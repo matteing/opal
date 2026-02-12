@@ -31,11 +31,16 @@ defmodule Opal do
 
   ## Config Keys
 
-    * `:model` — a `{provider_atom, model_id_string}` tuple
+    * `:model` — model specification. Accepts any form that `Opal.Model.coerce/2` supports:
+      * A `{provider, model_id}` tuple (e.g. `{:anthropic, "claude-sonnet-4-5"}`)
+      * A `"provider:model_id"` string (e.g. `"anthropic:claude-sonnet-4-5"`)
+      * A bare model ID string defaults to Copilot (e.g. `"claude-sonnet-4-5"`)
     * `:tools` — list of modules implementing `Opal.Tool`
     * `:system_prompt` — the system prompt string (default: `""`)
     * `:working_dir` — base directory for tool execution (default: current dir)
-    * `:provider` — module implementing `Opal.Provider` (default: `Opal.Provider.Copilot`)
+    * `:provider` — module implementing `Opal.Provider`. Auto-selected based on
+      model provider: `Opal.Provider.Copilot` for `:copilot`, `Opal.Provider.LLM`
+      for all others (Anthropic, OpenAI, Google, etc.)
     * `:session` — if `true`, starts an `Opal.Session` process for persistence/branching
     * `:shell` — shell type for `Opal.Tool.Shell` (default: platform auto-detect)
     * `:data_dir` — override data directory (default: `~/.opal`)
@@ -45,7 +50,19 @@ defmodule Opal do
       # Minimal — everything from config :opal
       {:ok, agent} = Opal.start_session(%{working_dir: "/project"})
 
-      # Override model for this session
+      # Use Anthropic directly (auto-selects Opal.Provider.LLM)
+      {:ok, agent} = Opal.start_session(%{
+        model: {:anthropic, "claude-sonnet-4-5"},
+        working_dir: "/project"
+      })
+
+      # Equivalent string form
+      {:ok, agent} = Opal.start_session(%{
+        model: "anthropic:claude-sonnet-4-5",
+        working_dir: "/project"
+      })
+
+      # Use Copilot (auto-selects Opal.Provider.Copilot)
       {:ok, agent} = Opal.start_session(%{
         model: {:copilot, "gpt-5"},
         working_dir: "/project"
@@ -55,9 +72,35 @@ defmodule Opal do
   def start_session(config) when is_map(config) do
     cfg = Opal.Config.new(config)
 
-    {provider_raw, model_id} = Map.get(config, :model) || cfg.default_model
-    provider_atom = if is_atom(provider_raw), do: provider_raw, else: String.to_existing_atom(provider_raw)
-    model = Opal.Model.new(provider_atom, model_id)
+    model =
+      case Map.get(config, :model) do
+        nil ->
+          # Check saved settings for a default model preference
+          case Opal.Settings.get("default_model") do
+            saved when is_binary(saved) and saved != "" -> Opal.Model.coerce(saved)
+            _ -> Opal.Model.coerce(cfg.default_model)
+          end
+
+        spec ->
+          Opal.Model.coerce(spec)
+      end
+
+    # Auto-select provider: if an explicit provider is given in config, use it.
+    # If the app-level config has a provider set, use that.
+    # Otherwise, derive from the model.
+    provider =
+      case Map.get(config, :provider) do
+        mod when is_atom(mod) and not is_nil(mod) ->
+          mod
+
+        _ ->
+          if cfg.provider != Opal.Provider.Copilot do
+            cfg.provider
+          else
+            Opal.Model.provider_module(model)
+          end
+      end
+
     session_id = generate_session_id()
 
     opts = [
@@ -67,6 +110,7 @@ defmodule Opal do
       tools: Map.get(config, :tools) || cfg.default_tools,
       working_dir: Map.get(config, :working_dir, File.cwd!()),
       config: cfg,
+      provider: provider,
       session: Map.get(config, :session, false)
     ]
 
@@ -146,13 +190,28 @@ defmodule Opal do
   Changes the model on a running agent session.
 
   The new model takes effect on the next prompt. Conversation history is preserved.
+  The provider is automatically updated based on the model's provider atom:
+  `:copilot` uses `Opal.Provider.Copilot`, all others use `Opal.Provider.LLM`.
 
-      Opal.set_model(agent, :copilot, "gpt-5")
+  Accepts any model specification that `Opal.Model.coerce/2` supports:
+
+    * A `"provider:model_id"` string (e.g. `"anthropic:claude-sonnet-4-5"`)
+    * A `{provider, model_id}` tuple (e.g. `{:copilot, "gpt-5"}`)
+    * An `%Opal.Model{}` struct
+
+  ## Examples
+
+      Opal.set_model(agent, {:copilot, "gpt-5"})
+      Opal.set_model(agent, "anthropic:claude-sonnet-4-5")
+      Opal.set_model(agent, "anthropic:claude-sonnet-4-5", thinking_level: :high)
   """
-  @spec set_model(pid(), atom(), String.t(), keyword()) :: :ok
-  def set_model(agent, provider, model_id, opts \\ []) do
-    model = Opal.Model.new(provider, model_id, opts)
+  @spec set_model(pid(), Opal.Model.t() | String.t() | {atom(), String.t()}, keyword()) :: :ok
+  def set_model(agent, model_spec, opts \\ []) do
+    model = Opal.Model.coerce(model_spec, opts)
+    provider_module = Opal.Model.provider_module(model)
+
     GenServer.call(agent, {:set_model, model})
+    GenServer.call(agent, {:set_provider, provider_module})
   end
 
   @doc """

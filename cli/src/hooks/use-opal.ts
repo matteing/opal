@@ -32,6 +32,8 @@ export interface Skill {
 
 export interface Context {
   files: string[];
+  skills: string[];
+  mcpServers: string[];
   status: "discovered";
 }
 
@@ -46,10 +48,12 @@ export interface OpalState {
   thinking: string | null;
   isRunning: boolean;
   confirmation: ConfirmRequest | null;
-  modelPicker: { models: { id: string; name: string }[]; current: string } | null;
+  modelPicker: { models: { id: string; name: string; provider?: string; supportsThinking?: boolean; thinkingLevels?: string[] }[]; current: string; currentThinkingLevel?: string } | null;
   currentModel: string | null;
   tokenUsage: TokenUsage | null;
+  statusMessage: string | null;
   sessionReady: boolean;
+  availableSkills: string[];
   error: string | null;
   workingDir: string;
   nodeName: string;
@@ -63,7 +67,7 @@ export interface OpalActions {
   compact: () => void;
   resolveConfirmation: (action: string) => void;
   runCommand: (input: string) => void;
-  selectModel: (modelId: string) => void;
+  selectModel: (modelId: string, thinkingLevel?: string) => void;
   dismissModelPicker: () => void;
 }
 
@@ -78,7 +82,9 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     modelPicker: null,
     currentModel: null,
     tokenUsage: null,
+    statusMessage: null,
     sessionReady: false,
+    availableSkills: [],
     error: null,
     workingDir: opts.workingDir ?? process.cwd(),
     nodeName: "",
@@ -87,6 +93,8 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
 
   const sessionRef = useRef<Session | null>(null);
   const confirmResolverRef = useRef<((action: string) => void) | null>(null);
+  const pendingEventsRef = useRef<AgentEvent[]>([]);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -108,9 +116,28 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
           return;
         }
         sessionRef.current = session;
-        setState((s) => ({ ...s, sessionReady: true, nodeName: session.nodeName }));
+
+        // Inject context discovery into timeline from session start response
+        const initialTimeline: TimelineEntry[] = [];
+        if (session.contextFiles.length > 0 || session.availableSkills.length > 0 || session.mcpServers.length > 0) {
+          initialTimeline.push({
+            kind: "context",
+            context: { files: session.contextFiles, skills: session.availableSkills, mcpServers: session.mcpServers, status: "discovered" },
+          });
+        }
+
+        setState((s) => ({
+          ...s,
+          sessionReady: true,
+          nodeName: session.nodeName,
+          availableSkills: session.availableSkills,
+          timeline: [...s.timeline, ...initialTimeline],
+        }));
         session.getState().then((res) => {
-          setState((s) => ({ ...s, currentModel: res.model.id }));
+          const displaySpec = res.model.provider !== "copilot"
+            ? `${res.model.provider}:${res.model.id}`
+            : res.model.id;
+          setState((s) => ({ ...s, currentModel: displaySpec }));
         }).catch(() => {});
       })
       .catch((err) => {
@@ -128,14 +155,42 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const flushEvents = useCallback(() => {
+    flushTimerRef.current = null;
+    const batch = pendingEventsRef.current;
+    if (batch.length === 0) return;
+    pendingEventsRef.current = [];
+    setState((s) => {
+      // Clone timeline so in-place mutations in appendMessageDelta don't
+      // corrupt the previous React state.
+      let next: OpalState = { ...s, timeline: [...s.timeline] };
+      for (const event of batch) {
+        next = applyEvent(next, event);
+      }
+      return next;
+    });
+  }, []);
+
   const processEvents = useCallback(async (iter: AsyncIterable<AgentEvent>) => {
     for await (const event of iter) {
       if (event.type === "agentEnd" || event.type === "agentAbort") {
         process.stderr.write("\x07");
       }
-      setState((s) => applyEvent(s, event));
+      pendingEventsRef.current.push(event);
+
+      const isTerminal = event.type === "agentEnd" || event.type === "agentAbort" || event.type === "error";
+      if (isTerminal) {
+        // Flush immediately for terminal events
+        if (flushTimerRef.current !== null) {
+          clearTimeout(flushTimerRef.current);
+        }
+        flushEvents();
+      } else if (flushTimerRef.current === null) {
+        // Schedule a batched flush
+        flushTimerRef.current = setTimeout(flushEvents, 32);
+      }
     }
-  }, []);
+  }, [flushEvents]);
 
   const submitPrompt = useCallback(
     (text: string) => {
@@ -202,20 +257,43 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
         case "models": {
           // Open interactive model picker
           Promise.all([session.listModels(), session.getState()]).then(([modelsRes, stateRes]) => {
-            const models = modelsRes.models.map((m: any) => ({ id: m.id as string, name: m.name as string }));
-            setState((s) => ({ ...s, modelPicker: { models, current: stateRes.model.id } }));
+            const models = modelsRes.models.map((m: any) => ({
+              id: m.id as string,
+              name: m.name as string,
+              provider: m.provider as string | undefined,
+              supportsThinking: m.supportsThinking as boolean | undefined,
+              thinkingLevels: m.thinkingLevels as string[] | undefined,
+            }));
+            setState((s) => ({
+              ...s,
+              modelPicker: {
+                models,
+                current: stateRes.model.id,
+                currentThinkingLevel: stateRes.model.thinkingLevel,
+              },
+            }));
           }).catch((e) => addSystemMessage(`Error: ${e.message}`));
           break;
         }
         case "model": {
           if (!arg) {
             session.getState().then((res) => {
-              addSystemMessage(`Current model: **${res.model.id}** (${res.model.provider})`);
+              const thinking = res.model.thinkingLevel && res.model.thinkingLevel !== "off"
+                ? ` thinking=${res.model.thinkingLevel}`
+                : "";
+              addSystemMessage(`Current model: **${res.model.id}** (${res.model.provider})${thinking}`);
             }).catch((e) => addSystemMessage(`Error: ${e.message}`));
           } else {
-            session.setModel(arg).then((res) => {
-              addSystemMessage(`Model changed to **${res.model.id}** (${res.model.provider})`);
-              setState((s) => ({ ...s, currentModel: res.model.id }));
+            // Normalize provider/model to provider:model for the backend
+            const modelSpec = arg.includes("/") ? arg.replace("/", ":") : arg;
+            session.setModel(modelSpec).then((res) => {
+              const displaySpec = res.model.provider !== "copilot"
+                ? `${res.model.provider}:${res.model.id}`
+                : res.model.id;
+              addSystemMessage(`Model changed to **${displaySpec}** (${res.model.provider})`);
+              setState((s) => ({ ...s, currentModel: displaySpec }));
+              // Persist choice
+              session.saveSettings({ default_model: `${res.model.provider}:${res.model.id}` }).catch(() => {});
             }).catch((e) => addSystemMessage(`Error: ${e.message}`));
           }
           break;
@@ -228,11 +306,11 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
         case "help": {
           addSystemMessage(
             "**Commands:**\n" +
-            "  `/model`          — show current model\n" +
-            "  `/model <id>`     — switch model\n" +
-            "  `/models`         — select model interactively\n" +
-            "  `/compact`        — compact conversation history\n" +
-            "  `/help`           — show this help"
+            "  `/model`                  — show current model\n" +
+            "  `/model <provider:id>`    — switch model (e.g. `anthropic:claude-sonnet-4`)\n" +
+            "  `/models`                 — select model interactively\n" +
+            "  `/compact`                — compact conversation history\n" +
+            "  `/help`                   — show this help"
           );
           break;
         }
@@ -244,13 +322,21 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
   );
 
   const selectModel = useCallback(
-    (modelId: string) => {
+    (modelId: string, thinkingLevel?: string) => {
       const session = sessionRef.current;
       if (!session) return;
       setState((s) => ({ ...s, modelPicker: null }));
-      session.setModel(modelId).then((res) => {
-        addSystemMessage(`Model changed to **${res.model.id}** (${res.model.provider})`);
-        setState((s) => ({ ...s, currentModel: res.model.id }));
+      session.setModel(modelId, thinkingLevel).then((res) => {
+        const displaySpec = res.model.provider !== "copilot"
+          ? `${res.model.provider}:${res.model.id}`
+          : res.model.id;
+        const thinking = res.model.thinkingLevel && res.model.thinkingLevel !== "off"
+          ? ` (thinking: ${res.model.thinkingLevel})`
+          : "";
+        addSystemMessage(`Model changed to **${displaySpec}**${thinking}`);
+        setState((s) => ({ ...s, currentModel: displaySpec }));
+        // Persist choice
+        session.saveSettings({ default_model: `${res.model.provider}:${res.model.id}` }).catch(() => {});
       }).catch((e) => addSystemMessage(`Error: ${e.message}`));
     },
     [addSystemMessage],
@@ -278,6 +364,7 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
         ...state,
         isRunning: false,
         thinking: null,
+        statusMessage: null,
         tokenUsage: event.usage
           ? {
               promptTokens: event.usage.promptTokens,
@@ -290,7 +377,7 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
       };
 
     case "agentAbort":
-      return { ...state, isRunning: false, thinking: null };
+      return { ...state, isRunning: false, thinking: null, statusMessage: null };
 
     case "messageStart":
       return {
@@ -419,6 +506,8 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
             kind: "context",
             context: {
               files: event.files,
+              skills: [],
+              mcpServers: [],
               status: "discovered",
             },
           },
@@ -439,22 +528,26 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
           : state.tokenUsage,
       };
 
+    case "statusUpdate":
+      return { ...state, statusMessage: event.message };
+
     default:
       return state;
   }
 }
 
 function appendMessageDelta(timeline: TimelineEntry[], delta: string): TimelineEntry[] {
-  // If the last entry is an assistant message, append directly
   if (timeline.length > 0) {
     const last = timeline[timeline.length - 1]!;
     if (last.kind === "message" && last.message.role === "assistant") {
-      return [
-        ...timeline.slice(0, -1),
-        { kind: "message", message: { ...last.message, content: last.message.content + delta } },
-      ];
+      // Mutate the last entry in place — safe because applyEvent already
+      // created a new state object and this timeline is the working copy
+      // within the batch reducer.
+      const updated = { kind: "message" as const, message: { ...last.message, content: last.message.content + delta } };
+      timeline[timeline.length - 1] = updated;
+      return timeline;
     }
   }
-  // Otherwise (tool entry, user message, or empty) — start a new assistant message
-  return [...timeline, { kind: "message", message: { role: "assistant", content: delta } }];
+  timeline.push({ kind: "message", message: { role: "assistant", content: delta } });
+  return timeline;
 }

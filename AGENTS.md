@@ -15,7 +15,7 @@ The project leverages Elixir/OTP's strengths: supervision trees, GenServers, pro
 
 - **Everything is a Process** - Agent loops, sessions, and tools are GenServers/processes
 - **OTP-First Design** - Process mailbox for steering, Registry pub/sub, supervision trees
-- **Cross-Platform** - No POSIX assumptions, supports multiple shells
+- **Cross-Platform** - All code must work on macOS, Linux, **and Windows**. No POSIX assumptions; avoid hard-coded `/` path separators, shell-specific syntax, or Unix-only APIs. Use `Path` helpers and `:os.type()` / `System.cmd` abstractions. The CLI and core must build and run on Windows.
 
 ## Key Components
 

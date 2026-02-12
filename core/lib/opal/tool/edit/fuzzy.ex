@@ -70,6 +70,7 @@ defmodule Opal.Tool.Edit.Fuzzy do
   # includes trailing spaces or tabs, but source files often do.
   defp strip_trailing_whitespace(text) do
     text
+    |> String.replace("\r\n", "\n")
     |> String.split("\n")
     |> Enum.map(&String.trim_trailing/1)
     |> Enum.join("\n")

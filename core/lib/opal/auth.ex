@@ -244,36 +244,14 @@ defmodule Opal.Auth do
   defp refresh_token(_), do: {:error, :missing_github_token}
 
   @doc """
-  Returns the list of known models available via GitHub Copilot.
+  Returns the list of models available via GitHub Copilot.
 
-  This is a curated list since the Copilot API does not expose
-  a model listing endpoint.
+  Auto-discovered from LLMDB's `github_copilot` provider. See `Opal.Models`
+  for details on model discovery and Copilot naming quirks.
   """
   @spec list_models() :: [map()]
   def list_models do
-    [
-      # Chat Completions API models
-      %{id: "claude-haiku-4.5", name: "Claude Haiku 4.5"},
-      %{id: "claude-opus-4.5", name: "Claude Opus 4.5"},
-      %{id: "claude-opus-4.6", name: "Claude Opus 4.6"},
-      %{id: "claude-sonnet-4", name: "Claude Sonnet 4"},
-      %{id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5"},
-      %{id: "gemini-2.5-pro", name: "Gemini 2.5 Pro"},
-      %{id: "gemini-3-flash-preview", name: "Gemini 3 Flash"},
-      %{id: "gemini-3-pro-preview", name: "Gemini 3 Pro Preview"},
-      %{id: "gpt-4.1", name: "GPT-4.1"},
-      %{id: "gpt-4o", name: "GPT-4o"},
-      %{id: "grok-code-fast-1", name: "Grok Code Fast 1"},
-      # Responses API models
-      %{id: "gpt-5", name: "GPT-5"},
-      %{id: "gpt-5-mini", name: "GPT-5 Mini"},
-      %{id: "gpt-5.1", name: "GPT-5.1"},
-      %{id: "gpt-5.1-codex", name: "GPT-5.1 Codex"},
-      %{id: "gpt-5.1-codex-max", name: "GPT-5.1 Codex Max"},
-      %{id: "gpt-5.1-codex-mini", name: "GPT-5.1 Codex Mini"},
-      %{id: "gpt-5.2", name: "GPT-5.2"},
-      %{id: "gpt-5.2-codex", name: "GPT-5.2 Codex"}
-    ]
+    Opal.Models.list_copilot()
   end
 
   defp token_path do

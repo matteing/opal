@@ -4,6 +4,15 @@ defmodule Opal.Provider do
 
   Each provider must implement streaming, SSE event parsing, and conversion
   of internal message/tool representations to the provider's wire format.
+
+  ## Built-in Providers
+
+    * `Opal.Provider.Copilot` — GitHub Copilot via its proprietary API
+    * `Opal.Provider.LLM` — Any provider supported by ReqLLM (Anthropic,
+      OpenAI, Google, Groq, OpenRouter, xAI, AWS Bedrock, and more)
+
+  The provider is auto-selected based on the model's provider atom:
+  `:copilot` → `Opal.Provider.Copilot`, anything else → `Opal.Provider.LLM`.
   """
 
   @type stream_event ::

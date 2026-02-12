@@ -114,6 +114,7 @@ defmodule Opal.RPC.Protocol do
         %{name: "session_id", type: :string, description: "The new session's unique ID."},
         %{name: "context_files", type: {:array, :string}, description: "Paths of loaded context files."},
         %{name: "available_skills", type: {:array, :string}, description: "Names of discovered skills (not yet loaded)."},
+        %{name: "mcp_servers", type: {:array, :string}, description: "Names of connected MCP servers."},
         %{name: "node_name", type: :string, description: "Erlang node name of the server (for debugging)."}
       ]
     },
@@ -162,7 +163,7 @@ defmodule Opal.RPC.Protocol do
       result: [
         %{name: "session_id", type: :string, description: "Session ID."},
         %{name: "status", type: :string, description: "One of: idle, running, streaming."},
-        %{name: "model", type: {:object, %{"provider" => :string, "id" => :string}}, description: "Current model."},
+        %{name: "model", type: {:object, %{"provider" => :string, "id" => :string, "thinking_level" => :string}}, description: "Current model."},
         %{name: "message_count", type: :integer, description: "Number of messages in history."},
         %{name: "tools", type: {:array, :string}, description: "Active tool names."}
       ]
@@ -203,10 +204,13 @@ defmodule Opal.RPC.Protocol do
     %{
       method: "models/list",
       direction: :client_to_server,
-      description: "List available LLM models.",
-      params: [],
+      description: "List available LLM models. Copilot models are always included. Pass providers to also list direct provider models.",
+      params: [
+        %{name: "providers", type: {:array, :string}, required: false,
+          description: "Optional list of direct providers to include (e.g. [\"anthropic\", \"openai\"])."}
+      ],
       result: [
-        %{name: "models", type: {:array, :object}, description: "Array of {id, name}."}
+        %{name: "models", type: {:array, :object}, description: "Array of {id, name, provider, supports_thinking}."}
       ]
     },
     %{
@@ -217,10 +221,26 @@ defmodule Opal.RPC.Protocol do
         %{name: "session_id", type: :string, required: true,
           description: "Target session ID."},
         %{name: "model_id", type: :string, required: true,
-          description: "Model ID to switch to."}
+          description: "Model ID to switch to."},
+        %{name: "thinking_level", type: :string, required: false,
+          description: "Reasoning effort: off, low, medium, high."}
       ],
       result: [
-        %{name: "model", type: {:object, %{"provider" => :string, "id" => :string}}, description: "The new active model."}
+        %{name: "model", type: {:object, %{"provider" => :string, "id" => :string, "thinking_level" => :string}}, description: "The new active model."}
+      ]
+    },
+    %{
+      method: "thinking/set",
+      direction: :client_to_server,
+      description: "Change the reasoning effort level for the current model.",
+      params: [
+        %{name: "session_id", type: :string, required: true,
+          description: "Target session ID."},
+        %{name: "level", type: :string, required: true,
+          description: "Reasoning effort: off, low, medium, high."}
+      ],
+      result: [
+        %{name: "thinking_level", type: :string, description: "The new thinking level."}
       ]
     },
     %{
@@ -254,6 +274,27 @@ defmodule Opal.RPC.Protocol do
       ],
       result: [
         %{name: "tasks", type: {:array, :object}, description: "Array of task objects."}
+      ]
+    },
+    %{
+      method: "settings/get",
+      direction: :client_to_server,
+      description: "Get all persistent user settings.",
+      params: [],
+      result: [
+        %{name: "settings", type: :object, description: "Map of setting key-value pairs."}
+      ]
+    },
+    %{
+      method: "settings/save",
+      direction: :client_to_server,
+      description: "Save user settings (merged with existing).",
+      params: [
+        %{name: "settings", type: :object, required: true,
+          description: "Map of setting key-value pairs to save."}
+      ],
+      result: [
+        %{name: "settings", type: :object, description: "The full settings after merge."}
       ]
     }
   ]
@@ -362,6 +403,10 @@ defmodule Opal.RPC.Protocol do
       fields: [
         %{name: "usage", type: {:object, %{"prompt_tokens" => :integer, "completion_tokens" => :integer, "total_tokens" => :integer, "context_window" => :integer, "current_context_tokens" => :integer}},
           description: "Current token usage snapshot."}
+      ]},
+    %{type: "status_update", description: "Short status message describing what the agent is currently working on.",
+      fields: [
+        %{name: "message", type: :string, description: "Brief human-readable status."}
       ]}
   ]
 

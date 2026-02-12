@@ -47,6 +47,7 @@ defmodule Opal.Agent do
             current_tool_calls: [map()],
             pending_tool_calls: MapSet.t(),
             pending_steers: [String.t()],
+            status_tag_buffer: String.t(),
             provider: module(),
             session: pid() | nil,
             tool_supervisor: atom() | pid(),
@@ -82,6 +83,7 @@ defmodule Opal.Agent do
       current_tool_calls: [],
       pending_tool_calls: MapSet.new(),
       pending_steers: [],
+      status_tag_buffer: "",
       provider: Opal.Provider.Copilot,
       session: nil,
       tool_supervisor: nil,
@@ -92,7 +94,7 @@ defmodule Opal.Agent do
       context_files: [],
       available_skills: [],
       active_skills: [],
-      token_usage: %{prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, context_window: 200_000},
+      token_usage: %{prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, context_window: 0, current_context_tokens: 0},
       last_prompt_tokens: 0,
       last_chunk_at: nil,
       stream_watchdog: nil,
@@ -280,7 +282,14 @@ defmodule Opal.Agent do
       context: context,
       context_files: context_files,
       available_skills: available_skills,
-      active_skills: []
+      active_skills: [],
+      token_usage: %{
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+        context_window: Opal.Models.context_window(model),
+        current_context_tokens: 0
+      }
     }
 
     tools_str = base_tools |> Enum.map(& &1.name()) |> Enum.join(", ")
@@ -339,6 +348,12 @@ defmodule Opal.Agent do
   def handle_call({:set_model, %Opal.Model{} = model}, _from, state) do
     Logger.debug("Model changed session=#{state.session_id} from=#{state.model.id} to=#{model.id}")
     {:reply, :ok, %{state | model: model}}
+  end
+
+  @impl true
+  def handle_call({:set_provider, provider_module}, _from, state) when is_atom(provider_module) do
+    Logger.debug("Provider changed session=#{state.session_id} to=#{inspect(provider_module)}")
+    {:reply, :ok, %{state | provider: provider_module}}
   end
 
   @impl true
@@ -447,22 +462,8 @@ defmodule Opal.Agent do
 
   @auto_compact_threshold 0.80
 
-  # Infer context window from model ID. Most coding models use 128k-200k.
-  defp model_context_window(%{id: id}) when is_binary(id) do
-    cond do
-      String.contains?(id, "gpt-4o") -> 128_000
-      String.contains?(id, "gpt-4.1") -> 1_047_576
-      String.contains?(id, "gpt-4") -> 128_000
-      String.contains?(id, "o1") -> 200_000
-      String.contains?(id, "o3") -> 200_000
-      String.contains?(id, "o4-mini") -> 200_000
-      String.contains?(id, "claude") -> 200_000
-      String.contains?(id, "gemini") -> 1_000_000
-      true -> 128_000
-    end
-  end
-
-  defp model_context_window(_), do: 128_000
+  # Look up context window from LLMDB. Falls back to 128k if not found.
+  defp model_context_window(model), do: Opal.Models.context_window(model)
 
   # Starts a new LLM turn: converts messages/tools, initiates streaming.
   # Auto-compacts if context usage exceeds threshold.
@@ -704,8 +705,13 @@ defmodule Opal.Agent do
   end
 
   defp handle_stream_event({:text_delta, delta}, state) do
-    broadcast(state, {:message_delta, %{delta: delta}})
-    %{state | current_text: state.current_text <> delta}
+    {clean_delta, state} = extract_status_tags(delta, state)
+
+    unless clean_delta == "" do
+      broadcast(state, {:message_delta, %{delta: clean_delta}})
+    end
+
+    %{state | current_text: state.current_text <> clean_delta}
   end
 
   defp handle_stream_event({:text_done, text}, state) do
@@ -794,11 +800,13 @@ defmodule Opal.Agent do
       state.token_usage |
       prompt_tokens: state.token_usage.prompt_tokens + prompt,
       completion_tokens: state.token_usage.completion_tokens + completion,
-      total_tokens: state.token_usage.total_tokens + total
+      total_tokens: state.token_usage.total_tokens + total,
+      current_context_tokens: prompt
     }
 
     state = %{state | token_usage: token_usage, last_prompt_tokens: prompt, last_usage_msg_index: length(state.messages)}
     context_window = model_context_window(state.model)
+
     broadcast(state, {:usage_update, %{state.token_usage | context_window: context_window}})
 
     # Flag usage-based overflow so finalize_response/1 can trigger compaction
@@ -872,7 +880,12 @@ defmodule Opal.Agent do
         broadcast(state, {:turn_end, assistant_msg, []})
         run_turn(state)
       else
-        broadcast(state, {:agent_end, state.messages, state.token_usage})
+        context_window = model_context_window(state.model)
+        final_usage = Map.merge(state.token_usage, %{
+          context_window: context_window,
+          current_context_tokens: state.last_prompt_tokens
+        })
+        broadcast(state, {:agent_end, state.messages, final_usage})
         maybe_auto_save(state)
         {:noreply, %{state | status: :idle}}
       end
@@ -1211,4 +1224,51 @@ defmodule Opal.Agent do
   defp result_tag({:ok, _}), do: "ok"
   defp result_tag({:error, _}), do: "error"
   defp result_tag(_), do: "unknown"
+
+  # Extracts <status>...</status> tags from streaming text deltas.
+  # Tags may span multiple deltas, so we buffer partial matches.
+  # Returns {clean_text, updated_state} with tags stripped and broadcast.
+  defp extract_status_tags(delta, %State{status_tag_buffer: buf} = state) do
+    text = buf <> delta
+
+    case Regex.run(~r/<status>(.*?)<\/status>/s, text) do
+      [full_match, status_text] ->
+        broadcast(state, {:status_update, String.trim(status_text)})
+        clean = String.replace(text, full_match, "", global: false)
+        # Recurse in case there are multiple tags in one chunk
+        {more_clean, state} = extract_status_tags("", %{state | status_tag_buffer: ""})
+        {clean <> more_clean, state}
+
+      nil ->
+        # Check if we might be in the middle of a tag
+        cond do
+          String.contains?(text, "<status>") and not String.contains?(text, "</status>") ->
+            # Partial open tag — buffer everything from <status> onward
+            [before | _] = String.split(text, "<status>", parts: 2)
+            rest = String.slice(text, String.length(before)..-1//1)
+            {before, %{state | status_tag_buffer: rest}}
+
+          String.ends_with?(text, "<") or
+          String.ends_with?(text, "<s") or
+          String.ends_with?(text, "<st") or
+          String.ends_with?(text, "<sta") or
+          String.ends_with?(text, "<stat") or
+          String.ends_with?(text, "<statu") or
+            String.ends_with?(text, "<status") ->
+            # Might be start of a tag — buffer the trailing potential match
+            idx = String.length(text) - partial_tag_length(text)
+            {String.slice(text, 0, idx), %{state | status_tag_buffer: String.slice(text, idx..-1//1)}}
+
+          true ->
+            {text, %{state | status_tag_buffer: ""}}
+        end
+    end
+  end
+
+  defp partial_tag_length(text) do
+    suffixes = ["<status", "<statu", "<stat", "<sta", "<st", "<s", "<"]
+    Enum.find_value(suffixes, 0, fn s ->
+      if String.ends_with?(text, s), do: String.length(s)
+    end)
+  end
 end

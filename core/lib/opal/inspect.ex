@@ -54,6 +54,7 @@ defmodule Opal.Inspect do
   defp format_event({:agent_end, _msgs}), do: {"agent_end", ""}
   defp format_event({:agent_end, _msgs, usage}), do: {"agent_end", "tokens=#{inspect(usage)}"}
   defp format_event({:usage_update, usage}), do: {"usage_update", "prompt=#{usage.prompt_tokens} total=#{usage.total_tokens} ctx=#{usage.context_window}"}
+  defp format_event({:status_update, msg}), do: {"status_update", "\"#{msg}\""}
   defp format_event({:message_start}), do: {"message_start", ""}
   defp format_event({:message_delta, %{delta: d}}), do: {"message_delta", "\"#{String.slice(d, 0, 60)}\""}
   defp format_event({:thinking_start}), do: {"thinking_start", ""}

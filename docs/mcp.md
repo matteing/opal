@@ -4,19 +4,16 @@ Opal integrates with external tool servers via the [Model Context Protocol](http
 
 ## How It Works
 
-```
-Session start
-  │
-  ├─ MCP.Supervisor starts one Client per configured server
-  │     ├─ Client "github" (stdio: gh copilot mcp)
-  │     └─ Client "filesystem" (streamable_http: localhost:3000)
-  │
-  ├─ MCP.Bridge.discover_tool_modules/2
-  │     ├─ server_list_tools → [{name, description, schema}, ...]
-  │     ├─ Create runtime module per tool (implements Opal.Tool)
-  │     └─ Handle name collisions (prefix with server name)
-  │
-  └─ Discovered tools added to Agent's tool list
+```mermaid
+graph TD
+    Start["Session start"] --> Sup["MCP.Supervisor starts one Client per server"]
+    Sup --> C1["Client 'github'<br/><small>stdio: gh copilot mcp</small>"]
+    Sup --> C2["Client 'filesystem'<br/><small>streamable_http: localhost:3000</small>"]
+    Start --> Discover["MCP.Bridge.discover_tool_modules/2"]
+    Discover --> List["server_list_tools → name, description, schema"]
+    Discover --> Create["Create runtime module per tool<br/><small>implements Opal.Tool</small>"]
+    Discover --> Collisions["Handle name collisions<br/><small>prefix with server name</small>"]
+    Start --> Register["Discovered tools added to Agent's tool list"]
 ```
 
 ## Components

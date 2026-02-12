@@ -5,10 +5,11 @@ import { platform, arch } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const PLATFORM_MAP: Record<string, string> = {
-  "darwin-arm64": "opal-server-darwin-arm64",
-  "darwin-x64": "opal-server-darwin-x64",
-  "linux-x64": "opal-server-linux-x64",
-  "linux-arm64": "opal-server-linux-arm64",
+  "darwin-arm64": "opal_server_darwin_arm64",
+  "darwin-x64": "opal_server_darwin_x64",
+  "linux-x64": "opal_server_linux_x64",
+  "linux-arm64": "opal_server_linux_arm64",
+  "win32-x64": "opal_server_win32_x64.exe",
 };
 
 export interface ServerResolution {
@@ -30,7 +31,8 @@ export interface ServerResolution {
 export function resolveServer(): ServerResolution {
   // 1. Check PATH
   try {
-    const found = execFileSync("which", ["opal-server"], {
+    const cmd = process.platform === "win32" ? "where" : "which";
+    const found = execFileSync(cmd, ["opal-server"], {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();

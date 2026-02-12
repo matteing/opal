@@ -6,13 +6,20 @@ The session is a conversation tree stored in an ETS table, managed by an `Opal.S
 
 Each message is an `Opal.Message` struct with a unique `id` and a `parent_id` that links it to the previous message. This forms a tree, not a flat list:
 
-```
-msg_1 (user: "fix the bug")
-└── msg_2 (assistant: "I'll edit app.ts" + tool_calls)
-    └── msg_3 (tool_result: "Edit applied")
-        ├── msg_4 (assistant: "Done!")           ← branch A (current)
-        └── msg_5 (user: "actually, try tests") ← branch B
-            └── msg_6 (assistant: "Running tests...")
+```mermaid
+graph TD
+    M1["msg_1<br/><small>user: fix the bug</small>"]
+    M2["msg_2<br/><small>assistant: I'll edit app.ts + tool_calls</small>"]
+    M3["msg_3<br/><small>tool_result: Edit applied</small>"]
+    M4["msg_4<br/><small>assistant: Done!</small>"]
+    M5["msg_5<br/><small>user: actually, try tests</small>"]
+    M6["msg_6<br/><small>assistant: Running tests...</small>"]
+
+    M1 --> M2 --> M3
+    M3 --> M4
+    M3 --> M5 --> M6
+
+    style M4 fill:#bfb,stroke:#393
 ```
 
 The `current_id` pointer tracks the active leaf. `get_path/1` walks parent links from the current leaf back to the root and returns the messages in order — this is the flat list the agent sends to the LLM.

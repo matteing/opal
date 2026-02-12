@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "ink": "^6.7.0",
+    "ink-task-list": "^2.0.0",
     "ink-text-input": "^6.0.0",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",

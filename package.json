@@ -10,11 +10,12 @@
     "test": "nx run-many -t test",
     "lint": "nx run-many -t lint",
     "typecheck": "nx run-many -t typecheck",
-    "dev": "NX_TUI=false nx run cli:build && cd cli && OPAL_CWD=\"${INIT_CWD:-$PWD}\" node dist/bin.js",
+    "dev": "cross-env NX_TUI=false nx run cli:build && cd cli && node dist/bin.js",
     "codegen": "nx run cli:codegen",
-    "inspect": "iex --sname inspector --cookie opal --remsh opal --dot-iex \"$(pwd)/scripts/inspect.exs\""
+    "inspect": "iex --sname inspector --cookie opal --remsh opal --dot-iex scripts/inspect.exs"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "nx": "^22.5.0"
   }
 }

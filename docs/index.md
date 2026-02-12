@@ -6,34 +6,47 @@ Opal is a coding agent harness built on Elixir/OTP. The core (`core/`) provides 
 
 Every agent session is an isolated OTP supervision tree. No global state is shared between sessions except the event registry.
 
-```
-Opal.Supervisor (:one_for_one)
-├── Opal.Events.Registry          ← shared pub/sub backbone
-└── Opal.SessionSupervisor        ← DynamicSupervisor, one child per session
-    ├── SessionServer "a1b2c3"    ← :rest_for_one
-    │   ├── Task.Supervisor       ← tool execution
-    │   ├── DynamicSupervisor     ← sub-agents
-    │   ├── Opal.Session          ← conversation tree (optional)
-    │   └── Opal.Agent            ← agent loop
-    └── SessionServer "d4e5f6"
-        └── ...
+```mermaid
+graph TD
+    Sup["Opal.Supervisor<br/><small>:one_for_one</small>"]
+    Reg["Opal.Events.Registry<br/><small>shared pub/sub backbone</small>"]
+    DSup["Opal.SessionSupervisor<br/><small>DynamicSupervisor</small>"]
+    Sup --> Reg
+    Sup --> DSup
+
+    subgraph s1["Session a1b2c3"]
+        SS1["SessionServer<br/><small>:rest_for_one</small>"]
+        TS1["Task.Supervisor<br/><small>tool execution</small>"]
+        DS1["DynamicSupervisor<br/><small>sub-agents</small>"]
+        Se1["Opal.Session<br/><small>optional</small>"]
+        Ag1["Opal.Agent<br/><small>agent loop</small>"]
+        SS1 --> TS1
+        SS1 --> DS1
+        SS1 --> Se1
+        SS1 --> Ag1
+    end
+
+    DSup --> SS1
 ```
 
 ## Request Flow
 
-```
-CLI (TypeScript)
-  │
-  ├─ JSON-RPC over stdio ──► Opal.RPC.Stdio ──► Opal.RPC.Handler
-  │                                                    │
-  │                                              Opal.Agent (GenServer)
-  │                                              ┌─────┴──────┐
-  │                                         Provider.stream   Tool execution
-  │                                         (SSE → handle_info) (Task.Supervisor)
-  │                                              │
-  │                                         Opal.Session (ETS tree)
-  │
-  └─ Events (notifications) ◄── Opal.Events.Registry ◄── Agent broadcasts
+```mermaid
+graph LR
+    CLI["CLI<br/><small>TypeScript</small>"]
+    Stdio["Opal.RPC.Stdio"]
+    Handler["Opal.RPC.Handler"]
+    Agent["Opal.Agent<br/><small>GenServer</small>"]
+    Provider["Provider.stream<br/><small>SSE → handle_info</small>"]
+    Tools["Tool execution<br/><small>Task.Supervisor</small>"]
+    Session["Opal.Session<br/><small>ETS tree</small>"]
+    Events["Opal.Events.Registry"]
+
+    CLI -- "JSON-RPC over stdio" --> Stdio --> Handler --> Agent
+    Agent --> Provider --> Session
+    Agent --> Tools
+    Events -- "notifications" --> CLI
+    Agent -- "broadcasts" --> Events
 ```
 
 ## Subsystem Map
@@ -49,6 +62,8 @@ CLI (TypeScript)
 | **RPC** | JSON-RPC 2.0 protocol over stdio between CLI and server | [rpc.md](rpc.md) |
 | **Providers** | LLM integration (auth, streaming, SSE parsing) | [providers.md](providers.md) |
 | **MCP** | Model Context Protocol bridge for external tool servers | [mcp.md](mcp.md) |
+| **Testing** | Fixture-based provider mocking, SSE simulation, no Mox | [testing.md](testing.md) |
+| **CLI** | Terminal UI, components, state management, slash commands | [cli.md](cli.md) |
 | **SDK** | TypeScript client library for the JSON-RPC protocol | [sdk.md](sdk.md) |
 
 ## Key Design Decisions

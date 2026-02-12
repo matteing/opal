@@ -247,7 +247,7 @@ end
 :ok = Opal.steer(agent, "Actually, focus on the test files")
 
 # Change models on the fly
-:ok = Opal.set_model(agent, :copilot, "claude-sonnet-4")
+:ok = Opal.set_model(agent, {:copilot, "claude-sonnet-4"})
 
 # Clean up
 :ok = Opal.stop_session(agent)

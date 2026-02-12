@@ -190,14 +190,16 @@ defmodule Opal.Config do
       Accepts `:bash`, `:zsh`, `:sh`, `:fish`, `:powershell`, or `:cmd`.
       Defaults to auto-detection based on the current platform.
 
-    * `:default_model` — a `{provider_atom, model_id}` tuple specifying the
-      LLM to use. Default: `{"copilot", "claude-sonnet-4-5"}`.
+    * `:default_model` — a `{provider_atom, model_id}` tuple or a
+      `"provider:model_id"` string specifying the LLM to use.
+      Default: `{"copilot", "claude-sonnet-4"}`.
 
     * `:default_tools` — list of modules implementing `Opal.Tool` available
       to the agent. Default: `[Opal.Tool.Read, Opal.Tool.Write, Opal.Tool.Edit, Opal.Tool.Shell]`.
 
     * `:provider` — module implementing `Opal.Provider` for LLM communication.
-      Default: `Opal.Provider.Copilot`.
+      Default: `Opal.Provider.Copilot`. Use `Opal.Provider.LLM` for ReqLLM-backed
+      providers (Anthropic, OpenAI, Google, etc.).
 
     * `:auto_save` — when `true`, automatically persists the session to disk
       after the agent goes idle. Requires a `Session` process to be attached.

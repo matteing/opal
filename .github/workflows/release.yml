@@ -15,10 +15,27 @@ env:
   OTP_VERSION: "28.0"
 
 jobs:
-  build-and-publish:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+  # ---------------------------------------------------------------------------
+  # Build Burrito binaries on each native platform
+  # ---------------------------------------------------------------------------
+  build-binary:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-14          # Apple Silicon
+            target: darwin_arm64
+            binary: opal_server_darwin_arm64
+          - runner: macos-13          # Intel Mac
+            target: darwin_x64
+            binary: opal_server_darwin_x64
+          - runner: ubuntu-latest     # x86_64 Linux
+            target: linux_x64
+            binary: opal_server_linux_x64
+          - runner: ubuntu-24.04-arm  # ARM Linux
+            target: linux_arm64
+            binary: opal_server_linux_arm64
+
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -27,18 +44,74 @@ jobs:
           elixir-version: ${{ env.ELIXIR_VERSION }}
           otp-version: ${{ env.OTP_VERSION }}
 
+      - name: Install deps
+        run: cd core && mix deps.get --only prod
+
+      - name: Build release (${{ matrix.target }})
+        run: cd core && mix release opal_server --overwrite
+        env:
+          BURRITO_TARGET: ${{ matrix.target }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary }}
+          path: core/burrito_out/*
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Build CLI TypeScript package
+  # ---------------------------------------------------------------------------
+  build-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        run: |
+          cd core && mix deps.get && cd ..
+          pnpm install --frozen-lockfile
+
+      - name: Codegen + Build
+        run: pnpm nx run cli:build
+
+      - name: Upload CLI dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-dist
+          path: |
+            cli/dist
+            cli/bin
+            cli/package.json
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Assemble and publish
+  # ---------------------------------------------------------------------------
+  publish:
+    needs: [build-binary, build-cli]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-
-      - name: Install Zig
-        run: |
-          curl -L https://ziglang.org/download/0.15.2/zig-linux-x86_64-0.15.2.tar.xz | tar xJ
-          echo "$PWD/zig-linux-x86_64-0.15.2" >> "$GITHUB_PATH"
-
-      - name: Install system deps
-        run: sudo apt-get install -y xz-utils p7zip-full
 
       - name: Determine version
         id: version
@@ -49,42 +122,55 @@ jobs:
             echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install Elixir deps
-        run: cd cli && mix deps.get --only prod
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
-      - name: Patch deps (OTP 28 compat)
-        run: cd cli && mix run --no-compile --no-start ../scripts/patch_deps.exs
-
-      - name: Build Burrito releases (all targets)
-        run: cd cli && mix release opal --overwrite
-
-      - name: Stage binaries into npm package
+      - name: Assemble npm package
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          mkdir -p npm/opal/releases
 
-          cp cli/burrito_out/* npm/opal/releases/
-          chmod +x npm/opal/releases/*
+          # CLI dist
+          cp -r artifacts/cli-dist/dist cli/dist
+          cp -r artifacts/cli-dist/bin cli/bin
 
-          # Update version
+          # Burrito binaries
+          mkdir -p cli/releases
+          cp artifacts/opal_server_darwin_arm64/* cli/releases/
+          cp artifacts/opal_server_darwin_x64/*   cli/releases/
+          cp artifacts/opal_server_linux_x64/*    cli/releases/
+          cp artifacts/opal_server_linux_arm64/*   cli/releases/
+          chmod +x cli/releases/*
+
+          # Stamp version
           node -e "
             const fs = require('fs');
-            const p = JSON.parse(fs.readFileSync('npm/opal/package.json', 'utf8'));
+            const p = JSON.parse(fs.readFileSync('cli/package.json', 'utf8'));
             p.version = '$VERSION';
-            fs.writeFileSync('npm/opal/package.json', JSON.stringify(p, null, 2) + '\n');
+            fs.writeFileSync('cli/package.json', JSON.stringify(p, null, 2) + '\n');
           "
 
-          echo "==> Staged binaries:"
-          ls -lh npm/opal/releases/
+          echo "==> Package contents:"
+          ls -lh cli/releases/
 
       - name: Publish to npm
-        run: cd npm/opal && npm publish --access public
+        run: cd cli && npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to Hex
+        run: cd core && mix hex.publish --yes
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: cli/burrito_out/*
+          files: |
+            artifacts/opal_server_darwin_arm64/*
+            artifacts/opal_server_darwin_x64/*
+            artifacts/opal_server_linux_x64/*
+            artifacts/opal_server_linux_arm64/*

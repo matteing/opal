@@ -19,7 +19,7 @@ Write docs that are **right-sized** — long enough to be useful, short enough t
 
 - **Start with a one-paragraph overview** of what the feature does and why it exists.
 - **Show the interface** (tool schema, function signature, config keys) before explaining internals.
-- **Use diagrams or ASCII art** for pipelines and data flow — a picture replaces paragraphs.
+- **Use Mermaid diagrams** for pipelines, data flow, and architecture — never ASCII art. Wrap in ` ```mermaid ` fenced blocks.
 - **Include a "How it works" section** with just enough detail to debug or extend the feature. Skip implementation trivia.
 - **End with a References section** linking to external sources, blog posts, papers, or benchmarks that informed the design. Always include references the user has provided.
 - **No timestamps or version numbers** — the doc describes the current state, not a changelog.

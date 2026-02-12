@@ -65,9 +65,10 @@ defmodule Opal.Path do
     expanded_base = Path.expand(base_dir)
     expanded_path = Path.expand(path, expanded_base)
 
-    # Ensure the expanded path starts with the base directory
-    if String.starts_with?(expanded_path, expanded_base <> "/") or
-         expanded_path == expanded_base do
+    # Ensure the expanded path is within the base directory.
+    # Path.relative_to/2 returns the input unchanged when it's not a child.
+    if expanded_path == expanded_base or
+         Path.relative_to(expanded_path, expanded_base) != expanded_path do
       {:ok, expanded_path}
     else
       {:error, :outside_base_dir}

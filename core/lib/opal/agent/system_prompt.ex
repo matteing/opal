@@ -53,7 +53,8 @@ defmodule Opal.Agent.SystemPrompt do
       &edit_vs_shell/1,
       &write_guidelines/1,
       &shell_display_warning/1,
-      &search_guidelines/1
+      &search_guidelines/1,
+      &status_tags/1
     ]
     |> Enum.flat_map(fn rule_fn ->
       case rule_fn.(names) do
@@ -107,5 +108,14 @@ defmodule Opal.Agent.SystemPrompt do
   # Checks if any shell-type tool is in the active set.
   defp has_shell?(names) do
     Enum.any?(["shell", "bash", "zsh", "cmd", "powershell"], &(&1 in names))
+  end
+
+  # Instructs the model to emit short status tags during complex tasks.
+  @known_tools MapSet.new(["read_file", "edit_file", "write_file", "shell", "bash", "zsh", "cmd", "powershell", "sub_agent", "tasks", "use_skill"])
+
+  defp status_tags(names) do
+    if MapSet.size(MapSet.intersection(names, @known_tools)) > 0 do
+      "Before starting each major step in a multi-step task, emit a short status tag: `<status>Analyzing test failures</status>`. Keep it under 6 words. This is displayed as a progress indicator and stripped from your output. Only emit when the task involves multiple steps — skip for simple questions."
+    end
   end
 end

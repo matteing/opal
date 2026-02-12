@@ -30,6 +30,8 @@ Client → Server requests:
 | `session/compact` | Manually trigger compaction |
 | `models/list` | List available models |
 | `model/set` | Switch the active model |
+| `settings/get` | Get persistent user settings |
+| `settings/save` | Save user settings (merged) |
 
 Server → Client requests:
 
@@ -79,14 +81,14 @@ This module is the single source of truth. The TypeScript SDK types are auto-gen
 
 ## Architecture
 
-```
-stdin → Opal.RPC.Stdio (parse JSON-RPC)
-            │
-            ├─ requests → Opal.RPC.Handler (pure dispatch) → Opal API
-            │                                                    │
-            └─ notifications ← serialize events ← Events.Registry ← Agent
-                    │
-                 stdout
+```mermaid
+graph LR
+    stdin --> Stdio["Opal.RPC.Stdio<br/><small>parse JSON-RPC</small>"]
+    Stdio -- "requests" --> Handler["Opal.RPC.Handler<br/><small>pure dispatch</small>"]
+    Handler --> API["Opal API"]
+    Agent["Agent"] -- "broadcasts" --> Events["Events.Registry"]
+    Events -- "serialize events" --> Stdio
+    Stdio -- "notifications" --> stdout
 ```
 
 `Stdio` handles transport (reading/writing lines, framing). `Handler` is a pure function that maps method names to Opal API calls — it has no transport awareness. This separation makes it easy to add WebSocket or HTTP transports later.

@@ -57,8 +57,8 @@ defmodule Opal.MixProject do
         "README.md": [title: "Overview"],
         "../ARCHITECTURE.md": [title: "Architecture"],
         "../docs/agent-loop.md": [title: "Agent Loop"],
-        "../docs/rpc-research.md": [title: "RPC Research"],
-        "../docs/supervision.md": [title: "Supervision"]
+        "../docs/supervision.md": [title: "Supervision"],
+        "../docs/otp.md": [title: "OTP Patterns"]
       ],
       groups_for_modules: [
         "Public API": [
@@ -78,6 +78,7 @@ defmodule Opal.MixProject do
         "Providers": [
           Opal.Provider,
           Opal.Provider.Copilot,
+          Opal.Provider.LLM,
           Opal.Auth
         ],
         "Tools": [
@@ -132,6 +133,7 @@ defmodule Opal.MixProject do
   defp deps do
     [
       {:req, "~> 0.5"},
+      {:req_llm, "~> 1.5"},
       {:jason, "~> 1.4"},
       {:yaml_elixir, "~> 2.11"},
       {:anubis_mcp, "~> 0.17"},

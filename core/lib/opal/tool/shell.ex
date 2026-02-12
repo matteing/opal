@@ -198,7 +198,7 @@ defmodule Opal.Tool.Shell do
   # live). Saves full output to a temp file for reference.
 
   defp truncate_shell_output(output) do
-    lines = String.split(output, "\n")
+    lines = String.split(String.replace(output, "\r\n", "\n"), "\n")
     total = length(lines)
 
     cond do

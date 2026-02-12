@@ -43,6 +43,7 @@ defmodule Opal.Tool.Hashline do
   @spec tag_lines(String.t(), pos_integer()) :: String.t()
   def tag_lines(content, start_line \\ 1) do
     content
+    |> String.replace("\r\n", "\n")
     |> String.split("\n")
     |> Enum.with_index(start_line)
     |> Enum.map_join("\n", fn {line, num} ->

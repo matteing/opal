@@ -1,4 +1,4 @@
-import React, { useState, useEffect, type FC } from "react";
+import React, { useState, useEffect, memo, type FC } from "react";
 import { Text } from "ink";
 
 const KAOMOJI = [
@@ -28,7 +28,7 @@ export interface ThinkingIndicatorProps {
   label?: string;
 }
 
-export const ThinkingIndicator: FC<ThinkingIndicatorProps> = ({
+const ThinkingIndicatorBase: FC<ThinkingIndicatorProps> = ({
   label = "thinking…",
 }) => {
   const [frame, setFrame] = useState(0);
@@ -36,7 +36,7 @@ export const ThinkingIndicator: FC<ThinkingIndicatorProps> = ({
   useEffect(() => {
     const timer = setInterval(() => {
       setFrame((f) => (f + 1) % KAOMOJI.length);
-    }, 150);
+    }, 400);
     return () => clearInterval(timer);
   }, []);
 
@@ -46,3 +46,5 @@ export const ThinkingIndicator: FC<ThinkingIndicatorProps> = ({
     </Text>
   );
 };
+
+export const ThinkingIndicator = memo(ThinkingIndicatorBase);

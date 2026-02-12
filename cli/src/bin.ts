@@ -48,7 +48,9 @@ Options:
 }
 
 if (!opts.workingDir) {
-  opts.workingDir = process.env["OPAL_CWD"] || process.cwd();
+  // INIT_CWD is set cross-platform by npm/pnpm to the original working directory.
+  // OPAL_CWD is kept as a manual override.
+  opts.workingDir = process.env["OPAL_CWD"] || process.env["INIT_CWD"] || process.cwd();
 }
 
 render(React.createElement(App, { sessionOpts: opts }));

@@ -17,7 +17,7 @@
       "dependsOn": ["codegen"]
     },
     "dev": {
-      "command": "OPAL_CWD=\"${INIT_CWD:-$PWD}\" node dist/bin.js",
+      "command": "node dist/bin.js",
       "options": { "cwd": "cli" },
       "dependsOn": ["build"],
       "cache": false

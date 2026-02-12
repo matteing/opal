@@ -5,18 +5,21 @@ older messages. This document is the reference spec for the full subsystem.
 
 ## Architecture
 
-```
-Agent (maybe_auto_compact)
-  ├── estimate_current_tokens → hybrid estimate (actual + heuristic)
-  ├── Opal.Session.Compaction.compact/2
-  │     ├── find_cut_point → walk backwards, cut at turn boundary
-  │     ├── detect_split_turn → clean or mid-turn cut
-  │     ├── build_summary → LLM summarize or truncate fallback
-  │     └── Session.replace_path_segment → swap old messages for summary
-  └── broadcast usage_update with new currentContextTokens
+```mermaid
+graph TD
+    Agent["Agent<br/><small>maybe_auto_compact</small>"]
+    Agent --> Estimate["estimate_current_tokens<br/><small>hybrid: actual + heuristic</small>"]
+    Agent --> Compact["Opal.Session.Compaction.compact/2"]
+    Compact --> Cut["find_cut_point<br/><small>walk backwards, cut at turn boundary</small>"]
+    Compact --> Split["detect_split_turn<br/><small>clean or mid-turn cut</small>"]
+    Compact --> Summary["build_summary<br/><small>LLM summarize or truncate fallback</small>"]
+    Compact --> Replace["Session.replace_path_segment<br/><small>swap old messages for summary</small>"]
+    Agent --> Broadcast["broadcast usage_update<br/><small>new currentContextTokens</small>"]
 
-Overflow recovery (separate path):
-  Provider rejects request → Overflow.context_overflow?/1 → emergency compact → retry turn
+    Overflow["Overflow recovery<br/><small>separate path</small>"]
+    Overflow --> Reject["Provider rejects request"]
+    Reject --> Detect["Overflow.context_overflow?/1"]
+    Detect --> Emergency["emergency compact → retry turn"]
 ```
 
 **Key files:**
@@ -153,16 +156,9 @@ If no session process exists, overflow is surfaced as an error (can't compact).
 
 ## Context Window Sizes
 
-Inferred from model ID in `model_context_window/1`:
+Looked up from LLMDB at agent initialization via `Opal.Models.context_window/1`. Falls back to 128k if the model isn't found. For Copilot models, queries the `github_copilot` LLMDB provider; for direct providers, queries the upstream provider (e.g., `:anthropic`).
 
-| Model pattern | Context window |
-|---|---|
-| `gpt-4o` | 128k |
-| `gpt-4.1` | ~1M |
-| `o1`, `o3`, `o4-mini` | 200k |
-| `claude` | 200k |
-| `gemini` | 1M |
-| Default | 128k |
+The `context_window` value is included in every `usage_update` and `agent_end` event, and is available via `agent/state` RPC from the moment the session starts.
 
 ## Manual Compaction
 

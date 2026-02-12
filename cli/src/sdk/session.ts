@@ -6,6 +6,8 @@ import type {
   AgentStateResult,
   ModelsListResult,
   ModelSetResult,
+  SettingsGetResult,
+  SettingsSaveResult,
   ConfirmRequest,
   InputRequest,
 } from "./protocol.js";
@@ -25,6 +27,7 @@ type EventMap = {
   subAgentEvent: [parentCallId: string, subSessionId: string, inner: Record<string, unknown>];
   turnEnd: [message: string];
   usageUpdate: [usage: { promptTokens: number; completionTokens: number; totalTokens: number; contextWindow: number }];
+  statusUpdate: [message: string];
   error: [reason: string];
   contextDiscovered: [files: string[]];
   skillLoaded: [name: string, description: string];
@@ -51,6 +54,7 @@ export class Session {
   readonly sessionId: string;
   readonly contextFiles: string[];
   readonly availableSkills: string[];
+  readonly mcpServers: string[];
   readonly nodeName: string;
   private client: OpalClient;
   private listeners = new Map<EventName, Set<(...args: unknown[]) => void>>();
@@ -63,6 +67,7 @@ export class Session {
     this.sessionId = result.sessionId;
     this.contextFiles = result.contextFiles;
     this.availableSkills = result.availableSkills;
+    this.mcpServers = result.mcpServers;
     this.nodeName = result.nodeName;
 
     client.onEvent((event) => this.dispatchEvent(event));
@@ -198,11 +203,36 @@ export class Session {
   /**
    * Change the model for this session.
    */
-  async setModel(modelId: string): Promise<ModelSetResult> {
+  async setModel(modelId: string, thinkingLevel?: string): Promise<ModelSetResult> {
     return this.client.request("model/set", {
       sessionId: this.sessionId,
       modelId,
+      ...(thinkingLevel ? { thinkingLevel } : {}),
     });
+  }
+
+  /**
+   * Change the reasoning effort level for the current model.
+   */
+  async setThinkingLevel(level: string): Promise<{ thinkingLevel: string }> {
+    return this.client.request("thinking/set", {
+      sessionId: this.sessionId,
+      level,
+    });
+  }
+
+  /**
+   * Get persistent user settings.
+   */
+  async getSettings(): Promise<SettingsGetResult> {
+    return this.client.request("settings/get", {});
+  }
+
+  /**
+   * Save persistent user settings (merged with existing).
+   */
+  async saveSettings(settings: Record<string, unknown>): Promise<SettingsSaveResult> {
+    return this.client.request("settings/save", { settings });
   }
 
   /**
@@ -257,6 +287,9 @@ export class Session {
           break;
         case "usageUpdate":
           handler(event.usage);
+          break;
+        case "statusUpdate":
+          handler(event.message);
           break;
         case "error":
           handler(event.reason);

@@ -168,13 +168,11 @@ defmodule Opal.Context do
     do_walk_up(path, [])
   end
 
-  defp do_walk_up("/", acc), do: ["/" | acc]
-
   defp do_walk_up(path, acc) do
     parent = Path.dirname(path)
 
     if parent == path do
-      # Windows root (e.g., "C:/")
+      # Filesystem root (Unix "/" or Windows "C:/")
       [path | acc]
     else
       do_walk_up(parent, [path | acc])

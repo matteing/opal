@@ -63,8 +63,21 @@ defmodule Opal.SubAgent do
   defp do_spawn(parent_state, overrides) do
     model =
       case Map.get(overrides, :model) do
-        {provider_atom, model_id} -> Opal.Model.new(provider_atom, model_id)
         nil -> parent_state.model
+        spec -> Opal.Model.coerce(spec)
+      end
+
+    # Auto-select provider: use explicit override, or inherit from parent.
+    # Only switch provider when the model is explicitly changed to a provider
+    # that differs from the parent's model provider.
+    provider =
+      case Map.get(overrides, :provider) do
+        nil ->
+          # Inherit parent's provider by default
+          parent_state.provider
+
+        mod ->
+          mod
       end
 
     session_id = generate_session_id()
@@ -78,7 +91,7 @@ defmodule Opal.SubAgent do
       tools: Map.get(overrides, :tools, parent_state.tools),
       working_dir: Map.get(overrides, :working_dir, parent_state.working_dir),
       config: parent_state.config,
-      provider: Map.get(overrides, :provider, parent_state.provider),
+      provider: provider,
       tool_supervisor: parent_state.tool_supervisor
     ]
 

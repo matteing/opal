@@ -24,6 +24,8 @@ export interface SessionStartResult {
   contextFiles: string[];
   /** Names of discovered skills (not yet loaded). */
   availableSkills: string[];
+  /** Names of connected MCP servers. */
+  mcpServers: string[];
   /** Erlang node name of the server (for debugging). */
   nodeName: string;
 }
@@ -64,7 +66,7 @@ export interface AgentStateResult {
   /** One of: idle, running, streaming. */
   status: string;
   /** Current model. */
-  model: { id: string; provider: string };
+  model: { id: string; provider: string; thinkingLevel: string };
   /** Number of messages in history. */
   messageCount: number;
   /** Active tool names. */
@@ -96,10 +98,13 @@ export interface SessionCompactParams {
 
 export type SessionCompactResult = Record<string, never>;
 
-export type ModelsListParams = Record<string, never>;
+export interface ModelsListParams {
+  /** Optional list of direct providers to include (e.g. ["anthropic", "openai"]). */
+  providers?: string[];
+}
 
 export interface ModelsListResult {
-  /** Array of {id, name}. */
+  /** Array of {id, name, provider, supports_thinking}. */
   models: Record<string, unknown>[];
 }
 
@@ -108,11 +113,25 @@ export interface ModelSetParams {
   sessionId: string;
   /** Model ID to switch to. */
   modelId: string;
+  /** Reasoning effort: off, low, medium, high. */
+  thinkingLevel?: string;
 }
 
 export interface ModelSetResult {
   /** The new active model. */
-  model: { id: string; provider: string };
+  model: { id: string; provider: string; thinkingLevel: string };
+}
+
+export interface ThinkingSetParams {
+  /** Target session ID. */
+  sessionId: string;
+  /** Reasoning effort: off, low, medium, high. */
+  level: string;
+}
+
+export interface ThinkingSetResult {
+  /** The new thinking level. */
+  thinkingLevel: string;
 }
 
 export type AuthStatusParams = Record<string, never>;
@@ -143,6 +162,23 @@ export interface TasksListParams {
 export interface TasksListResult {
   /** Array of task objects. */
   tasks: Record<string, unknown>[];
+}
+
+export type SettingsGetParams = Record<string, never>;
+
+export interface SettingsGetResult {
+  /** Map of setting key-value pairs. */
+  settings: Record<string, unknown>;
+}
+
+export interface SettingsSaveParams {
+  /** Map of setting key-value pairs to save. */
+  settings: Record<string, unknown>;
+}
+
+export interface SettingsSaveResult {
+  /** The full settings after merge. */
+  settings: Record<string, unknown>;
 }
 
 export interface ClientConfirmParams {
@@ -275,6 +311,12 @@ export interface UsageUpdateEvent {
   usage: { completionTokens: number; contextWindow: number; currentContextTokens: number; promptTokens: number; totalTokens: number };
 }
 
+export interface StatusUpdateEvent {
+  type: "statusUpdate";
+  /** Brief human-readable status. */
+  message: string;
+}
+
 
 export type AgentEvent =
   | AgentStartEvent
@@ -291,7 +333,8 @@ export type AgentEvent =
   | ContextDiscoveredEvent
   | SkillLoadedEvent
   | SubAgentEventEvent
-  | UsageUpdateEvent;
+  | UsageUpdateEvent
+  | StatusUpdateEvent;
 
 // --- Method constants ---
 
@@ -306,9 +349,12 @@ export const Methods = {
   SESSION_COMPACT: "session/compact" as const,
   MODELS_LIST: "models/list" as const,
   MODEL_SET: "model/set" as const,
+  THINKING_SET: "thinking/set" as const,
   AUTH_STATUS: "auth/status" as const,
   AUTH_LOGIN: "auth/login" as const,
   TASKS_LIST: "tasks/list" as const,
+  SETTINGS_GET: "settings/get" as const,
+  SETTINGS_SAVE: "settings/save" as const,
   CLIENT_CONFIRM: "client/confirm" as const,
   CLIENT_INPUT: "client/input" as const,
 } as const;
@@ -355,9 +401,12 @@ export interface MethodTypes {
   "session/compact": { params: SessionCompactParams; result: SessionCompactResult };
   "models/list": { params: ModelsListParams; result: ModelsListResult };
   "model/set": { params: ModelSetParams; result: ModelSetResult };
+  "thinking/set": { params: ThinkingSetParams; result: ThinkingSetResult };
   "auth/status": { params: AuthStatusParams; result: AuthStatusResult };
   "auth/login": { params: AuthLoginParams; result: AuthLoginResult };
   "tasks/list": { params: TasksListParams; result: TasksListResult };
+  "settings/get": { params: SettingsGetParams; result: SettingsGetResult };
+  "settings/save": { params: SettingsSaveParams; result: SettingsSaveResult };
   "client/confirm": { params: ClientConfirmParams; result: ClientConfirmResult };
   "client/input": { params: ClientInputParams; result: ClientInputResult };
 }

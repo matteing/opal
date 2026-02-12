@@ -53,31 +53,15 @@ Omitting `end` defaults to a single-line edit. Omitting `new_string` deletes the
 
 ### Pipeline
 
-```
-  start, end, new_string
-          │
-   ┌──────▼──────┐
-   │ Parse       │──── invalid format ──► error
-   │ anchors     │
-   └──────┬──────┘
-          │
-   ┌──────▼──────┐
-   │ Read file,  │
-   │ strip BOM,  │
-   │ normalize   │
-   │ line endings│
-   └──────┬──────┘
-          │
-   ┌──────▼──────┐
-   │ Validate    │──── hash mismatch ──► error ("file may have changed")
-   │ hashes      │
-   └──────┬──────┘
-          │
-   ┌──────▼──────┐
-   │ Apply edit, │
-   │ restore     │──── success ──► write file
-   │ encoding    │
-   └─────────────┘
+```mermaid
+graph TD
+    Input["start, end, new_string"] --> Parse["Parse anchors"]
+    Parse -- "invalid format" --> Err1["error"]
+    Parse --> Read["Read file,<br/>strip BOM,<br/>normalize line endings"]
+    Read --> Validate["Validate hashes"]
+    Validate -- "hash mismatch" --> Err2["error: file may have changed"]
+    Validate --> Apply["Apply edit,<br/>restore encoding"]
+    Apply -- "success" --> Write["write file"]
 ```
 
 ### Hash validation

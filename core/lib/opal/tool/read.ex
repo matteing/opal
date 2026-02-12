@@ -67,6 +67,8 @@ defmodule Opal.Tool.Read do
       # Strip BOM so the LLM sees clean text (BOM is invisible and would
       # cause mismatches if the LLM later tries to edit the file).
       {_had_bom, content} = Encoding.strip_bom(raw_content)
+      # Normalize CRLF → LF for consistent line splitting
+      {_had_crlf, content} = Encoding.normalize_line_endings(content)
 
       offset = Map.get(args, "offset")
       limit = Map.get(args, "limit")

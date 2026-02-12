@@ -39,6 +39,7 @@ defmodule Opal.RPC.Handler do
           session_id: state.session_id,
           context_files: state.context_files,
           available_skills: Enum.map(state.available_skills, & &1.name),
+          mcp_servers: Enum.map(state.mcp_servers, & &1.name),
           node_name: Atom.to_string(Node.self())
         }}
 
@@ -172,29 +173,56 @@ defmodule Opal.RPC.Handler do
     {:error, Opal.RPC.invalid_params(), "Missing required param: session_id", nil}
   end
 
-  def handle("models/list", _params) do
-    models = Opal.Auth.list_models()
-    {:ok, %{models: models}}
+  def handle("models/list", params) do
+    copilot_models =
+      Opal.Auth.list_models()
+      |> Enum.map(fn m -> Map.put(m, :provider, "copilot") end)
+
+    # Include models from direct providers if requested
+    provider_models =
+      case params do
+        %{"providers" => providers} when is_list(providers) ->
+          Enum.flat_map(providers, fn p ->
+            provider = String.to_atom(p)
+            Opal.Models.list_provider(provider)
+            |> Enum.map(fn m -> Map.put(m, :provider, p) end)
+          end)
+
+        _ ->
+          []
+      end
+
+    {:ok, %{models: copilot_models ++ provider_models}}
   end
 
-  def handle("model/set", %{"session_id" => sid, "model_id" => model_id}) do
+  def handle("model/set", %{"session_id" => sid, "model_id" => model_id} = params) do
     with {:ok, agent} <- find_agent_by_session_id(sid) do
-      models = Opal.Auth.list_models()
-      model_info = Enum.find(models, fn m -> m.id == model_id end)
+      thinking_level = parse_thinking_level(params["thinking_level"])
+      model = Opal.Model.coerce(model_id, thinking_level: thinking_level)
+      provider = Opal.Model.provider_module(model)
 
-      if model_info do
-        # All models use the :copilot provider
-        model = %Opal.Model{provider: :copilot, id: model_info.id}
-        GenServer.call(agent, {:set_model, model})
-        {:ok, %{model: %{provider: model.provider, id: model.id}}}
-      else
-        {:error, Opal.RPC.invalid_params(), "Unknown model: #{model_id}", nil}
-      end
+      GenServer.call(agent, {:set_model, model})
+      GenServer.call(agent, {:set_provider, provider})
+      {:ok, %{model: %{provider: model.provider, id: model.id, thinking_level: model.thinking_level}}}
     end
   end
 
   def handle("model/set", _params) do
     {:error, Opal.RPC.invalid_params(), "Missing required params: session_id, model_id", nil}
+  end
+
+  def handle("thinking/set", %{"session_id" => sid, "level" => level_str}) do
+    with {:ok, agent} <- find_agent_by_session_id(sid) do
+      level = parse_thinking_level(level_str)
+      state = Opal.Agent.get_state(agent)
+      model = %{state.model | thinking_level: level}
+      GenServer.call(agent, {:set_model, model})
+      {:ok, %{thinking_level: level}}
+    end
+  end
+
+  def handle("thinking/set", _params) do
+    {:error, Opal.RPC.invalid_params(), "Missing required params: session_id, level", nil}
   end
 
   def handle("auth/status", _params) do
@@ -239,6 +267,21 @@ defmodule Opal.RPC.Handler do
 
   def handle("tasks/list", _params) do
     {:error, Opal.RPC.invalid_params(), "Missing required param: session_id", nil}
+  end
+
+  def handle("settings/get", _params) do
+    {:ok, %{settings: Opal.Settings.get_all()}}
+  end
+
+  def handle("settings/save", %{"settings" => settings}) when is_map(settings) do
+    case Opal.Settings.save(settings) do
+      :ok -> {:ok, %{settings: Opal.Settings.get_all()}}
+      {:error, reason} -> {:error, Opal.RPC.internal_error(), "Failed to save settings", inspect(reason)}
+    end
+  end
+
+  def handle("settings/save", _params) do
+    {:error, Opal.RPC.invalid_params(), "Missing required param: settings", nil}
   end
 
   # Catch-all for unknown methods
@@ -327,7 +370,8 @@ defmodule Opal.RPC.Handler do
       status: state.status,
       model: %{
         provider: state.model.provider,
-        id: state.model.id
+        id: state.model.id,
+        thinking_level: state.model.thinking_level
       },
       message_count: length(state.messages),
       tools: Enum.map(state.tools, fn t -> t.name() end),
@@ -342,4 +386,9 @@ defmodule Opal.RPC.Handler do
       modified: NaiveDateTime.to_iso8601(info.modified)
     }
   end
+
+  @valid_thinking_levels ~w(off low medium high)
+  defp parse_thinking_level(nil), do: :off
+  defp parse_thinking_level(level) when level in @valid_thinking_levels, do: String.to_atom(level)
+  defp parse_thinking_level(_), do: :off
 end

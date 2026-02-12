@@ -1,4 +1,4 @@
-import React, { useState, useEffect, type FC } from "react";
+import React, { useState, useEffect, useRef, type FC } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import { useOpal } from "./hooks/use-opal.js";
 import { Header } from "./components/header.js";
@@ -7,6 +7,7 @@ import { BottomBar } from "./components/bottom-bar.js";
 import { ThinkingIndicator } from "./components/thinking.js";
 import { ConfirmDialog } from "./components/confirm-dialog.js";
 import { ModelPicker } from "./components/model-picker.js";
+import { ShimmerText } from "./components/shimmer-text.js";
 import type { SessionOptions } from "./sdk/session.js";
 
 export interface AppProps {
@@ -18,18 +19,25 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
   const { exit } = useApp();
   const [stalled, setStalled] = useState(false);
   const [showToolOutput, setShowToolOutput] = useState(false);
+  const lastDeltaRef = useRef(0);
+
+  // Keep ref in sync so the interval can read it without re-creating
+  useEffect(() => {
+    lastDeltaRef.current = state.lastDeltaAt;
+  }, [state.lastDeltaAt]);
 
   // Detect when the model goes quiet mid-stream (e.g. composing a long file)
   useEffect(() => {
-    if (!state.isRunning || state.lastDeltaAt === 0) {
+    if (!state.isRunning) {
       setStalled(false);
       return;
     }
     const timer = setInterval(() => {
-      setStalled(Date.now() - state.lastDeltaAt > 2000);
+      const last = lastDeltaRef.current;
+      setStalled(last > 0 && Date.now() - last > 2000);
     }, 500);
     return () => clearInterval(timer);
-  }, [state.isRunning, state.lastDeltaAt]);
+  }, [state.isRunning]);
 
   useInput((input, key) => {
     if (input === "c" && key.ctrl) {
@@ -55,7 +63,7 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
   if (!state.sessionReady) {
     return (
       <Box padding={1}>
-        <Text color="magenta">Starting opal-server…</Text>
+        <ShimmerText>Starting opal-server…</ShimmerText>
       </Box>
     );
   }
@@ -68,7 +76,7 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
 
       {(state.thinking !== null || stalled || (state.isRunning && !lastEntryIsAssistant(state.timeline))) && (
         <Box paddingX={1}>
-          <ThinkingIndicator />
+          <ThinkingIndicator label={state.statusMessage ?? "thinking…"} />
         </Box>
       )}
 
@@ -83,6 +91,7 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
         <ModelPicker
           models={state.modelPicker.models}
           current={state.modelPicker.current}
+          currentThinkingLevel={state.modelPicker.currentThinkingLevel}
           onSelect={actions.selectModel}
           onDismiss={actions.dismissModelPicker}
         />

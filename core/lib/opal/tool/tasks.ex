@@ -3,7 +3,8 @@ defmodule Opal.Tool.Tasks do
   Project-scoped task tracker backed by DETS (built into Erlang).
 
   Uses structured JSON parameters — no SQL parsing needed. The LLM
-  passes action + fields directly. Database stored at `.opal/tasks.dets`.
+  passes action + fields directly. Database stored at `~/.opal/tasks/<hash>.dets`,
+  keyed by the working directory so each project gets its own task database.
 
   ## Actions
 
@@ -112,9 +113,10 @@ defmodule Opal.Tool.Tasks do
   @spec clear(String.t()) :: :ok
   def clear(working_dir) do
     path = dets_path(working_dir)
+    table = table_name(working_dir)
 
-    case :dets.open_file(:opal_tasks, file: path, type: :set) do
-      {:ok, table} ->
+    case :dets.open_file(table, file: path, type: :set) do
+      {:ok, ^table} ->
         :dets.delete_all_objects(table)
         :dets.close(table)
         :ok
@@ -165,14 +167,21 @@ defmodule Opal.Tool.Tasks do
   # -- DETS Helpers --
 
   defp dets_path(working_dir) do
-    dir = Path.join(working_dir, ".opal")
+    cfg = Opal.Config.new()
+    dir = Path.join(Opal.Config.data_dir(cfg), "tasks")
     File.mkdir_p!(dir)
-    Path.join(dir, "tasks.dets") |> String.to_charlist()
+    hash = :crypto.hash(:sha256, working_dir) |> Base.url_encode64(padding: false) |> binary_part(0, 12)
+    Path.join(dir, "#{hash}.dets") |> String.to_charlist()
+  end
+
+  defp table_name(working_dir) do
+    hash = :crypto.hash(:sha256, working_dir) |> Base.url_encode64(padding: false) |> binary_part(0, 12)
+    String.to_atom("opal_tasks_#{hash}")
   end
 
   defp with_dets(working_dir, fun) do
     path = dets_path(working_dir)
-    table = :opal_tasks
+    table = table_name(working_dir)
 
     case :dets.open_file(table, file: path, type: :set) do
       {:ok, ^table} ->

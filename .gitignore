@@ -2,9 +2,11 @@
 _build/
 deps/
 /cover/
-/doc/
+doc/
 erl_crash.dump
 *.ez
+tmp/
+*.dets
 
 # Context dumps
 opal-context-*.json
