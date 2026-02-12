@@ -1,0 +1,6 @@
+{
+  "description": "Error response via Responses API",
+  "events": [
+    {"data": "{\"type\":\"error\",\"error\":{\"message\":\"Rate limit exceeded\",\"code\":429}}"}
+  ]
+}

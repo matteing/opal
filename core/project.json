@@ -1,0 +1,48 @@
+{
+  "name": "core",
+  "root": "core",
+  "namedInputs": {
+    "source": [
+      "{projectRoot}/lib/**/*",
+      "{projectRoot}/config/**/*",
+      "{projectRoot}/mix.exs",
+      "{projectRoot}/mix.lock"
+    ]
+  },
+  "targets": {
+    "build": {
+      "command": "mix compile --warnings-as-errors",
+      "options": { "cwd": "core" },
+      "inputs": ["source"],
+      "outputs": ["{projectRoot}/_build"]
+    },
+    "test": {
+      "command": "mix test",
+      "options": { "cwd": "core" },
+      "dependsOn": ["build"],
+      "inputs": ["source", "{projectRoot}/test/**/*"],
+      "outputs": []
+    },
+    "lint": {
+      "command": "mix format --check-formatted",
+      "options": { "cwd": "core" },
+      "inputs": ["source", "{projectRoot}/test/**/*", "{projectRoot}/.formatter.exs"]
+    },
+    "format": {
+      "command": "mix format",
+      "options": { "cwd": "core" },
+      "cache": false
+    },
+    "deps": {
+      "command": "mix deps.get",
+      "options": { "cwd": "core" },
+      "cache": false
+    },
+    "docs": {
+      "command": "mix docs",
+      "options": { "cwd": "core" },
+      "inputs": ["source", "{projectRoot}/README.md", "{workspaceRoot}/docs/**/*"],
+      "outputs": ["{projectRoot}/doc"]
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "@unfinite/opal",
+  "version": "0.2.0",
+  "description": "AI coding agent — CLI & typed client library",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "opal": "bin/opal"
+  },
+  "main": "dist/sdk/index.js",
+  "types": "dist/sdk/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/sdk/index.js",
+      "types": "./dist/sdk/index.d.ts"
+    }
+  },
+  "files": [
+    "bin",
+    "dist",
+    "releases"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ink": "^6.7.0",
+    "ink-text-input": "^6.0.0",
+    "marked": "^15.0.12",
+    "marked-terminal": "^7.3.0",
+    "react": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/marked-terminal": "^6.1.1",
+    "@types/node": "^25.2.3",
+    "@types/react": "^19.2.14",
+    "typescript": "^5.9.3"
+  }
+}

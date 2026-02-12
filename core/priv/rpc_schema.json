@@ -1,0 +1,829 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "events": {
+      "agent_abort": {
+        "description": "Agent run was aborted.",
+        "properties": {
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "agent_abort",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id"
+        ],
+        "type": "object"
+      },
+      "agent_end": {
+        "description": "Agent has finished processing.",
+        "properties": {
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "agent_end",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id"
+        ],
+        "type": "object"
+      },
+      "agent_start": {
+        "description": "Agent has started processing.",
+        "properties": {
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "agent_start",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "description": "An error occurred during processing.",
+        "properties": {
+          "reason": {
+            "description": "Error description.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "error",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "message_delta": {
+        "description": "A chunk of LLM-generated text.",
+        "properties": {
+          "delta": {
+            "description": "The text fragment.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "message_delta",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "delta"
+        ],
+        "type": "object"
+      },
+      "message_start": {
+        "description": "LLM has started generating a message.",
+        "properties": {
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "message_start",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id"
+        ],
+        "type": "object"
+      },
+      "skill_loaded": {
+        "description": "An agent skill was dynamically loaded into context.",
+        "properties": {
+          "description": {
+            "description": "Skill description.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Skill name.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "skill_loaded",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "name",
+          "description"
+        ],
+        "type": "object"
+      },
+      "thinking_delta": {
+        "description": "A chunk of LLM thinking/reasoning text.",
+        "properties": {
+          "delta": {
+            "description": "The thinking text fragment.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "thinking_delta",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "delta"
+        ],
+        "type": "object"
+      },
+      "thinking_start": {
+        "description": "LLM has started a thinking/reasoning block.",
+        "properties": {
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "thinking_start",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id"
+        ],
+        "type": "object"
+      },
+      "tool_execution_end": {
+        "description": "A tool has finished executing.",
+        "properties": {
+          "call_id": {
+            "description": "Unique call identifier.",
+            "type": "string"
+          },
+          "result": {
+            "description": "Tool execution result.",
+            "properties": {
+              "error": {
+                "type": "string"
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "output": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "ok"
+            ],
+            "type": "object"
+          },
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "tool": {
+            "description": "Tool name.",
+            "type": "string"
+          },
+          "type": {
+            "const": "tool_execution_end",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "tool",
+          "call_id",
+          "result"
+        ],
+        "type": "object"
+      },
+      "tool_execution_start": {
+        "description": "A tool has started executing.",
+        "properties": {
+          "args": {
+            "description": "Tool arguments.",
+            "type": "object"
+          },
+          "call_id": {
+            "description": "Unique call identifier.",
+            "type": "string"
+          },
+          "meta": {
+            "description": "Human-readable summary of the invocation.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "tool": {
+            "description": "Tool name.",
+            "type": "string"
+          },
+          "type": {
+            "const": "tool_execution_start",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "tool",
+          "call_id",
+          "args",
+          "meta"
+        ],
+        "type": "object"
+      },
+      "turn_end": {
+        "description": "An LLM turn has ended (may be followed by tool calls).",
+        "properties": {
+          "message": {
+            "description": "The assistant's message text.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "turn_end",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "message"
+        ],
+        "type": "object"
+      }
+    },
+    "methods": {
+      "agent/abort": {
+        "description": "Abort the current agent run.",
+        "params": {
+          "properties": {
+            "session_id": {
+              "description": "Target session ID.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "ok": {
+              "description": "Always true on success.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ],
+          "type": "object"
+        }
+      },
+      "agent/prompt": {
+        "description": "Send an async user prompt. Results stream as agent/event notifications.",
+        "params": {
+          "properties": {
+            "session_id": {
+              "description": "Target session ID.",
+              "type": "string"
+            },
+            "text": {
+              "description": "The user's prompt text.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id",
+            "text"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "ok": {
+              "description": "Always true on success.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ],
+          "type": "object"
+        }
+      },
+      "agent/state": {
+        "description": "Get the current agent state.",
+        "params": {
+          "properties": {
+            "session_id": {
+              "description": "Target session ID.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "message_count": {
+              "description": "Number of messages in history.",
+              "type": "integer"
+            },
+            "model": {
+              "description": "Current model.",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider",
+                "id"
+              ],
+              "type": "object"
+            },
+            "session_id": {
+              "description": "Session ID.",
+              "type": "string"
+            },
+            "status": {
+              "description": "One of: idle, running, streaming.",
+              "type": "string"
+            },
+            "tools": {
+              "description": "Active tool names.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "session_id",
+            "status",
+            "model",
+            "message_count",
+            "tools"
+          ],
+          "type": "object"
+        }
+      },
+      "agent/steer": {
+        "description": "Steer the agent mid-run. If idle, acts like agent/prompt.",
+        "params": {
+          "properties": {
+            "session_id": {
+              "description": "Target session ID.",
+              "type": "string"
+            },
+            "text": {
+              "description": "The steering message.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id",
+            "text"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "ok": {
+              "description": "Always true on success.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ],
+          "type": "object"
+        }
+      },
+      "auth/login": {
+        "description": "Start the device-code OAuth login flow.",
+        "params": {
+          "properties": {},
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "device_code": {
+              "description": "Device code for polling.",
+              "type": "string"
+            },
+            "interval": {
+              "description": "Polling interval in seconds.",
+              "type": "integer"
+            },
+            "user_code": {
+              "description": "Code for the user to enter.",
+              "type": "string"
+            },
+            "verification_uri": {
+              "description": "URL to visit.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "user_code",
+            "verification_uri",
+            "device_code",
+            "interval"
+          ],
+          "type": "object"
+        }
+      },
+      "auth/status": {
+        "description": "Check whether the server is authenticated.",
+        "params": {
+          "properties": {},
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "authenticated": {
+              "description": "True if a valid token exists.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "authenticated"
+          ],
+          "type": "object"
+        }
+      },
+      "models/list": {
+        "description": "List available LLM models.",
+        "params": {
+          "properties": {},
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "models": {
+              "description": "Array of {id, name}.",
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "models"
+          ],
+          "type": "object"
+        }
+      },
+      "session/branch": {
+        "description": "Branch the conversation at a specific message.",
+        "params": {
+          "properties": {
+            "entry_id": {
+              "description": "Message ID to branch from.",
+              "type": "string"
+            },
+            "session_id": {
+              "description": "Target session ID.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id",
+            "entry_id"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "ok": {
+              "description": "Always true on success.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ],
+          "type": "object"
+        }
+      },
+      "session/compact": {
+        "description": "Compact older messages in the session. (Not yet implemented.)",
+        "params": {
+          "properties": {
+            "keep_recent": {
+              "description": "Number of recent messages to keep. Default: 10.",
+              "type": "integer"
+            },
+            "session_id": {
+              "description": "Target session ID.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "ok": {
+              "description": "Always true on success.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ],
+          "type": "object"
+        }
+      },
+      "session/list": {
+        "description": "List saved sessions on disk.",
+        "params": {
+          "properties": {},
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "sessions": {
+              "description": "Array of {id, title, modified}.",
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "sessions"
+          ],
+          "type": "object"
+        }
+      },
+      "session/start": {
+        "description": "Start a new agent session.",
+        "params": {
+          "properties": {
+            "mcp_servers": {
+              "description": "MCP server configurations.",
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "model": {
+              "description": "Model to use. Defaults to config default.",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider",
+                "id"
+              ],
+              "type": "object"
+            },
+            "session": {
+              "description": "If true, enable session persistence.",
+              "type": "boolean"
+            },
+            "system_prompt": {
+              "description": "System prompt for the agent.",
+              "type": "string"
+            },
+            "tools": {
+              "description": "Tool names to enable.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "working_dir": {
+              "description": "Working directory. Defaults to server cwd.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "agent_pid": {
+              "description": "Erlang PID (for debugging).",
+              "type": "string"
+            },
+            "available_skills": {
+              "description": "Names of discovered skills (not yet loaded).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "context_files": {
+              "description": "Paths of loaded context files.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "session_id": {
+              "description": "The new session's unique ID.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id",
+            "agent_pid",
+            "context_files",
+            "available_skills"
+          ],
+          "type": "object"
+        }
+      },
+      "tasks/list": {
+        "description": "List active tasks (open, in_progress, blocked) for a session's project.",
+        "params": {
+          "properties": {
+            "session_id": {
+              "description": "Target session ID.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "tasks": {
+              "description": "Array of task objects.",
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "tasks"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    "notification_method": "agent/event",
+    "server_requests": {
+      "client/confirm": {
+        "description": "Ask the user for confirmation (e.g., before executing a tool).",
+        "params": {
+          "properties": {
+            "actions": {
+              "description": "Available actions (e.g., [\"allow\", \"deny\", \"allow_session\"]).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "message": {
+              "description": "Detailed message to show.",
+              "type": "string"
+            },
+            "session_id": {
+              "description": "Session this confirmation belongs to.",
+              "type": "string"
+            },
+            "title": {
+              "description": "Short title for the confirmation dialog.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id",
+            "title",
+            "message",
+            "actions"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "action": {
+              "description": "The user's chosen action.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        }
+      },
+      "client/input": {
+        "description": "Ask the user for freeform text input.",
+        "params": {
+          "properties": {
+            "prompt": {
+              "description": "Prompt to display to the user.",
+              "type": "string"
+            },
+            "sensitive": {
+              "description": "If true, input should be masked (e.g., API keys).",
+              "type": "boolean"
+            },
+            "session_id": {
+              "description": "Session this input request belongs to.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id",
+            "prompt"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "text": {
+              "description": "The user's input.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object"
+        }
+      }
+    }
+  },
+  "description": "Auto-generated from Opal.RPC.Protocol",
+  "title": "Opal RPC Protocol",
+  "version": "0.1.0"
+}

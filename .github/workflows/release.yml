@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 0.2.0)"
+        required: true
+
+env:
+  MIX_ENV: prod
+  ELIXIR_VERSION: "1.18.4"
+  OTP_VERSION: "28.0"
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install Zig
+        run: |
+          curl -L https://ziglang.org/download/0.15.2/zig-linux-x86_64-0.15.2.tar.xz | tar xJ
+          echo "$PWD/zig-linux-x86_64-0.15.2" >> "$GITHUB_PATH"
+
+      - name: Install system deps
+        run: sudo apt-get install -y xz-utils p7zip-full
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Elixir deps
+        run: cd cli && mix deps.get --only prod
+
+      - name: Patch deps (OTP 28 compat)
+        run: cd cli && mix run --no-compile --no-start ../scripts/patch_deps.exs
+
+      - name: Build Burrito releases (all targets)
+        run: cd cli && mix release opal --overwrite
+
+      - name: Stage binaries into npm package
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          mkdir -p npm/opal/releases
+
+          cp cli/burrito_out/* npm/opal/releases/
+          chmod +x npm/opal/releases/*
+
+          # Update version
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('npm/opal/package.json', 'utf8'));
+            p.version = '$VERSION';
+            fs.writeFileSync('npm/opal/package.json', JSON.stringify(p, null, 2) + '\n');
+          "
+
+          echo "==> Staged binaries:"
+          ls -lh npm/opal/releases/
+
+      - name: Publish to npm
+        run: cd npm/opal && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: cli/burrito_out/*

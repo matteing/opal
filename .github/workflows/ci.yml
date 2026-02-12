@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  MIX_ENV: test
+  ELIXIR_VERSION: "1.18.4"
+  OTP_VERSION: "28.0"
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            core/deps
+            core/_build
+            cli/deps
+            cli/_build
+          key: mix-${{ runner.os }}-${{ hashFiles('core/mix.lock', 'cli/mix.lock') }}
+          restore-keys: mix-${{ runner.os }}-
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Install Elixir deps
+        run: |
+          cd core && mix deps.get && cd ..
+          cd cli && mix deps.get && cd ..
+
+      - name: Patch deps (OTP 28 compat)
+        run: cd cli && mix run --no-compile --no-start ../scripts/patch_deps.exs
+
+      - name: Compile (warnings as errors)
+        run: |
+          cd core && mix compile --warnings-as-errors && cd ..
+          cd cli && mix compile --warnings-as-errors && cd ..
+
+      - name: Lint
+        run: |
+          cd core && mix format --check-formatted && cd ..
+          cd cli && mix format --check-formatted && cd ..
+
+      - name: Test core
+        run: cd core && mix test
+
+      - name: Test cli
+        run: cd cli && mix test

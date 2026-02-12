@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.40.1">
+    <meta name="project" content="Opal v0.1.0">
+
+
+    <title>Opal.Message — Opal v0.1.0</title>
+
+    <link rel="stylesheet" href="dist/html-elixir-YJO4MOOW.css" />
+
+    <script defer src="dist/sidebar_items-93C55D77.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-YU4BZFVS.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="https://github.com/scohen/opal" class="sidebar-projectName" translate="no">
+Opal
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v0.1.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras="Pages"></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of Opal</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">Opal.<wbr>Message</span> 
+      <small class="app-vsn" translate="no">(Opal v0.1.0)</small>
+
+    </h1>
+
+<a href="Opal.Message.md" title="Copy Markdown (hold Ctrl/Cmd and click it to open as Markdown)" class="copy-markdown icon-action" rel="help">
+  <i class="ri-markdown-line" aria-hidden="true"></i>
+  <span class="sr-only">Copy Markdown</span>
+</a>
+
+
+
+      <a href="https://github.com/scohen/opal/blob/v0.1.0/lib/opal/message.ex#L1" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>A struct representing messages in an agent conversation.</p><p>Messages flow through the agent loop and carry content between the user,
+assistant, and tool executions. Each message has a role that determines
+its semantics:</p><ul><li><code class="inline">:user</code> — a user-originated message with text content</li><li><code class="inline">:assistant</code> — an assistant response with text and optional tool calls</li><li><code class="inline">:tool_call</code> — a tool invocation specifying name, call ID, and arguments</li><li><code class="inline">:tool_result</code> — the result of a tool execution, keyed by call ID</li></ul><p>Every message is assigned a unique ID at construction time.</p>
+    </section>
+
+</div>
+
+  <section id="summary" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h2>
+<div class="summary-types summary">
+  <h3>
+    <a href="#types">Types</a>
+  </h3>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:role/0" data-no-tooltip="" translate="no">role()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:t/0" data-no-tooltip="" translate="no">t()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:tool_call/0" data-no-tooltip="" translate="no">tool_call()</a>
+
+      </div>
+
+    </div>
+
+</div>
+<div class="summary-functions summary">
+  <h3>
+    <a href="#functions">Functions</a>
+  </h3>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#assistant/2" data-no-tooltip="" translate="no">assistant(content, tool_calls \\ [])</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Creates an assistant message with text content and optional tool calls.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#tool_call/3" data-no-tooltip="" translate="no">tool_call(call_id, name, arguments)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Creates a tool call message representing a tool invocation.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#tool_result/3" data-no-tooltip="" translate="no">tool_result(call_id, output, is_error \\ false)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Creates a tool result message with the output of a tool execution.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#user/1" data-no-tooltip="" translate="no">user(content)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Creates a user message with the given text content.</p></div>
+
+    </div>
+
+</div>
+
+  </section>
+
+
+  <section id="types" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#types">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Types</span>
+    </h2>
+
+    <div class="types-list">
+<section class="detail" id="t:role/0">
+
+  <div class="detail-header">
+    <a href="#t:role/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">role()</h1>
+
+
+        <a href="https://github.com/scohen/opal/blob/v0.1.0/lib/opal/message.ex#L17" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@type</span> role() :: :user | :assistant | :tool_call | :tool_result</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:t/0">
+
+  <div class="detail-header">
+    <a href="#t:t/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">t()</h1>
+
+
+        <a href="https://github.com/scohen/opal/blob/v0.1.0/lib/opal/message.ex#L25" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@type</span> t() :: %Opal.Message{
+  call_id: <a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>() | nil,
+  content: <a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>() | nil,
+  id: <a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>(),
+  is_error: <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">boolean</a>(),
+  name: <a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>() | nil,
+  parent_id: <a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>() | nil,
+  role: <a href="#t:role/0">role</a>(),
+  tool_calls: [<a href="#t:tool_call/0">tool_call</a>()] | nil
+}</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:tool_call/0">
+
+  <div class="detail-header">
+    <a href="#t:tool_call/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">tool_call()</h1>
+
+
+        <a href="https://github.com/scohen/opal/blob/v0.1.0/lib/opal/message.ex#L19" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@type</span> tool_call() :: %{call_id: <a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>(), name: <a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>(), arguments: <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">map</a>()}</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h2>
+
+    <div class="functions-list">
+<section class="detail" id="assistant/2">
+
+    <span id="assistant/1"></span>
+
+  <div class="detail-header">
+    <a href="#assistant/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">assistant(content, tool_calls \\ [])</h1>
+
+
+        <a href="https://github.com/scohen/opal/blob/v0.1.0/lib/opal/message.ex#L63" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> assistant(<a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>() | nil, [<a href="#t:tool_call/0">tool_call</a>()]) :: <a href="#t:t/0">t</a>()</pre>
+
+      </div>
+
+<p>Creates an assistant message with text content and optional tool calls.</p><h2 id="assistant/2-examples" class="section-heading"><a href="#assistant/2-examples" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Examples</span></h2><pre><code class="makeup elixir" translate="no"><span class="gp unselectable">iex&gt; </span><span class="n">msg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Opal.Message</span><span class="o">.</span><span class="n">assistant</span><span class="p" data-group-id="9109910618-1">(</span><span class="s">&quot;Sure, let me check.&quot;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="9109910618-2">[</span><span class="p" data-group-id="9109910618-2">]</span><span class="p" data-group-id="9109910618-1">)</span><span class="w">
+</span><span class="gp unselectable">iex&gt; </span><span class="n">msg</span><span class="o">.</span><span class="n">role</span><span class="w">
+</span><span class="ss">:assistant</span></code></pre>
+  </section>
+</section>
+<section class="detail" id="tool_call/3">
+
+  <div class="detail-header">
+    <a href="#tool_call/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">tool_call(call_id, name, arguments)</h1>
+
+
+        <a href="https://github.com/scohen/opal/blob/v0.1.0/lib/opal/message.ex#L82" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> tool_call(<a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>(), <a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>(), <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">map</a>()) :: <a href="#t:t/0">t</a>()</pre>
+
+      </div>
+
+<p>Creates a tool call message representing a tool invocation.</p><h2 id="tool_call/3-parameters" class="section-heading"><a href="#tool_call/3-parameters" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Parameters</span></h2><ul><li><code class="inline">call_id</code> — unique identifier linking this call to its result</li><li><code class="inline">name</code> — the tool name to invoke</li><li><code class="inline">arguments</code> — a map of arguments to pass to the tool</li></ul>
+  </section>
+</section>
+<section class="detail" id="tool_result/3">
+
+    <span id="tool_result/2"></span>
+
+  <div class="detail-header">
+    <a href="#tool_result/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">tool_result(call_id, output, is_error \\ false)</h1>
+
+
+        <a href="https://github.com/scohen/opal/blob/v0.1.0/lib/opal/message.ex#L103" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> tool_result(<a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>(), <a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>(), <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">boolean</a>()) :: <a href="#t:t/0">t</a>()</pre>
+
+      </div>
+
+<p>Creates a tool result message with the output of a tool execution.</p><h2 id="tool_result/3-parameters" class="section-heading"><a href="#tool_result/3-parameters" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Parameters</span></h2><ul><li><code class="inline">call_id</code> — the call ID this result corresponds to</li><li><code class="inline">output</code> — the string output produced by the tool</li><li><code class="inline">is_error</code> — whether the tool execution resulted in an error (default: <code class="inline">false</code>)</li></ul>
+  </section>
+</section>
+<section class="detail" id="user/1">
+
+  <div class="detail-header">
+    <a href="#user/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">user(content)</h1>
+
+
+        <a href="https://github.com/scohen/opal/blob/v0.1.0/lib/opal/message.ex#L49" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> user(<a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>()) :: <a href="#t:t/0">t</a>()</pre>
+
+      </div>
+
+<p>Creates a user message with the given text content.</p><h2 id="user/1-examples" class="section-heading"><a href="#user/1-examples" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Examples</span></h2><pre><code class="makeup elixir" translate="no"><span class="gp unselectable">iex&gt; </span><span class="n">msg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Opal.Message</span><span class="o">.</span><span class="n">user</span><span class="p" data-group-id="8462611276-1">(</span><span class="s">&quot;Hello&quot;</span><span class="p" data-group-id="8462611276-1">)</span><span class="w">
+</span><span class="gp unselectable">iex&gt; </span><span class="n">msg</span><span class="o">.</span><span class="n">role</span><span class="w">
+</span><span class="ss">:user</span></code></pre>
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+
+        <p>
+
+            <span class="line">
+              <a href="https://hex.pm/packages/opal/0.1.0">Hex Package</a>
+
+              <a href="https://preview.hex.pm/preview/opal/0.1.0">Hex Preview</a>
+
+            </span>
+
+          <span class="line">
+            <button class="a-main footer-button display-quick-switch" title="Go to package docs">
+              Go to package docs
+            </button>
+
+              <a href="llms.txt" target="_blank">
+                View llms.txt
+              </a>
+
+
+              <a href="Opal.epub">
+                Download ePub version
+              </a>
+
+          </span>
+        </p>
+
+        <p class="built-using">
+          Built using
+          <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.40.1) for the
+
+            <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>
+
+        </p>
+
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

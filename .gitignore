@@ -1,0 +1,38 @@
+# Elixir (per-project build artifacts)
+_build/
+deps/
+/cover/
+/doc/
+erl_crash.dump
+*.ez
+
+# Context dumps
+opal-context-*.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+*.swp
+*.swo
+*~
+.lexical/
+.opal/
+.copilot/
+# Nx
+.nx/
+node_modules/
+
+# NPM release binaries (built artifacts)
+npm/opal/releases/
+
+# Burrito build output
+cli/burrito_out/
+
+# CLI build artifacts
+cli/dist/
+cli/bin/
+
+# Prevent npm lockfile from returning
+package-lock.json

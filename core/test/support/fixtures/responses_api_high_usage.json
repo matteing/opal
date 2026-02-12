@@ -1,0 +1,9 @@
+{
+  "description": "Text response with high token usage to trigger auto-compaction",
+  "events": [
+    {"data": "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"message\",\"id\":\"item_001\"}}"},
+    {"data": "{\"type\":\"response.output_text.delta\",\"delta\":\"OK\"}"},
+    {"data": "{\"type\":\"response.output_text.done\",\"text\":\"OK\"}"},
+    {"data": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_fix_002\",\"status\":\"completed\",\"usage\":{\"prompt_tokens\":110000,\"completion_tokens\":5,\"total_tokens\":110005}}}"}
+  ]
+}

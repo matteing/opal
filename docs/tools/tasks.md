@@ -1,0 +1,34 @@
+# tasks
+
+Persistent task tracker backed by DETS. The LLM uses this to maintain a structured work plan across turns and sessions.
+
+## Parameters
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `action` | string | yes | `insert`, `list`, `update`, `delete`, or `batch` |
+| `id` | string | no | Task ID (auto-generated for insert) |
+| `label` | string | no | Task description |
+| `status` | string | no | `open`, `in_progress`, `done`, `blocked` |
+| `priority` | string | no | `low`, `medium`, `high`, `critical` |
+| `group_name` | string | no | Group/category label |
+| `tags` | string[] | no | Tags for filtering |
+| `due` | string | no | Due date |
+| `notes` | string | no | Additional notes |
+| `blocked_by` | string[] | no | IDs of blocking tasks |
+
+## Actions
+
+- **insert** — Create a task. Auto-generates ID, defaults to `status: "open"`, `priority: "medium"`.
+- **list** — Query tasks. Supports named views (`open`, `done`, `blocked`, `overdue`, `high_priority`) or custom filters. Results are sorted by priority.
+- **update** — Modify a task by ID. Any settable field can be changed.
+- **delete** — Remove a task by ID.
+- **batch** — Process an array of operations atomically.
+
+## Storage
+
+Tasks are stored in a DETS file at `.opal/tasks.dets` in the working directory. DETS is Erlang's disk-based term storage — tasks survive agent restarts. Each task has `created_at` and `updated_at` timestamps.
+
+## Source
+
+`core/lib/opal/tool/tasks.ex`

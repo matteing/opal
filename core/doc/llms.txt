@@ -1,0 +1,68 @@
+# Opal v0.1.0 - Table of Contents
+
+An OTP-native coding agent SDK. Build, orchestrate, and observe AI coding agents with Elixir supervision trees, streaming events, and a JSON-RPC 2.0 interface.
+
+## Pages
+
+- [Overview](readme.md)
+- [Architecture](architecture.md)
+- [Agent Loop](agent-loop.md)
+- [RPC Research](rpc-research.md)
+- [Supervision](supervision.md)
+
+## Modules
+
+- [Opal.Agent.State](Opal.Agent.State.md): Internal state for `Opal.Agent`.
+- [Opal.Config.Copilot](Opal.Config.Copilot.md): Copilot-specific configuration: OAuth client ID and GitHub domain.
+- [Opal.Config.Features](Opal.Config.Features.md): Unified feature toggles for optional Opal subsystems.
+- [Opal.MCP.Servers.Weather](Opal.MCP.Servers.Weather.md): Example MCP server that provides weather information via stdio JSON-RPC.
+- [Opal.Tool.Tasks](Opal.Tool.Tasks.md): Project-scoped task tracker backed by DETS (built into Erlang).
+- [Opal.Tool.UseSkill](Opal.Tool.UseSkill.md): Loads an agent skill's full instructions into the active context.
+
+- Public API
+  - [Opal](Opal.md): Public API for the Opal coding agent SDK.
+  - [Opal.Agent](Opal.Agent.md): GenServer implementing the core agent loop.
+  - [Opal.Config](Opal.Config.md): Typed configuration struct for Opal sessions.
+  - [Opal.Events](Opal.Events.md): Registry-based publish/subscribe for session events.
+  - [Opal.Model](Opal.Model.md): A struct representing model configuration for an agent session.
+  - [Opal.Session](Opal.Session.md): GenServer managing a conversation tree with branching and persistence.
+
+- RPC Server
+  - [Opal.RPC](Opal.RPC.md): JSON-RPC 2.0 encoding/decoding. Transport-agnostic.
+  - [Opal.RPC.Handler](Opal.RPC.Handler.md): Dispatches JSON-RPC methods to Opal library functions.
+  - [Opal.RPC.Protocol](Opal.RPC.Protocol.md): Declarative protocol specification for the Opal JSON-RPC 2.0 API.
+  - [Opal.RPC.Stdio](Opal.RPC.Stdio.md): JSON-RPC 2.0 transport over stdin/stdout.
+
+- Providers
+  - [Opal.Auth](Opal.Auth.md): Manages GitHub Copilot OAuth credentials.
+  - [Opal.Provider](Opal.Provider.md): Behaviour for LLM provider implementations.
+  - [Opal.Provider.Copilot](Opal.Provider.Copilot.md): GitHub Copilot provider implementation.
+
+- Tools
+  - [Opal.Skill](Opal.Skill.md): Parses and validates Agent Skills following the [agentskills.io specification](https://agentskills.io/specification).
+  - [Opal.Tool](Opal.Tool.md): Behaviour defining the interface for agent tools.
+  - [Opal.Tool.Edit](Opal.Tool.Edit.md): Applies a search-and-replace edit to a file.
+  - [Opal.Tool.Read](Opal.Tool.Read.md): Reads file contents, optionally returning a slice of lines.
+  - [Opal.Tool.Shell](Opal.Tool.Shell.md): Runs shell commands cross-platform with timeout support.
+  - [Opal.Tool.SubAgent](Opal.Tool.SubAgent.md): Tool that allows an agent to spawn a sub-agent for delegated tasks.
+  - [Opal.Tool.Write](Opal.Tool.Write.md): Writes content to a file, creating parent directories as needed.
+
+- MCP
+  - [Opal.MCP.Bridge](Opal.MCP.Bridge.md): Bridges MCP tools into the Opal tool system.
+  - [Opal.MCP.Client](Opal.MCP.Client.md): Anubis MCP client for connecting to external MCP servers.
+  - [Opal.MCP.Config](Opal.MCP.Config.md): Discovers and parses MCP server configuration files.
+  - [Opal.MCP.Resources](Opal.MCP.Resources.md): Discovers and reads resources from connected MCP servers.
+  - [Opal.MCP.Supervisor](Opal.MCP.Supervisor.md): Supervisor for MCP client processes within a session.
+
+- Internals
+  - [Opal.Context](Opal.Context.md): Discovers project context files and agent skills from the filesystem.
+  - [Opal.Message](Opal.Message.md): A struct representing messages in an agent conversation.
+  - [Opal.Path](Opal.Path.md): Cross-platform path normalization and security utilities.
+  - [Opal.Session.Compaction](Opal.Session.Compaction.md): Context window compaction following pi's approach.
+  - [Opal.SessionServer](Opal.SessionServer.md): Per-session supervisor that owns the full session process tree.
+  - [Opal.SubAgent](Opal.SubAgent.md): Spawns and manages child agents that work in parallel.
+
+## Mix Tasks
+
+- [mix opal.gen.json_schema](Mix.Tasks.Opal.Gen.JsonSchema.md): Generates a JSON Schema file from the Opal RPC protocol specification.
+

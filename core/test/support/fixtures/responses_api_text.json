@@ -1,0 +1,11 @@
+{
+  "description": "Simple text response via Responses API",
+  "events": [
+    {"data": "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"message\",\"id\":\"item_001\"}}"},
+    {"data": "{\"type\":\"response.output_text.delta\",\"delta\":\"Hello\"}"},
+    {"data": "{\"type\":\"response.output_text.delta\",\"delta\":\" from\"}"},
+    {"data": "{\"type\":\"response.output_text.delta\",\"delta\":\" fixture!\"}"},
+    {"data": "{\"type\":\"response.output_text.done\",\"text\":\"Hello from fixture!\"}"},
+    {"data": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_fix_001\",\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5}}}"}
+  ]
+}

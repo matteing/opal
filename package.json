@@ -1,0 +1,20 @@
+{
+  "name": "opal",
+  "private": true,
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "nx run-many -t build",
+    "test": "nx run-many -t test",
+    "lint": "nx run-many -t lint",
+    "typecheck": "nx run-many -t typecheck",
+    "dev": "NX_TUI=false nx run cli:build && cd cli && OPAL_CWD=\"${INIT_CWD:-$PWD}\" node dist/bin.js",
+    "codegen": "nx run cli:codegen",
+    "inspect": "iex --sname inspector --cookie opal --remsh opal --dot-iex \"$(pwd)/scripts/inspect.exs\""
+  },
+  "devDependencies": {
+    "nx": "^22.5.0"
+  }
+}

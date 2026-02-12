@@ -1,0 +1,11 @@
+{
+  "description": "Simple text response via Chat Completions API",
+  "events": [
+    {"data": "{\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}"},
+    {"data": "{\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}"},
+    {"data": "{\"choices\":[{\"delta\":{\"content\":\" from\"},\"finish_reason\":null}]}"},
+    {"data": "{\"choices\":[{\"delta\":{\"content\":\" completions!\"},\"finish_reason\":null}]}"},
+    {"data": "{\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}"},
+    {"data": "{\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}"}
+  ]
+}

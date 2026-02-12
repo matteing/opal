@@ -1,0 +1,7 @@
+# Mix build artifacts
+erl_crash.dump
+*.ez
+opal-*.tar
+
+# Escript binary
+/opal-server

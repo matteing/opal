@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.40.1">
+    <meta name="project" content="Opal v0.1.0">
+
+
+    <title>Opal.SubAgent — Opal v0.1.0</title>
+
+    <link rel="stylesheet" href="dist/html-elixir-YJO4MOOW.css" />
+
+    <script defer src="dist/sidebar_items-93C55D77.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-YU4BZFVS.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="https://github.com/scohen/opal" class="sidebar-projectName" translate="no">
+Opal
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v0.1.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras="Pages"></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of Opal</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">Opal.<wbr>SubAgent</span> 
+      <small class="app-vsn" translate="no">(Opal v0.1.0)</small>
+
+    </h1>
+
+<a href="Opal.SubAgent.md" title="Copy Markdown (hold Ctrl/Cmd and click it to open as Markdown)" class="copy-markdown icon-action" rel="help">
+  <i class="ri-markdown-line" aria-hidden="true"></i>
+  <span class="sr-only">Copy Markdown</span>
+</a>
+
+
+
+      <a href="https://github.com/scohen/opal/blob/v0.1.0/lib/opal/sub_agent.ex#L1" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>Spawns and manages child agents that work in parallel.</p><p>A sub-agent is another <a href="Opal.Agent.html"><code class="inline">Opal.Agent</code></a> started under <code class="inline">Opal.SessionSupervisor</code>.
+It gets its own process, message history, and tool set. The supervision tree
+ensures cleanup — if the parent session is torn down, sub-agents started by
+tools within that session are cleaned up when those tool tasks terminate.</p><h2 id="module-usage" class="section-heading"><a href="#module-usage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Usage</span></h2><pre><code class="makeup elixir" translate="no"><span class="c1"># From within a tool or the parent agent:</span><span class="w">
+</span><span class="p" data-group-id="0511756151-1">{</span><span class="ss">:ok</span><span class="p">,</span><span class="w"> </span><span class="n">sub</span><span class="p" data-group-id="0511756151-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Opal.SubAgent</span><span class="o">.</span><span class="n">spawn</span><span class="p" data-group-id="0511756151-2">(</span><span class="n">parent_agent</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="0511756151-3">%{</span><span class="w">
+  </span><span class="ss">system_prompt</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;You are a test-writing specialist.&quot;</span><span class="p">,</span><span class="w">
+  </span><span class="ss">tools</span><span class="p">:</span><span class="w"> </span><span class="p" data-group-id="0511756151-4">[</span><span class="nc">Opal.Tool.Read</span><span class="p">,</span><span class="w"> </span><span class="nc">Opal.Tool.Write</span><span class="p">,</span><span class="w"> </span><span class="nc">Opal.Tool.Shell</span><span class="p" data-group-id="0511756151-4">]</span><span class="p">,</span><span class="w">
+  </span><span class="ss">model</span><span class="p">:</span><span class="w"> </span><span class="p" data-group-id="0511756151-5">{</span><span class="ss">:copilot</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;claude-haiku-3-5&quot;</span><span class="p" data-group-id="0511756151-5">}</span><span class="w">
+</span><span class="p" data-group-id="0511756151-3">}</span><span class="p" data-group-id="0511756151-2">)</span><span class="w">
+
+</span><span class="p" data-group-id="0511756151-6">{</span><span class="ss">:ok</span><span class="p">,</span><span class="w"> </span><span class="n">result</span><span class="p" data-group-id="0511756151-6">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Opal.SubAgent</span><span class="o">.</span><span class="n">run</span><span class="p" data-group-id="0511756151-7">(</span><span class="n">sub</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Write tests for lib/opal/agent.ex&quot;</span><span class="p" data-group-id="0511756151-7">)</span></code></pre><p>Multiple sub-agents can be spawned in parallel, each working on different
+files or tasks. If a sub-agent crashes, only that sub-agent is affected.</p>
+    </section>
+
+</div>
+
+  <section id="summary" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h2>
+<div class="summary-functions summary">
+  <h3>
+    <a href="#functions">Functions</a>
+  </h3>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#run/3" data-no-tooltip="" translate="no">run(sub_agent, prompt, timeout \\ 120_000)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Sends a prompt to a sub-agent and synchronously collects the response.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#spawn/2" data-no-tooltip="" translate="no">spawn(parent_agent, overrides \\ %{})</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Spawns a new sub-agent inheriting defaults from the parent agent.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#spawn_from_state/2" data-no-tooltip="" translate="no">spawn_from_state(parent_state, overrides \\ %{})</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Like <a href="#spawn/2"><code class="inline">spawn/2</code></a>, but takes an already-captured <a href="Opal.Agent.State.html"><code class="inline">Opal.Agent.State</code></a> struct
+instead of a pid. Use this from within tool execution to avoid calling
+back into the blocked Agent GenServer (which would deadlock).</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#stop/1" data-no-tooltip="" translate="no">stop(sub_agent)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Stops a sub-agent and cleans up its process.</p></div>
+
+    </div>
+
+</div>
+
+  </section>
+
+
+  <section id="functions" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h2>
+
+    <div class="functions-list">
+<section class="detail" id="run/3">
+
+    <span id="run/2"></span>
+
+  <div class="detail-header">
+    <a href="#run/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">run(sub_agent, prompt, timeout \\ 120_000)</h1>
+
+
+        <a href="https://github.com/scohen/opal/blob/v0.1.0/lib/opal/sub_agent.ex#L99" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> run(<a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">pid</a>(), <a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>(), <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">timeout</a>()) :: {:ok, <a href="https://hexdocs.pm/elixir/String.html#t:t/0">String.t</a>()} | {:error, <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}</pre>
+
+      </div>
+
+<p>Sends a prompt to a sub-agent and synchronously collects the response.</p><p>Subscribes to the sub-agent's events, sends the prompt, and waits for
+<code class="inline">:agent_end</code>. Returns the accumulated text response.</p><h2 id="run/3-options" class="section-heading"><a href="#run/3-options" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Options</span></h2><ul><li><code class="inline">timeout</code> — maximum wait time in milliseconds (default: <code class="inline">120_000</code>)</li></ul>
+  </section>
+</section>
+<section class="detail" id="spawn/2">
+
+    <span id="spawn/1"></span>
+
+  <div class="detail-header">
+    <a href="#spawn/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">spawn(parent_agent, overrides \\ %{})</h1>
+
+
+        <a href="https://github.com/scohen/opal/blob/v0.1.0/lib/opal/sub_agent.ex#L44" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> spawn(<a href="https://hexdocs.pm/elixir/GenServer.html#t:server/0">GenServer.server</a>(), <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">map</a>()) :: {:ok, <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">pid</a>()} | {:error, <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}</pre>
+
+      </div>
+
+<p>Spawns a new sub-agent inheriting defaults from the parent agent.</p><p>The parent agent's config, working directory, model, provider, and tools
+are used as defaults. Any key in <code class="inline">overrides</code> replaces the parent's value.</p><h2 id="spawn/2-overrides" class="section-heading"><a href="#spawn/2-overrides" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Overrides</span></h2><ul><li><code class="inline">:system_prompt</code> — system prompt for the sub-agent (default: parent's)</li><li><code class="inline">:tools</code> — tool modules (default: parent's tools)</li><li><code class="inline">:model</code> — <code class="inline">{provider, model_id}</code> tuple (default: parent's model)</li><li><code class="inline">:working_dir</code> — working directory (default: parent's)</li><li><code class="inline">:provider</code> — provider module (default: parent's)</li></ul><p>Returns <code class="inline">{:ok, sub_agent_pid}</code> or <code class="inline">{:error, reason}</code>.</p>
+  </section>
+</section>
+<section class="detail" id="spawn_from_state/2">
+
+    <span id="spawn_from_state/1"></span>
+
+  <div class="detail-header">
+    <a href="#spawn_from_state/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">spawn_from_state(parent_state, overrides \\ %{})</h1>
+
+
+        <a href="https://github.com/scohen/opal/blob/v0.1.0/lib/opal/sub_agent.ex#L55" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> spawn_from_state(<a href="Opal.Agent.State.html#t:t/0">Opal.Agent.State.t</a>(), <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">map</a>()) :: {:ok, <a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">pid</a>()} | {:error, <a href="https://hexdocs.pm/elixir/typespecs.html#built-in-types">term</a>()}</pre>
+
+      </div>
+
+<p>Like <a href="#spawn/2"><code class="inline">spawn/2</code></a>, but takes an already-captured <a href="Opal.Agent.State.html"><code class="inline">Opal.Agent.State</code></a> struct
+instead of a pid. Use this from within tool execution to avoid calling
+back into the blocked Agent GenServer (which would deadlock).</p>
+  </section>
+</section>
+<section class="detail" id="stop/1">
+
+  <div class="detail-header">
+    <a href="#stop/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">stop(sub_agent)</h1>
+
+
+        <a href="https://github.com/scohen/opal/blob/v0.1.0/lib/opal/sub_agent.ex#L118" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">@spec</span> stop(<a href="https://hexdocs.pm/elixir/typespecs.html#basic-types">pid</a>()) :: :ok | {:error, :not_found}</pre>
+
+      </div>
+
+<p>Stops a sub-agent and cleans up its process.</p><p>Accepts either just the sub-agent pid (looks up the parent supervisor
+from process ancestry) or the sub-agent pid and the supervisor to
+terminate it from.</p>
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+
+        <p>
+
+            <span class="line">
+              <a href="https://hex.pm/packages/opal/0.1.0">Hex Package</a>
+
+              <a href="https://preview.hex.pm/preview/opal/0.1.0">Hex Preview</a>
+
+            </span>
+
+          <span class="line">
+            <button class="a-main footer-button display-quick-switch" title="Go to package docs">
+              Go to package docs
+            </button>
+
+              <a href="llms.txt" target="_blank">
+                View llms.txt
+              </a>
+
+
+              <a href="Opal.epub">
+                Download ePub version
+              </a>
+
+          </span>
+        </p>
+
+        <p class="built-using">
+          Built using
+          <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.40.1) for the
+
+            <a href="https://elixir-lang.org" title="Elixir" target="_blank" translate="no">Elixir programming language</a>
+
+        </p>
+
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

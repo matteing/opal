@@ -1,0 +1,9 @@
+{
+  "description": "Tool call response via Chat Completions API",
+  "events": [
+    {"data": "{\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_cc_001\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}"},
+    {"data": "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"{\\\"path\\\"\"}}]},\"finish_reason\":null}]}"},
+    {"data": "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\": \\\"/tmp/test.txt\\\"}\"}}]},\"finish_reason\":null}]}"},
+    {"data": "{\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}"}
+  ]
+}

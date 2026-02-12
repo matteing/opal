@@ -1,0 +1,143 @@
+defmodule Opal.MixProject do
+  use Mix.Project
+
+  @version "0.1.0"
+  @source_url "https://github.com/scohen/opal"
+
+  def project do
+    [
+      app: :opal,
+      version: @version,
+      config_path: "config/config.exs",
+      elixir: "~> 1.18",
+      elixirc_paths: elixirc_paths(Mix.env()),
+      start_permanent: Mix.env() == :prod,
+      deps: deps(),
+      releases: releases(),
+      name: "Opal",
+      description: description(),
+      package: package(),
+      docs: docs(),
+      source_url: @source_url,
+      homepage_url: @source_url
+    ]
+  end
+
+  def application do
+    [
+      extra_applications: [:logger],
+      mod: {Opal.Application, []}
+    ]
+  end
+
+  defp description do
+    "An OTP-native coding agent SDK. Build, orchestrate, and observe AI coding agents with Elixir supervision trees, streaming events, and a JSON-RPC 2.0 interface."
+  end
+
+  defp package do
+    [
+      name: "opal",
+      licenses: ["MIT"],
+      links: %{
+        "GitHub" => @source_url,
+        "Architecture" => "#{@source_url}/blob/main/ARCHITECTURE.md"
+      },
+      files: ~w(
+        lib config mix.exs mix.lock
+        README.md LICENSE
+      )
+    ]
+  end
+
+  defp docs do
+    [
+      main: "Opal",
+      source_ref: "v#{@version}",
+      extras: [
+        "README.md": [title: "Overview"],
+        "../ARCHITECTURE.md": [title: "Architecture"],
+        "../docs/agent-loop.md": [title: "Agent Loop"],
+        "../docs/rpc-research.md": [title: "RPC Research"],
+        "../docs/supervision.md": [title: "Supervision"]
+      ],
+      groups_for_modules: [
+        "Public API": [
+          Opal,
+          Opal.Agent,
+          Opal.Config,
+          Opal.Events,
+          Opal.Model,
+          Opal.Session
+        ],
+        "RPC Server": [
+          Opal.RPC,
+          Opal.RPC.Handler,
+          Opal.RPC.Protocol,
+          Opal.RPC.Stdio
+        ],
+        "Providers": [
+          Opal.Provider,
+          Opal.Provider.Copilot,
+          Opal.Auth
+        ],
+        "Tools": [
+          Opal.Tool,
+          Opal.Tool.Read,
+          Opal.Tool.Write,
+          Opal.Tool.Edit,
+          Opal.Tool.Shell,
+          Opal.Tool.SubAgent,
+          Opal.Skill
+        ],
+        "MCP": [
+          Opal.MCP.Bridge,
+          Opal.MCP.Client,
+          Opal.MCP.Config,
+          Opal.MCP.Resources,
+          Opal.MCP.Supervisor
+        ],
+        "Internals": [
+          Opal.Application,
+          Opal.Context,
+          Opal.Message,
+          Opal.Path,
+          Opal.SessionServer,
+          Opal.Session.Compaction,
+          Opal.SubAgent
+        ]
+      ]
+    ]
+  end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
+
+  defp releases do
+    [
+      opal_server: [
+        applications: [opal: :permanent],
+        steps: [:assemble, &Burrito.wrap/1],
+        burrito: [
+          targets: [
+            darwin_arm64: [os: :darwin, cpu: :aarch64],
+            darwin_x64: [os: :darwin, cpu: :x86_64],
+            linux_x64: [os: :linux, cpu: :x86_64],
+            linux_arm64: [os: :linux, cpu: :aarch64]
+          ]
+        ]
+      ]
+    ]
+  end
+
+  defp deps do
+    [
+      {:req, "~> 0.5"},
+      {:jason, "~> 1.4"},
+      {:yaml_elixir, "~> 2.11"},
+      {:anubis_mcp, "~> 0.17"},
+      {:ex_doc, "~> 0.35", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:burrito, "~> 1.5", only: :prod}
+    ]
+  end
+end

@@ -1,0 +1,51 @@
+{
+  "name": "cli",
+  "root": "cli",
+  "namedInputs": {
+    "source": [
+      "{projectRoot}/src/**/*",
+      "{projectRoot}/tsconfig.json",
+      "{projectRoot}/package.json"
+    ]
+  },
+  "targets": {
+    "build": {
+      "command": "tsc",
+      "options": { "cwd": "cli" },
+      "inputs": ["source"],
+      "outputs": ["{projectRoot}/dist"],
+      "dependsOn": ["codegen"]
+    },
+    "dev": {
+      "command": "OPAL_CWD=\"${INIT_CWD:-$PWD}\" node dist/bin.js",
+      "options": { "cwd": "cli" },
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "typecheck": {
+      "command": "tsc --noEmit",
+      "options": { "cwd": "cli" },
+      "inputs": ["source"]
+    },
+    "codegen": {
+      "command": "mix run ../scripts/codegen_ts.exs",
+      "options": { "cwd": "core" },
+      "inputs": [
+        "{workspaceRoot}/core/lib/**/protocol.*",
+        "{workspaceRoot}/scripts/codegen_ts.exs"
+      ],
+      "outputs": ["{projectRoot}/src/sdk/protocol.ts"],
+      "dependsOn": ["core:build"]
+    },
+    "codegen:check": {
+      "command": "mix run ../scripts/codegen_ts.exs --check",
+      "options": { "cwd": "core" },
+      "inputs": [
+        "{workspaceRoot}/core/lib/**/protocol.*",
+        "{workspaceRoot}/scripts/codegen_ts.exs",
+        "{projectRoot}/src/sdk/protocol.ts"
+      ],
+      "dependsOn": ["core:build"]
+    }
+  }
+}
