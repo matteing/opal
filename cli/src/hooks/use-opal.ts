@@ -709,9 +709,7 @@ function applyAgentEvent(view: AgentView, event: Record<string, unknown>): Agent
       const callId = ((event.callId ?? event.call_id) as string) ?? "";
       const result = event.result as { ok: boolean; output?: string; error?: string };
       // Mutate in place — timeline was already copied at batch start
-      const idx = view.timeline.findIndex(
-        (e) => e.kind === "tool" && e.task.callId === callId,
-      );
+      const idx = view.timeline.findIndex((e) => e.kind === "tool" && e.task.callId === callId);
       if (idx >= 0) {
         const entry = view.timeline[idx] as { kind: "tool"; task: Task };
         view.timeline[idx] = {

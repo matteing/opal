@@ -6,11 +6,7 @@ import { spawn, execSync } from "node:child_process";
  */
 export function openUrl(url: string): void {
   const cmd =
-    process.platform === "darwin"
-      ? "open"
-      : process.platform === "win32"
-        ? "start"
-        : "xdg-open";
+    process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
 
   const child = spawn(cmd, [url], {
     detached: true,
