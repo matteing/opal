@@ -5,7 +5,7 @@
 <h1 align="center">✦ Opal</h1>
 
 <p align="center">
-  <strong>A minimal coding agent harness built with the magic of Elixir.</strong>
+  <strong>A minimal agent harness built with the magic of Elixir.</strong>
 </p>
 
 <p align="center">
