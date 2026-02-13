@@ -211,14 +211,14 @@ Messages are **newline-delimited JSON** (one JSON object per line). The server s
 
 **Server → Client requests (user interaction):**
 ```json
-{"jsonrpc": "2.0", "id": 100, "method": "client/confirm", "params": {"tool": "shell", "args": {"command": "rm -rf dist/"}}}
+{"jsonrpc": "2.0", "id": 100, "method": "client/confirm", "params": {"session_id": "abc123", "title": "Execute shell command?", "message": "rm -rf node_modules/", "actions": ["allow", "deny", "allow_session"]}}
 ```
 
 ### RPC Methods
 
 | Method | Params | Description |
 |--------|--------|-------------|
-| `session/start` | `model?`, `system_prompt?`, `working_dir?`, `tools?`, `mcp_servers?` | Start a session, returns `session_id` |
+| `session/start` | `model?`, `system_prompt?`, `working_dir?`, `tools?`, `mcp_servers?`, `session?` | Start a session, returns `session_id` |
 | `agent/prompt` | `session_id`, `text` | Send a prompt (async — events stream via notifications) |
 | `agent/steer` | `session_id`, `text` | Steer the agent mid-run |
 | `agent/abort` | `session_id` | Cancel the current run |
@@ -233,6 +233,7 @@ Messages are **newline-delimited JSON** (one JSON object per line). The server s
 | `auth/login` | — | Start device-code OAuth flow |
 | `settings/get` | — | Read persisted settings |
 | `settings/save` | `settings` | Save settings |
+| `tasks/list` | `session_id` | List tracked tasks |
 
 ### Server → Client Requests
 
@@ -240,9 +241,9 @@ The server may send requests back to the client that require a response:
 
 | Method | Params | Expected Response |
 |--------|--------|-------------------|
-| `client/confirm` | `tool`, `args`, `actions` | `{ "action": "allow" }` or `{ "action": "deny" }` |
-| `client/input` | `prompt`, `sensitive?` | `{ "text": "user input" }` |
-| `client/ask_user` | `question`, `choices?` | `{ "answer": "selected choice" }` |
+| `client/confirm` | `session_id`, `title`, `message`, `actions` | `{ "action": "allow" }` or `{ "action": "deny" }` |
+| `client/input` | `session_id`, `prompt`, `sensitive?` | `{ "text": "user input" }` |
+| `client/ask_user` | `session_id`, `question`, `choices?` | `{ "answer": "selected choice" }` |
 
 ### Event Types
 
@@ -288,7 +289,7 @@ The SDK is the highest-level integration. It spawns and manages the `opal-server
 ### Setup
 
 ```bash
-npm install @opal/sdk
+npm install @unfinite/opal
 ```
 
 ### High-Level: Session
@@ -296,7 +297,7 @@ npm install @opal/sdk
 The `Session` class is the recommended entry point:
 
 ```typescript
-import { Session } from "@opal/sdk";
+import { Session } from "@unfinite/opal";
 
 const session = await Session.start({
   workingDir: "/path/to/project",
@@ -395,7 +396,7 @@ const { models } = await session.listModels();
 For full control over the RPC layer, use `OpalClient` directly:
 
 ```typescript
-import { OpalClient } from "@opal/sdk";
+import { OpalClient } from "@unfinite/opal";
 
 const client = new OpalClient({
   onServerRequest: async (method, params) => {
