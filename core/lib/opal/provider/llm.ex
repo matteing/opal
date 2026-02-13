@@ -316,20 +316,7 @@ defmodule Opal.Provider.LLM do
   # ── convert_tools/1 ──────────────────────────────────────────────────
 
   @impl true
-  def convert_tools(tools) do
-    # Conversion is handled internally by stream/4 via ReqLLM.
-    Enum.map(tools, fn tool ->
-      %{
-        type: "function",
-        function: %{
-          name: tool.name(),
-          description: tool.description(),
-          parameters: tool.parameters(),
-          strict: false
-        }
-      }
-    end)
-  end
+  defdelegate convert_tools(tools), to: Opal.Provider
 
   # ── Internal Conversion Helpers ──────────────────────────────────────
 

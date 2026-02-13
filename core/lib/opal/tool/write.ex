@@ -16,6 +16,7 @@ defmodule Opal.Tool.Write do
   @behaviour Opal.Tool
 
   alias Opal.Tool.Encoding
+  alias Opal.Tool.FileHelper
 
   @impl true
   @spec name() :: String.t()
@@ -46,7 +47,7 @@ defmodule Opal.Tool.Write do
   @impl true
   @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
   def execute(%{"path" => path, "content" => content}, %{working_dir: working_dir}) do
-    with {:ok, resolved} <- resolve_path(path, working_dir) do
+    with {:ok, resolved} <- FileHelper.resolve_path(path, working_dir) do
       write_file(resolved, content)
     end
   end
@@ -56,13 +57,6 @@ defmodule Opal.Tool.Write do
 
   def execute(_args, _context),
     do: {:error, "Missing required parameters: path and content"}
-
-  defp resolve_path(path, working_dir) do
-    case Opal.Path.safe_relative(path, working_dir) do
-      {:ok, resolved} -> {:ok, resolved}
-      {:error, :outside_base_dir} -> {:error, "Path escapes working directory: #{path}"}
-    end
-  end
 
   defp write_file(path, content) do
     path |> Path.dirname() |> File.mkdir_p!()

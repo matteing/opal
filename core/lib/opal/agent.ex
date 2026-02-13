@@ -210,6 +210,7 @@ defmodule Opal.Agent do
   @impl true
   def init(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
+    Registry.register(Opal.Registry, {:agent, session_id}, nil)
     :proc_lib.set_label("agent:#{session_id}")
 
     model = Keyword.fetch!(opts, :model)
@@ -314,7 +315,7 @@ defmodule Opal.Agent do
     state = append_message(state, user_msg)
     state = %{state | status: :running}
     broadcast(state, {:agent_start})
-    run_turn(state)
+    run_turn_internal(state)
   end
 
   def handle_cast({:steer, text}, %State{status: :idle} = state) do
@@ -323,7 +324,7 @@ defmodule Opal.Agent do
     state = append_message(state, user_msg)
     state = %{state | status: :running}
     broadcast(state, {:agent_start})
-    run_turn(state)
+    run_turn_internal(state)
   end
 
   def handle_cast({:steer, text}, %State{status: status} = state)
@@ -363,7 +364,7 @@ defmodule Opal.Agent do
   @impl true
   def handle_call({:sync_messages, messages}, _from, state) do
     Logger.debug("Messages synced session=#{state.session_id} count=#{length(messages)}")
-    {:reply, :ok, %{state | messages: messages}}
+    {:reply, :ok, %{state | messages: Enum.reverse(messages)}}
   end
 
   @impl true
@@ -404,7 +405,7 @@ defmodule Opal.Agent do
 
         state =
           Enum.reduce(chunks, state, fn
-            {:data, data}, acc -> parse_sse_data(data, acc)
+            {:data, data}, acc -> Opal.Agent.Stream.parse_sse_data(data, acc)
             :done, acc -> acc
             _other, acc -> acc
           end)
@@ -447,7 +448,7 @@ defmodule Opal.Agent do
   # If the agent was aborted during the retry wait (status changed to :idle),
   # the timer is silently discarded.
   def handle_info(:retry_turn, %State{status: :running} = state) do
-    run_turn(state)
+    run_turn_internal(state)
   end
 
   def handle_info(:retry_turn, state) do
@@ -464,19 +465,30 @@ defmodule Opal.Agent do
 
   # --- Internal Loop Logic ---
 
-  @auto_compact_threshold 0.80
-
   # Look up context window from LLMDB. Falls back to 128k if not found.
   defp model_context_window(model), do: Opal.Models.context_window(model)
 
+  @doc """
+  Builds messages for token estimation usage.
+  Public wrapper around build_messages for the UsageTracker module.
+  """
+  @spec build_messages_for_usage(State.t()) :: [Opal.Message.t()]
+  def build_messages_for_usage(%State{} = state) do
+    build_messages(state)
+  end
+  @spec run_turn(State.t()) :: term()
+  def run_turn(%State{} = state) do
+    run_turn_internal(state)
+  end
+
   # Starts a new LLM turn: converts messages/tools, initiates streaming.
   # Auto-compacts if context usage exceeds threshold.
-  defp run_turn(%State{} = state) do
+  defp run_turn_internal(%State{} = state) do
     state = maybe_auto_compact(state)
 
     provider = state.provider
     all_messages = build_messages(state)
-    tools = active_tools(state)
+    tools = Opal.Agent.ToolRunner.active_tools(state)
 
     Logger.debug("Turn start session=#{state.session_id} messages=#{length(all_messages)} tools=#{length(tools)} model=#{state.model.id}")
     broadcast(state, {:request_start, %{model: state.model.id, messages: length(all_messages)}})
@@ -539,52 +551,11 @@ defmodule Opal.Agent do
   # Uses hybrid token estimation (Plan 13): combines the last actual usage
   # report with heuristic estimates for messages added since. This catches
   # growth *between* turns that the lagging `last_prompt_tokens` would miss.
-  defp maybe_auto_compact(%State{session: session, model: model} = state)
-       when is_pid(session) do
-    context_window = model_context_window(model)
-
-    # Build hybrid estimate: actual usage base + heuristic for trailing messages
-    estimated_tokens = estimate_current_tokens(state, context_window)
-    ratio = estimated_tokens / context_window
-
-    if ratio >= @auto_compact_threshold do
-      Logger.info("Auto-compacting: ~#{estimated_tokens} estimated tokens / #{context_window} context (#{Float.round(ratio * 100, 1)}%)")
-      broadcast(state, {:compaction_start, length(state.messages)})
-
-      case Opal.Session.Compaction.compact(session,
-             provider: state.provider,
-             model: state.model,
-             keep_recent_tokens: div(context_window, 4)) do
-        :ok ->
-          new_path = Opal.Session.get_path(session)
-          broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
-          %{state | messages: new_path, last_prompt_tokens: 0, last_usage_msg_index: 0}
-
-        {:error, reason} ->
-          Logger.warning("Auto-compaction failed: #{inspect(reason)}")
-          state
-      end
-    else
-      state
-    end
+  defp maybe_auto_compact(%State{} = state) do
+    Opal.Agent.UsageTracker.maybe_auto_compact(state)
   end
 
-  defp maybe_auto_compact(state), do: state
 
-  # Builds a token estimate using the hybrid approach:
-  # - If we have a recent usage report, use it as a calibrated base and add
-  #   heuristic estimates for messages added since.
-  # - If no usage data yet, fall back to full heuristic estimation.
-  defp estimate_current_tokens(%State{} = state, _context_window) do
-    if state.last_prompt_tokens > 0 do
-      # Messages added after the last usage report
-      messages_since = Enum.drop(state.messages, state.last_usage_msg_index)
-      Opal.Token.hybrid_estimate(state.last_prompt_tokens, messages_since)
-    else
-      # No usage data yet — estimate the full context heuristically
-      Opal.Token.estimate_context(build_messages(state))
-    end
-  end
 
   # ── Overflow Recovery ─────────────────────────────────────────────────
   #
@@ -595,39 +566,11 @@ defmodule Opal.Agent do
 
   # Without a session process we can't compact — surface the raw error.
   defp handle_overflow_compaction(%State{session: nil} = state, reason) do
-    Logger.error("Context overflow but no session attached — cannot compact")
-    broadcast(state, {:error, {:overflow_no_session, reason}})
-    {:noreply, %{state | status: :idle}}
+    Opal.Agent.UsageTracker.handle_overflow_compaction(state, reason)
   end
 
-  defp handle_overflow_compaction(%State{session: session, model: model} = state, reason) do
-    context_window = model_context_window(model)
-
-    # Aggressive keep budget: retain only ~20% of the context window so
-    # the retried turn has plenty of headroom.
-    keep_tokens = div(context_window, 5)
-
-    Logger.info("Context overflow detected — compacting to #{keep_tokens} tokens")
-    broadcast(state, {:compaction_start, :overflow})
-
-    case Opal.Session.Compaction.compact(session,
-           provider: state.provider,
-           model: state.model,
-           keep_recent_tokens: keep_tokens,
-           force: true) do
-      :ok ->
-        new_path = Opal.Session.get_path(session)
-        broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
-        state = %{state | messages: new_path, last_prompt_tokens: 0, overflow_detected: false, last_usage_msg_index: 0}
-
-        # Auto-retry the turn immediately after compaction
-        run_turn(state)
-
-      {:error, compact_error} ->
-        Logger.error("Overflow compaction failed: #{inspect(compact_error)}")
-        broadcast(state, {:error, {:overflow_compact_failed, reason, compact_error}})
-        {:noreply, %{state | status: :idle}}
-    end
+  defp handle_overflow_compaction(%State{} = state, reason) do
+    Opal.Agent.UsageTracker.handle_overflow_compaction(state, reason)
   end
 
   # Prepends system prompt (with discovered context, skill menu, and
@@ -645,7 +588,7 @@ defmodule Opal.Agent do
 
     # Build dynamic tool guidelines based on which tools are active
     # (prevents the LLM from using shell for read/edit/write operations)
-    tool_guidelines = Opal.Agent.SystemPrompt.build_guidelines(active_tools(state))
+    tool_guidelines = Opal.Agent.SystemPrompt.build_guidelines(Opal.Agent.ToolRunner.active_tools(state))
 
     # Planning instructions — tell the agent where to write plan.md
     planning = planning_instructions(state)
@@ -661,10 +604,10 @@ defmodule Opal.Agent do
       content: full_prompt
     }
 
-    [system_msg | messages]
+    [system_msg | Enum.reverse(messages)]
   end
 
-  defp build_messages(%State{messages: messages}), do: messages
+  defp build_messages(%State{messages: messages}), do: Enum.reverse(messages)
 
   # Returns planning instructions for the system prompt, or "" for sub-agents.
   defp planning_instructions(%State{config: config, session_id: session_id, session: session}) do
@@ -686,181 +629,7 @@ defmodule Opal.Agent do
     end
   end
 
-  # Parses raw SSE data, dispatching events for each line.
-  defp parse_sse_data(data, state) do
-    binary = IO.iodata_to_binary(data)
 
-    Logger.debug(
-      "SSE raw data (#{byte_size(binary)} bytes): #{inspect(String.slice(binary, 0, 300))}"
-    )
-
-    binary
-    |> String.split("\n", trim: true)
-    |> Enum.reduce(state, fn line, acc ->
-      case line do
-        "data: [DONE]" ->
-          acc
-
-        "data: " <> json_data ->
-          dispatch_sse_events(json_data, acc)
-
-        # Handle raw JSON error responses (no SSE prefix)
-        "{" <> _ = json_data ->
-          dispatch_sse_events(json_data, acc)
-
-        _ ->
-          acc
-      end
-    end)
-  end
-
-  # Decodes a single SSE JSON line and dispatches all parsed events.
-  defp dispatch_sse_events(json_data, state) do
-    events = state.provider.parse_stream_event(json_data)
-    Logger.debug("Parsed SSE events: #{inspect(events, limit: 5, printable_limit: 200)}")
-
-    Enum.reduce(events, state, fn event, acc ->
-      handle_stream_event(event, acc)
-    end)
-  end
-
-  # --- Stream Event Handlers ---
-
-  defp handle_stream_event({:text_start, _info}, state) do
-    broadcast(state, {:message_start})
-    state
-  end
-
-  defp handle_stream_event({:text_delta, delta}, state) do
-    {clean_delta, state} = extract_status_tags(delta, state)
-
-    unless clean_delta == "" do
-      broadcast(state, {:message_delta, %{delta: clean_delta}})
-    end
-
-    %{state | current_text: state.current_text <> clean_delta}
-  end
-
-  defp handle_stream_event({:text_done, text}, state) do
-    %{state | current_text: text}
-  end
-
-  defp handle_stream_event({:thinking_start, _info}, state) do
-    broadcast(state, {:thinking_start})
-    state
-  end
-
-  defp handle_stream_event({:thinking_delta, delta}, state) do
-    broadcast(state, {:thinking_delta, %{delta: delta}})
-    state
-  end
-
-  defp handle_stream_event({:tool_call_start, info}, state) do
-    # Start a new tool call accumulator
-    tool_call = %{
-      call_id: info[:call_id],
-      name: info[:name],
-      arguments_json: ""
-    }
-
-    %{state | current_tool_calls: state.current_tool_calls ++ [tool_call]}
-  end
-
-  defp handle_stream_event({:tool_call_delta, delta}, state) do
-    # Append to the last tool call's arguments JSON
-    updated =
-      case List.pop_at(state.current_tool_calls, -1) do
-        {nil, _} ->
-          state.current_tool_calls
-
-        {last_tc, rest} ->
-          rest ++ [%{last_tc | arguments_json: last_tc.arguments_json <> delta}]
-      end
-
-    %{state | current_tool_calls: updated}
-  end
-
-  defp handle_stream_event({:tool_call_done, info}, state) do
-    # Finalize the tool call with parsed arguments
-    updated =
-      case List.pop_at(state.current_tool_calls, -1) do
-        {nil, _} ->
-          # No in-progress tool call — create one from the done event
-          [
-            %{
-              call_id: info[:call_id],
-              name: info[:name],
-              arguments: info[:arguments] || %{}
-            }
-          ]
-
-        {last_tc, rest} ->
-          # Merge final info into the accumulated tool call
-          arguments =
-            info[:arguments] ||
-              case Jason.decode(last_tc[:arguments_json] || "{}") do
-                {:ok, parsed} -> parsed
-                {:error, _} -> %{}
-              end
-
-          finalized = %{
-            call_id: info[:call_id] || last_tc[:call_id],
-            name: info[:name] || last_tc[:name],
-            arguments: arguments
-          }
-
-          rest ++ [finalized]
-      end
-
-    %{state | current_tool_calls: updated}
-  end
-
-  defp handle_stream_event({:usage, usage}, state) do
-    # Handle both Chat Completions keys (prompt_tokens) and Responses API keys (input_tokens)
-    prompt = Map.get(usage, "prompt_tokens", Map.get(usage, :prompt_tokens,
-               Map.get(usage, "input_tokens", Map.get(usage, :input_tokens, 0)))) || 0
-    completion = Map.get(usage, "completion_tokens", Map.get(usage, :completion_tokens,
-                   Map.get(usage, "output_tokens", Map.get(usage, :output_tokens, 0)))) || 0
-    total = Map.get(usage, "total_tokens", Map.get(usage, :total_tokens, prompt + completion)) || 0
-
-    token_usage = %{
-      state.token_usage |
-      prompt_tokens: state.token_usage.prompt_tokens + prompt,
-      completion_tokens: state.token_usage.completion_tokens + completion,
-      total_tokens: state.token_usage.total_tokens + total,
-      current_context_tokens: prompt
-    }
-
-    state = %{state | token_usage: token_usage, last_prompt_tokens: prompt, last_usage_msg_index: length(state.messages)}
-    context_window = model_context_window(state.model)
-
-    broadcast(state, {:usage_update, %{state.token_usage | context_window: context_window}})
-
-    # Flag usage-based overflow so finalize_response/1 can trigger compaction
-    # before the *next* turn pushes past the limit.
-    if Opal.Agent.Overflow.usage_overflow?(prompt, context_window) do
-      Logger.warning("Usage overflow: #{prompt} input tokens > #{context_window} context window")
-      %{state | overflow_detected: true}
-    else
-      state
-    end
-  end
-
-  defp handle_stream_event({:response_done, info}, state) do
-    # Responses API includes usage inline; Chat Completions sends it separately via {:usage, ...}
-    case Map.get(info, :usage, %{}) do
-      usage when usage != %{} -> handle_stream_event({:usage, usage}, state)
-      _ -> state
-    end
-  end
-
-  defp handle_stream_event({:error, reason}, state) do
-    Logger.error("Stream error: #{inspect(reason)}")
-    broadcast(state, {:error, reason})
-    %{state | status: :idle, streaming_resp: nil}
-  end
-
-  defp handle_stream_event(_unknown, state), do: state
 
   # --- Response Finalization ---
 
@@ -896,23 +665,23 @@ defmodule Opal.Agent do
   defp finalize_response_continue(state, tool_calls, assistant_msg) do
     if tool_calls != [] do
       broadcast(state, {:turn_end, assistant_msg, []})
-      execute_tool_calls(tool_calls, state)
+      Opal.Agent.ToolRunner.execute_tool_calls(tool_calls, state)
     else
       # Drain any steering messages that arrived during this turn
-      state = check_for_steering(state)
-      last_msg = List.last(state.messages)
+      state = Opal.Agent.ToolRunner.check_for_steering(state)
+      last_msg = List.first(state.messages)
 
       if last_msg && last_msg.role == :user do
         # Steers were injected — continue with a new turn
         broadcast(state, {:turn_end, assistant_msg, []})
-        run_turn(state)
+        run_turn_internal(state)
       else
         context_window = model_context_window(state.model)
         final_usage = Map.merge(state.token_usage, %{
           context_window: context_window,
           current_context_tokens: state.last_prompt_tokens
         })
-        broadcast(state, {:agent_end, state.messages, final_usage})
+        broadcast(state, {:agent_end, Enum.reverse(state.messages), final_usage})
         maybe_auto_save(state)
         {:noreply, %{state | status: :idle}}
       end
@@ -941,232 +710,7 @@ defmodule Opal.Agent do
 
   # --- Tool Execution ---
 
-  # Executes tool calls sequentially, checking for user steers between each
-  # call. When a steer is detected, all remaining tool calls in the batch
-  # are skipped — the LLM will see the skip messages alongside the user's
-  # new instructions and decide how to proceed.
-  #
-  # Sequential execution trades parallelism for responsiveness: the user
-  # can redirect the agent mid-batch instead of waiting for all tools to
-  # finish (some of which may be destructive writes or shell commands).
-  defp execute_tool_calls(tool_calls, %State{} = state) do
-    context = build_tool_context(state)
 
-    {results, state} =
-      Enum.reduce(tool_calls, {[], state}, fn tc, {acc, st} ->
-        # Drain pending steer casts from the process mailbox before each tool
-        st = drain_mailbox_steers(st)
-
-        if st.pending_steers != [] do
-          # User sent a steering message — skip this and all remaining tools.
-          # The cascade works because once pending_steers is non-empty,
-          # every subsequent iteration hits this branch too.
-          broadcast(st, {:tool_skipped, tc.name, tc.call_id})
-          result = {tc, {:error, "Skipped — user sent a steering message"}}
-          {[result | acc], st}
-        else
-          result = execute_single_tool_supervised(tc, st, context)
-          {[result | acc], st}
-        end
-      end)
-
-    results = Enum.reverse(results)
-
-    # Convert results to tool_result messages
-    tool_result_messages =
-      Enum.map(results, fn {tc, result} ->
-        case result do
-          {:ok, output} ->
-            Opal.Message.tool_result(tc.call_id, output)
-
-          {:error, reason} ->
-            Opal.Message.tool_result(tc.call_id, reason, true)
-        end
-      end)
-
-    state = append_messages(state, tool_result_messages)
-
-    # Auto-load skills whose globs match files touched by this batch
-    state = maybe_auto_load_skills(results, state)
-
-    # Process any steers that arrived during the last tool execution
-    state = check_for_steering(state)
-
-    # Start next turn
-    run_turn(state)
-  end
-
-  # Builds the shared context map passed to every tool execution.
-  defp build_tool_context(%State{} = state) do
-    ctx = %{
-      working_dir: state.working_dir,
-      session_id: state.session_id,
-      config: state.config,
-      agent_pid: self(),
-      agent_state: state
-    }
-
-    if state.question_handler do
-      Map.put(ctx, :question_handler, state.question_handler)
-    else
-      ctx
-    end
-  end
-
-  # Runs a single tool call under the session's Task.Supervisor.
-  # Broadcasts lifecycle events and catches task crashes.
-  defp execute_single_tool_supervised(tc, %State{} = state, context) do
-    tool_mod = find_tool_module(tc.name, active_tools(state))
-    meta = if tool_mod, do: Opal.Tool.meta(tool_mod, tc.arguments), else: tc.name
-
-    Logger.debug("Tool start session=#{state.session_id} tool=#{tc.name} args=#{inspect(tc.arguments, limit: 5, printable_limit: 200)}")
-    broadcast(state, {:tool_execution_start, tc.name, tc.call_id, tc.arguments, meta})
-
-    started_at = System.monotonic_time(:millisecond)
-
-    # Provide an emit callback so tools can stream output chunks
-    emit = fn chunk -> broadcast(state, {:tool_output, tc.name, chunk}) end
-    ctx = context |> Map.put(:emit, emit) |> Map.put(:call_id, tc.call_id)
-
-    result =
-      Task.Supervisor.async_nolink(state.tool_supervisor, fn ->
-        :proc_lib.set_label("tool:#{tc.name}")
-        execute_single_tool(tool_mod, tc.arguments, ctx)
-      end)
-      |> Task.await(:infinity)
-
-    elapsed = System.monotonic_time(:millisecond) - started_at
-    Logger.debug("Tool done session=#{state.session_id} tool=#{tc.name} elapsed=#{elapsed}ms result=#{result_tag(result)}")
-    broadcast(state, {:tool_execution_end, tc.name, tc.call_id, result})
-
-    {tc, result}
-  catch
-    # Task.await/2 re-raises EXIT signals from crashed tasks. We catch
-    # them here so a single tool crash doesn't bring down the agent —
-    # the error is recorded as a tool_result and the LLM decides how
-    # to proceed.
-    :exit, reason ->
-      error_msg = "Tool execution crashed: #{inspect(reason)}"
-      Logger.error(error_msg)
-      broadcast(state, {:tool_execution_end, tc.name, tc.call_id, {:error, error_msg}})
-      {tc, {:error, error_msg}}
-  end
-
-  # Selectively receives `:steer` GenServer casts from the process mailbox
-  # without blocking. Uses a zero timeout so it returns immediately when
-  # there are no pending steers — this is the mechanism that lets us check
-  # for user redirection between sequential tool calls.
-  defp drain_mailbox_steers(state) do
-    receive do
-      {:"$gen_cast", {:steer, text}} ->
-        state = %{state | pending_steers: state.pending_steers ++ [text]}
-        drain_mailbox_steers(state)
-    after
-      0 -> state
-    end
-  end
-
-  # Executes a single tool, catching any exceptions.
-  defp execute_single_tool(nil, _args, _context) do
-    {:error, "Tool not found"}
-  end
-
-  defp execute_single_tool(tool_mod, args, context) do
-    tool_mod.execute(args, context)
-  rescue
-    e ->
-      Logger.error("Tool #{inspect(tool_mod)} raised: #{Exception.message(e)}")
-      {:error, "Tool raised an exception: #{Exception.message(e)}"}
-  end
-
-  # File-modifying tools whose "path" argument should trigger skill globs.
-  @file_tools ~w(write_file edit_file)
-
-  # After a batch of tool calls, checks whether any file-modifying tool
-  # touched a path that matches an inactive skill's globs. If so, the
-  # skill is auto-loaded into the conversation context so the LLM has
-  # its instructions on the very next turn.
-  defp maybe_auto_load_skills(_results, %State{available_skills: []} = state), do: state
-
-  defp maybe_auto_load_skills(results, %State{} = state) do
-    # Collect relative paths from successful file-modifying tool calls
-    touched_paths =
-      results
-      |> Enum.flat_map(fn
-        {%{name: name, arguments: %{"path" => path}}, {:ok, _}} when name in @file_tools ->
-          [make_relative(path, state.working_dir)]
-
-        _ ->
-          []
-      end)
-
-    if touched_paths == [] do
-      state
-    else
-      # Find skills with matching globs that aren't already active
-      matching =
-        state.available_skills
-        |> Enum.reject(&(&1.name in state.active_skills))
-        |> Enum.filter(fn skill ->
-          Enum.any?(touched_paths, &Opal.Skill.matches_path?(skill, &1))
-        end)
-
-      Enum.reduce(matching, state, fn skill, acc ->
-        Logger.debug("Auto-loading skill '#{skill.name}' (glob matched)")
-
-        skill_msg = %Opal.Message{
-          id: "skill:#{skill.name}",
-          role: :user,
-          content: "[System] Skill '#{skill.name}' auto-activated (file matched glob). Instructions:\n\n#{skill.instructions}"
-        }
-
-        new_active = [skill.name | acc.active_skills]
-        acc = append_message(%{acc | active_skills: new_active}, skill_msg)
-        broadcast(acc, {:skill_loaded, skill.name, skill.description})
-        acc
-      end)
-    end
-  end
-
-  # Returns a path relative to working_dir, or the path unchanged if
-  # it's already relative or outside the working dir.
-  defp make_relative(path, working_dir) do
-    expanded = Path.expand(path, working_dir)
-
-    case Path.relative_to(expanded, Path.expand(working_dir)) do
-      ^expanded -> path
-      relative -> relative
-    end
-  end
-
-  # Finds the tool module whose name/0 matches the given name string.
-  defp find_tool_module(name, tools) do
-    Enum.find(tools, fn tool_mod ->
-      tool_mod.name() == name
-    end)
-  end
-
-  # Returns the tools list with config-gated tools filtered out.
-  defp active_tools(%State{tools: tools, config: config, available_skills: skills}) do
-    tools
-    |> then(fn t ->
-      if config.features.sub_agents.enabled, do: t, else: Enum.reject(t, &(&1 == Opal.Tool.SubAgent))
-    end)
-    |> then(fn t ->
-      if skills != [], do: t, else: Enum.reject(t, &(&1 == Opal.Tool.UseSkill))
-    end)
-  end
-
-  # Drains pending steering messages queued while agent was busy.
-  defp check_for_steering(%State{pending_steers: []} = state), do: state
-
-  defp check_for_steering(%State{pending_steers: steers} = state) do
-    state = Enum.reduce(steers, state, fn text, acc ->
-      Logger.debug("Steering message received: #{String.slice(text, 0, 50)}...")
-      append_message(acc, Opal.Message.user(text))
-    end)
-    %{state | pending_steers: []}
-  end
 
   # Cancels an in-progress streaming response if present.
   defp cancel_streaming(%State{streaming_resp: nil} = state), do: state
@@ -1191,23 +735,15 @@ defmodule Opal.Agent do
   # is also stored in the session tree. The local messages list is always
   # updated for LLM context building.
   defp append_message(%State{session: nil} = state, msg) do
-    %{state | messages: state.messages ++ [msg]}
+    %{state | messages: [msg | state.messages]}
   end
 
   defp append_message(%State{session: session} = state, msg) do
     Opal.Session.append(session, msg)
-    %{state | messages: state.messages ++ [msg]}
+    %{state | messages: [msg | state.messages]}
   end
 
-  # Appends multiple messages at once.
-  defp append_messages(%State{session: nil} = state, msgs) do
-    %{state | messages: state.messages ++ msgs}
-  end
 
-  defp append_messages(%State{session: session} = state, msgs) do
-    Opal.Session.append_many(session, msgs)
-    %{state | messages: state.messages ++ msgs}
-  end
 
   # Auto-saves the session when the agent goes idle, if a Session process
   # is attached and auto_save is enabled in config.
@@ -1317,54 +853,7 @@ defmodule Opal.Agent do
       []
   end
 
-  defp result_tag({:ok, _}), do: "ok"
-  defp result_tag({:error, _}), do: "error"
-  defp result_tag(_), do: "unknown"
 
-  # Extracts <status>...</status> tags from streaming text deltas.
-  # Tags may span multiple deltas, so we buffer partial matches.
-  # Returns {clean_text, updated_state} with tags stripped and broadcast.
-  defp extract_status_tags(delta, %State{status_tag_buffer: buf} = state) do
-    text = buf <> delta
 
-    case Regex.run(~r/<status>(.*?)<\/status>/s, text) do
-      [full_match, status_text] ->
-        broadcast(state, {:status_update, String.trim(status_text)})
-        clean = String.replace(text, full_match, "", global: false)
-        # Recurse in case there are multiple tags in one chunk
-        {more_clean, state} = extract_status_tags("", %{state | status_tag_buffer: ""})
-        {clean <> more_clean, state}
 
-      nil ->
-        # Check if we might be in the middle of a tag
-        cond do
-          String.contains?(text, "<status>") and not String.contains?(text, "</status>") ->
-            # Partial open tag — buffer everything from <status> onward
-            [before | _] = String.split(text, "<status>", parts: 2)
-            rest = String.slice(text, String.length(before)..-1//1)
-            {before, %{state | status_tag_buffer: rest}}
-
-          String.ends_with?(text, "<") or
-          String.ends_with?(text, "<s") or
-          String.ends_with?(text, "<st") or
-          String.ends_with?(text, "<sta") or
-          String.ends_with?(text, "<stat") or
-          String.ends_with?(text, "<statu") or
-            String.ends_with?(text, "<status") ->
-            # Might be start of a tag — buffer the trailing potential match
-            idx = String.length(text) - partial_tag_length(text)
-            {String.slice(text, 0, idx), %{state | status_tag_buffer: String.slice(text, idx..-1//1)}}
-
-          true ->
-            {text, %{state | status_tag_buffer: ""}}
-        end
-    end
-  end
-
-  defp partial_tag_length(text) do
-    suffixes = ["<status", "<statu", "<stat", "<sta", "<st", "<s", "<"]
-    Enum.find_value(suffixes, 0, fn s ->
-      if String.ends_with?(text, s), do: String.length(s)
-    end)
-  end
 end

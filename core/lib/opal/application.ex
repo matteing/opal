@@ -10,9 +10,17 @@ defmodule Opal.Application do
     children = [
       {Registry, keys: :unique, name: Opal.Registry},
       {Registry, keys: :duplicate, name: Opal.Events.Registry},
-      {DynamicSupervisor, name: Opal.SessionSupervisor, strategy: :one_for_one},
-      Opal.RPC.Stdio
+      {DynamicSupervisor, name: Opal.SessionSupervisor, strategy: :one_for_one}
     ]
+
+    # Only start stdio transport when enabled (default true for backward compat;
+    # set `config :opal, start_rpc: false` for embedded SDK use).
+    children =
+      if Application.get_env(:opal, :start_rpc, true) do
+        children ++ [Opal.RPC.Stdio]
+      else
+        children
+      end
 
     opts = [strategy: :rest_for_one, name: Opal.Supervisor]
     Supervisor.start_link(children, opts)

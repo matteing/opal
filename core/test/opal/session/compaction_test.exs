@@ -318,7 +318,7 @@ defmodule Opal.Session.CompactionTest do
           role: :assistant,
           content: "Let me check",
           tool_calls: [
-            %{name: "read", arguments: %{"path" => "foo.ex"}}
+            %{name: "read_file", arguments: %{"path" => "foo.ex"}}
           ]
         }
       ]
@@ -326,16 +326,16 @@ defmodule Opal.Session.CompactionTest do
       transcript = Compaction.serialize_conversation(messages)
       assert transcript =~ "[Assistant]: Let me check"
       assert transcript =~ "[Assistant tool calls]:"
-      assert transcript =~ "read("
+      assert transcript =~ "read_file("
     end
 
     test "serializes tool result messages" do
       messages = [
-        %Message{id: "1", role: :tool_result, call_id: "call_1", name: "read", content: "file contents here"}
+        %Message{id: "1", role: :tool_result, call_id: "call_1", name: "read_file", content: "file contents here"}
       ]
 
       transcript = Compaction.serialize_conversation(messages)
-      assert transcript =~ "[Tool result (read)]:"
+      assert transcript =~ "[Tool result (read_file)]:"
       assert transcript =~ "file contents here"
     end
 
@@ -362,7 +362,7 @@ defmodule Opal.Session.CompactionTest do
     test "truncates long tool result output" do
       long_content = String.duplicate("x", 1000)
       messages = [
-        %Message{id: "1", role: :tool_result, call_id: "c1", name: "read", content: long_content}
+        %Message{id: "1", role: :tool_result, call_id: "c1", name: "read_file", content: long_content}
       ]
 
       transcript = Compaction.serialize_conversation(messages)
@@ -381,9 +381,9 @@ defmodule Opal.Session.CompactionTest do
           role: :assistant,
           content: "Let me check",
           tool_calls: [
-            %{name: "read", arguments: %{"path" => "lib/foo.ex"}},
-            %{name: "write", arguments: %{"path" => "lib/bar.ex"}},
-            %{name: "edit", arguments: %{"path" => "lib/baz.ex"}}
+            %{name: "read_file", arguments: %{"path" => "lib/foo.ex"}},
+            %{name: "write_file", arguments: %{"path" => "lib/bar.ex"}},
+            %{name: "edit_file", arguments: %{"path" => "lib/baz.ex"}}
           ]
         }
       ]
@@ -398,11 +398,11 @@ defmodule Opal.Session.CompactionTest do
       messages = [
         %Message{
           id: "1", role: :assistant, content: "first",
-          tool_calls: [%{name: "read", arguments: %{"path" => "lib/foo.ex"}}]
+          tool_calls: [%{name: "read_file", arguments: %{"path" => "lib/foo.ex"}}]
         },
         %Message{
           id: "2", role: :assistant, content: "second",
-          tool_calls: [%{name: "read", arguments: %{"path" => "lib/foo.ex"}}]
+          tool_calls: [%{name: "read_file", arguments: %{"path" => "lib/foo.ex"}}]
         }
       ]
 
@@ -427,7 +427,7 @@ defmodule Opal.Session.CompactionTest do
       messages = [
         %Message{
           id: "1", role: :assistant, content: "hmm",
-          tool_calls: [%{name: "read", arguments: %{}}]
+          tool_calls: [%{name: "read_file", arguments: %{}}]
         }
       ]
 
@@ -488,14 +488,14 @@ defmodule Opal.Session.CompactionTest do
         id: "tc1",
         role: :assistant,
         content: "reading" <> String.duplicate("x", 500),
-        tool_calls: [%{name: "read", arguments: %{"path" => "lib/app.ex"}}]
+        tool_calls: [%{name: "read_file", arguments: %{"path" => "lib/app.ex"}}]
       })
       :ok = Session.append(session, Message.user("edit it"))
       :ok = Session.append(session, %Message{
         id: "tc2",
         role: :assistant,
         content: "editing" <> String.duplicate("x", 500),
-        tool_calls: [%{name: "edit", arguments: %{"path" => "lib/app.ex"}}]
+        tool_calls: [%{name: "edit_file", arguments: %{"path" => "lib/app.ex"}}]
       })
       :ok = Session.append(session, Message.user("done"))
       :ok = Session.append(session, Message.assistant("ok" <> String.duplicate("x", 500)))
@@ -516,7 +516,7 @@ defmodule Opal.Session.CompactionTest do
         id: "tc_kept",
         role: :assistant,
         content: "let me check",
-        tool_calls: [%{name: "read", arguments: %{"path" => "recent.ex"}}]
+        tool_calls: [%{name: "read_file", arguments: %{"path" => "recent.ex"}}]
       })
       :ok = Session.append(session, %Message{
         id: "tr_kept",
@@ -638,7 +638,7 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, Message.user("read a file"))
       :ok = Session.append(session, %Message{
         id: "tc1", role: :assistant, content: "reading" <> String.duplicate("x", 500),
-        tool_calls: [%{name: "read", arguments: %{"path" => "lib/app.ex"}}]
+        tool_calls: [%{name: "read_file", arguments: %{"path" => "lib/app.ex"}}]
       })
       :ok = Session.append(session, Message.user("done"))
       :ok = Session.append(session, Message.assistant("ok" <> String.duplicate("x", 500)))
@@ -657,8 +657,8 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, %Message{
         id: "tc1", role: :assistant, content: String.duplicate("x", 500),
         tool_calls: [
-          %{name: "read", arguments: %{"path" => "file_a.ex"}},
-          %{name: "write", arguments: %{"path" => "file_b.ex"}}
+          %{name: "read_file", arguments: %{"path" => "file_a.ex"}},
+          %{name: "write_file", arguments: %{"path" => "file_b.ex"}}
         ]
       })
       :ok = Session.append(session, Message.user("next"))
@@ -676,8 +676,8 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, %Message{
         id: "tc2", role: :assistant, content: String.duplicate("y", 500),
         tool_calls: [
-          %{name: "read", arguments: %{"path" => "file_c.ex"}},
-          %{name: "edit", arguments: %{"path" => "file_a.ex"}}
+          %{name: "read_file", arguments: %{"path" => "file_c.ex"}},
+          %{name: "edit_file", arguments: %{"path" => "file_a.ex"}}
         ]
       })
       :ok = Session.append(session, Message.user("done"))
@@ -700,8 +700,8 @@ defmodule Opal.Session.CompactionTest do
       ops = Compaction.extract_file_ops([
         %Message{id: "1", role: :assistant, content: "",
           tool_calls: [
-            %{name: "read", arguments: %{"path" => "a.ex"}},
-            %{name: "read", arguments: %{"path" => "a.ex"}}
+            %{name: "read_file", arguments: %{"path" => "a.ex"}},
+            %{name: "read_file", arguments: %{"path" => "a.ex"}}
           ]}
       ])
 
@@ -738,10 +738,10 @@ defmodule Opal.Session.CompactionTest do
       for i <- 1..20 do
         :ok = Session.append(session, %Message{
           id: "tc_#{i}", role: :assistant, content: "step #{i}" <> String.duplicate("x", 200),
-          tool_calls: [%{name: "edit", arguments: %{"path" => "file_#{i}.ex"}}]
+          tool_calls: [%{name: "edit_file", arguments: %{"path" => "file_#{i}.ex"}}]
         })
         :ok = Session.append(session, %Message{
-          id: "tr_#{i}", role: :tool_result, call_id: "call_#{i}", name: "edit",
+          id: "tr_#{i}", role: :tool_result, call_id: "call_#{i}", name: "edit_file",
           content: "edited" <> String.duplicate("y", 200)
         })
       end

@@ -70,51 +70,9 @@ defmodule Opal do
   """
   @spec start_session(map()) :: {:ok, pid()} | {:error, term()}
   def start_session(config) when is_map(config) do
-    cfg = Opal.Config.new(config)
+    opts = Opal.Session.Builder.build_opts(config)
 
-    model =
-      case Map.get(config, :model) do
-        nil ->
-          # Check saved settings for a default model preference
-          case Opal.Settings.get("default_model") do
-            saved when is_binary(saved) and saved != "" -> Opal.Model.coerce(saved)
-            _ -> Opal.Model.coerce(cfg.default_model)
-          end
-
-        spec ->
-          Opal.Model.coerce(spec)
-      end
-
-    # Auto-select provider: if an explicit provider is given in config, use it.
-    # If the app-level config has a provider set, use that.
-    # Otherwise, derive from the model.
-    provider =
-      case Map.get(config, :provider) do
-        mod when is_atom(mod) and not is_nil(mod) ->
-          mod
-
-        _ ->
-          if cfg.provider != Opal.Provider.Copilot do
-            cfg.provider
-          else
-            Opal.Model.provider_module(model)
-          end
-      end
-
-    session_id = generate_session_id()
-
-    opts = [
-      session_id: session_id,
-      system_prompt: Map.get(config, :system_prompt, ""),
-      model: model,
-      tools: Map.get(config, :tools) || cfg.default_tools,
-      working_dir: Map.get(config, :working_dir, File.cwd!()),
-      config: cfg,
-      provider: provider,
-      session: Map.get(config, :session, false)
-    ]
-
-    Opal.Config.ensure_dirs!(cfg)
+    Opal.Config.ensure_dirs!(opts[:config])
 
     case DynamicSupervisor.start_child(Opal.SessionSupervisor, {Opal.SessionServer, opts}) do
       {:ok, session_server} ->
@@ -153,7 +111,7 @@ defmodule Opal do
     state = Opal.Agent.get_state(agent)
     Opal.Events.subscribe(state.session_id)
     Opal.Agent.prompt(agent, text)
-    collect_response(state.session_id, "", timeout)
+    Opal.Agent.Collector.collect_response(state.session_id, "", timeout)
   after
     state = Opal.Agent.get_state(agent)
     Opal.Events.unsubscribe(state.session_id)
@@ -239,35 +197,78 @@ defmodule Opal do
     end
   end
 
+  @doc """
+  Returns a curated info map for the given agent.
+
+  Useful for inspecting agent state without depending on internal structs.
+  The returned map includes:
+
+    * `:session_id` — unique session identifier
+    * `:session_dir` — on-disk path for session persistence
+    * `:status` — current agent status (`:idle`, `:running`, etc.)
+    * `:model` — the active `%Opal.Model{}` struct
+    * `:provider` — provider module (e.g. `Opal.Provider.Copilot`)
+    * `:session` — session process pid (or `nil`)
+    * `:working_dir` — base directory for tool execution
+    * `:context_files` — list of discovered context files
+    * `:available_skills` — list of available skill structs
+    * `:mcp_servers` — list of connected MCP servers
+    * `:tools` — list of tool modules
+    * `:message_count` — number of messages in the conversation
+    * `:token_usage` — token usage statistics
+  """
+  @spec get_info(pid()) :: map()
+  def get_info(agent) do
+    state = Opal.Agent.get_state(agent)
+    session_dir = Path.join(Opal.Config.sessions_dir(state.config), state.session_id)
+
+    %{
+      session_id: state.session_id,
+      session_dir: session_dir,
+      status: state.status,
+      model: state.model,
+      provider: state.provider,
+      session: state.session,
+      working_dir: state.working_dir,
+      context_files: state.context_files,
+      available_skills: state.available_skills,
+      mcp_servers: state.mcp_servers,
+      tools: state.tools,
+      message_count: length(state.messages),
+      token_usage: state.token_usage
+    }
+  end
+
+  @doc """
+  Syncs the agent's message list with the given messages.
+
+  Typically used after session compaction to update the agent with
+  the compacted message history.
+  """
+  @spec sync_messages(pid(), list()) :: :ok
+  def sync_messages(agent, messages) do
+    GenServer.call(agent, {:sync_messages, messages})
+  end
+
+  @doc """
+  Sets the thinking level on the agent's current model.
+
+  Updates only the thinking level while preserving the current model
+  and provider. Returns `:ok`.
+
+  ## Examples
+
+      Opal.set_thinking_level(agent, :high)
+      Opal.set_thinking_level(agent, :off)
+  """
+  @spec set_thinking_level(pid(), atom()) :: :ok
+  def set_thinking_level(agent, level) do
+    state = Opal.Agent.get_state(agent)
+    model = %{state.model | thinking_level: level}
+    GenServer.call(agent, {:set_model, model})
+  end
+
   # --- Private Helpers ---
-
-  # Collects streamed text deltas until :agent_end is received.
-  defp collect_response(session_id, acc, timeout) do
-    receive do
-      {:opal_event, ^session_id, {:message_delta, %{delta: delta}}} ->
-        collect_response(session_id, acc <> delta, timeout)
-
-      {:opal_event, ^session_id, {:agent_end, _messages}} ->
-        {:ok, acc}
-
-      {:opal_event, ^session_id, {:agent_end, _messages, _usage}} ->
-        {:ok, acc}
-
-      {:opal_event, ^session_id, {:error, reason}} ->
-        {:error, reason}
-
-      {:opal_event, ^session_id, _other} ->
-        # Ignore other events (tool_execution_start, thinking, etc.)
-        collect_response(session_id, acc, timeout)
-    after
-      timeout ->
-        {:error, :timeout}
-    end
-  end
-
-  defp generate_session_id do
-    :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
-  end
 
   # Finds the SessionServer supervisor that owns the given agent pid.
   defp find_session_server(agent) do

@@ -66,6 +66,8 @@ graph LR
 | **Testing** | Fixture-based provider mocking, SSE simulation, no Mox | [testing.md](testing.md) |
 | **CLI** | Terminal UI, components, state management, slash commands | [cli.md](cli.md) |
 | **SDK** | TypeScript client library for the JSON-RPC protocol | [sdk.md](sdk.md) |
+| **Integrating** | Embedding Opal via Elixir, JSON-RPC server, or TypeScript SDK | [integrating.md](integrating.md) |
+| **Inspecting** | Live event stream via Erlang distribution for debugging | [inspecting.md](inspecting.md) |
 
 ## Key Design Decisions
 

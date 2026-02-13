@@ -129,7 +129,7 @@ defmodule Opal.SubAgent do
 
     try do
       Opal.Agent.prompt(sub_agent, prompt)
-      collect_response(session_id, "", timeout)
+      Opal.Agent.Collector.collect_response(session_id, "", timeout)
     after
       Opal.Events.unsubscribe(session_id)
     end
@@ -156,29 +156,6 @@ defmodule Opal.SubAgent do
 
       nil ->
         {:error, :not_found}
-    end
-  end
-
-  # Collects streamed text deltas until :agent_end is received.
-  defp collect_response(session_id, acc, timeout) do
-    receive do
-      {:opal_event, ^session_id, {:message_delta, %{delta: delta}}} ->
-        collect_response(session_id, acc <> delta, timeout)
-
-      {:opal_event, ^session_id, {:agent_end, _messages}} ->
-        {:ok, acc}
-
-      {:opal_event, ^session_id, {:agent_end, _messages, _usage}} ->
-        {:ok, acc}
-
-      {:opal_event, ^session_id, {:error, reason}} ->
-        {:error, reason}
-
-      {:opal_event, ^session_id, _other} ->
-        collect_response(session_id, acc, timeout)
-    after
-      timeout ->
-        {:error, :timeout}
     end
   end
 

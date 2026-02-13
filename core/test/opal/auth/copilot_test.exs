@@ -1,37 +1,37 @@
-defmodule Opal.AuthTest do
+defmodule Opal.Auth.CopilotTest do
   use ExUnit.Case, async: true
 
   describe "token_expired?/1" do
     test "returns true when expires_at is in the past" do
       past = System.system_time(:second) - 600
-      assert Opal.Auth.token_expired?(%{"expires_at" => past})
+      assert Opal.Auth.Copilot.token_expired?(%{"expires_at" => past})
     end
 
     test "returns true when expires_at is within 5-minute buffer" do
       almost_expired = System.system_time(:second) + 200
-      assert Opal.Auth.token_expired?(%{"expires_at" => almost_expired})
+      assert Opal.Auth.Copilot.token_expired?(%{"expires_at" => almost_expired})
     end
 
     test "returns false when expires_at is well in the future" do
       future = System.system_time(:second) + 3600
-      refute Opal.Auth.token_expired?(%{"expires_at" => future})
+      refute Opal.Auth.Copilot.token_expired?(%{"expires_at" => future})
     end
 
     test "returns false when expires_at is exactly at the 5-minute boundary" do
       boundary = System.system_time(:second) + 301
-      refute Opal.Auth.token_expired?(%{"expires_at" => boundary})
+      refute Opal.Auth.Copilot.token_expired?(%{"expires_at" => boundary})
     end
 
     test "returns true for map without expires_at" do
-      assert Opal.Auth.token_expired?(%{})
+      assert Opal.Auth.Copilot.token_expired?(%{})
     end
 
     test "returns true for non-integer expires_at" do
-      assert Opal.Auth.token_expired?(%{"expires_at" => "not_a_number"})
+      assert Opal.Auth.Copilot.token_expired?(%{"expires_at" => "not_a_number"})
     end
 
     test "returns true for nil input" do
-      assert Opal.Auth.token_expired?(nil)
+      assert Opal.Auth.Copilot.token_expired?(nil)
     end
   end
 
@@ -98,40 +98,40 @@ defmodule Opal.AuthTest do
   describe "base_url/1" do
     test "extracts URL from endpoints.api" do
       token_data = %{"endpoints" => %{"api" => "https://custom.api.example.com"}}
-      assert Opal.Auth.base_url(token_data) == "https://custom.api.example.com"
+      assert Opal.Auth.Copilot.base_url(token_data) == "https://custom.api.example.com"
     end
 
     test "extracts proxy-ep from semicolon-delimited token" do
       token = "tid=abc123;proxy-ep=proxy.enterprise.githubcopilot.com;exp=9999999999"
 
       token_data = %{"token" => token}
-      assert Opal.Auth.base_url(token_data) == "https://api.enterprise.githubcopilot.com"
+      assert Opal.Auth.Copilot.base_url(token_data) == "https://api.enterprise.githubcopilot.com"
     end
 
     test "falls back to default URL when token has no proxy-ep" do
       token = "tid=abc123;exp=9999999999;chat=1"
 
       token_data = %{"token" => token}
-      assert Opal.Auth.base_url(token_data) == "https://api.individual.githubcopilot.com"
+      assert Opal.Auth.Copilot.base_url(token_data) == "https://api.individual.githubcopilot.com"
     end
 
     test "falls back to default URL for invalid token format" do
       token_data = %{"token" => "!!!invalid!!!"}
-      assert Opal.Auth.base_url(token_data) == "https://api.individual.githubcopilot.com"
+      assert Opal.Auth.Copilot.base_url(token_data) == "https://api.individual.githubcopilot.com"
     end
 
     test "handles proxy-ep without proxy. prefix" do
       token = "tid=abc;proxy-ep=custom.githubcopilot.com;exp=9999"
       token_data = %{"token" => token}
-      assert Opal.Auth.base_url(token_data) == "https://custom.githubcopilot.com"
+      assert Opal.Auth.Copilot.base_url(token_data) == "https://custom.githubcopilot.com"
     end
 
     test "falls back to default URL for empty map" do
-      assert Opal.Auth.base_url(%{}) == "https://api.individual.githubcopilot.com"
+      assert Opal.Auth.Copilot.base_url(%{}) == "https://api.individual.githubcopilot.com"
     end
 
     test "falls back to default URL for nil" do
-      assert Opal.Auth.base_url(nil) == "https://api.individual.githubcopilot.com"
+      assert Opal.Auth.Copilot.base_url(nil) == "https://api.individual.githubcopilot.com"
     end
 
     test "endpoints.api takes precedence over token field" do
@@ -144,19 +144,19 @@ defmodule Opal.AuthTest do
         "token" => token
       }
 
-      assert Opal.Auth.base_url(token_data) == "https://api.endpoint.com"
+      assert Opal.Auth.Copilot.base_url(token_data) == "https://api.endpoint.com"
     end
   end
 
   describe "list_models/0" do
     test "returns a non-empty list" do
-      models = Opal.Auth.list_models()
+      models = Opal.Auth.Copilot.list_models()
       assert is_list(models)
       assert length(models) > 0
     end
 
     test "each model has :id and :name keys" do
-      for model <- Opal.Auth.list_models() do
+      for model <- Opal.Auth.Copilot.list_models() do
         assert Map.has_key?(model, :id), "Model missing :id key: #{inspect(model)}"
         assert Map.has_key?(model, :name), "Model missing :name key: #{inspect(model)}"
         assert is_binary(model.id)
@@ -165,19 +165,19 @@ defmodule Opal.AuthTest do
     end
 
     test "includes expected models" do
-      ids = Opal.Auth.list_models() |> Enum.map(& &1.id)
+      ids = Opal.Auth.Copilot.list_models() |> Enum.map(& &1.id)
       assert "claude-sonnet-4" in ids
       assert "gpt-5" in ids
       assert "gpt-4o" in ids
     end
 
     test "all model IDs are unique" do
-      ids = Opal.Auth.list_models() |> Enum.map(& &1.id)
+      ids = Opal.Auth.Copilot.list_models() |> Enum.map(& &1.id)
       assert length(ids) == length(Enum.uniq(ids))
     end
 
     test "all model names are non-empty" do
-      for model <- Opal.Auth.list_models() do
+      for model <- Opal.Auth.Copilot.list_models() do
         assert byte_size(model.name) > 0, "Model #{model.id} has empty name"
       end
     end

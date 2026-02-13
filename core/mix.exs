@@ -79,7 +79,7 @@ defmodule Opal.MixProject do
           Opal.Provider,
           Opal.Provider.Copilot,
           Opal.Provider.LLM,
-          Opal.Auth
+          Opal.Auth.Copilot
         ],
         "Tools": [
           Opal.Tool,

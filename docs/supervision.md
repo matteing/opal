@@ -12,12 +12,14 @@ fully isolated unit — its own processes, its own failure domain, its own clean
 
 ```mermaid
 graph TD
-    OpalSup["Opal.Supervisor<br/><i>:one_for_one</i>"]
+    OpalSup["Opal.Supervisor<br/><i>:rest_for_one</i>"]
     Registry["Opal.Events.Registry<br/><i>shared pubsub backbone</i>"]
     SessionSup["Opal.SessionSupervisor<br/><i>DynamicSupervisor :one_for_one</i>"]
+    Stdio["Opal.RPC.Stdio<br/><i>optional, gated by :start_rpc</i>"]
 
     OpalSup --> Registry
     OpalSup --> SessionSup
+    OpalSup -.-> Stdio
 
     subgraph session_a["Session &quot;a1b2c3&quot;"]
         SSA["SessionServer<br/><i>Supervisor :rest_for_one</i>"]
@@ -78,6 +80,12 @@ graph TD
 A `Registry` with `:duplicate` keys. Any process can subscribe to a session ID
 and receive events. This is the **only shared global process** — everything else
 is per-session. The registry never holds state; it simply routes messages.
+
+### `Opal.RPC.Stdio` (optional)
+
+The stdio JSON-RPC transport. Started by default but can be disabled by setting
+`config :opal, start_rpc: false` — useful when embedding the core library as an
+SDK without stdio transport. See [rpc.md](rpc.md) for details.
 
 ### `Opal.SessionSupervisor`
 

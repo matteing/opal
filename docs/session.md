@@ -2,6 +2,32 @@
 
 The session is a conversation tree stored in an ETS table, managed by an `Opal.Session` GenServer. It supports branching (rewinding to any past message and forking), persistence to disk, and compaction.
 
+## Session Startup
+
+`Opal.Session.Builder` resolves all configuration needed to start a new session. `Opal.start_session/1` delegates to `Builder.build_opts/1`, which applies a priority cascade and returns a keyword list ready for `SessionServer.start_link`:
+
+```mermaid
+flowchart LR
+    A["User opts map"] --> B["Builder.build_opts/1"]
+    B --> C["Resolve model<br/><small>explicit → saved setting → default</small>"]
+    B --> D["Resolve provider<br/><small>explicit → app config → derive from model</small>"]
+    C --> E["opts keyword list"]
+    D --> E
+    E --> F["SessionServer.start_link"]
+```
+
+**Model resolution** follows a three-level cascade:
+
+1. Explicit `:model` key in the opts map
+2. Saved `"default_model"` preference via `Opal.Settings`
+3. `Opal.Config` default model
+
+**Provider resolution** follows a similar cascade:
+
+1. Explicit `:provider` module in the opts map
+2. App-level `Opal.Config` provider (if not the default Copilot)
+3. Auto-derived from the resolved model via `Opal.Model.provider_module/1`
+
 ## Data Model
 
 Each message is an `Opal.Message` struct with a unique `id` and a `parent_id` that links it to the previous message. This forms a tree, not a flat list:
@@ -65,5 +91,6 @@ This is how compaction summarizes old messages without breaking the tree structu
 ## Source
 
 - `core/lib/opal/session.ex` — GenServer, ETS operations, persistence
+- `core/lib/opal/session/builder.ex` — Session startup config resolution
 - `core/lib/opal/session/compaction.ex` — Compaction algorithm (see [compaction.md](compaction.md))
 - `core/lib/opal/session/branch_summary.ex` — LLM-generated branch summaries

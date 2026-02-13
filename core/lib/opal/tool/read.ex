@@ -20,6 +20,7 @@ defmodule Opal.Tool.Read do
   @behaviour Opal.Tool
 
   alias Opal.Tool.Encoding
+  alias Opal.Tool.FileHelper
   alias Opal.Tool.Hashline
 
   # -- Truncation limits ------------------------------------------------------
@@ -62,8 +63,8 @@ defmodule Opal.Tool.Read do
   @impl true
   @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
   def execute(%{"path" => path} = args, %{working_dir: working_dir}) do
-    with {:ok, resolved} <- resolve_path(path, working_dir),
-         {:ok, raw_content} <- read_file(resolved) do
+    with {:ok, resolved} <- FileHelper.resolve_path(path, working_dir),
+         {:ok, raw_content} <- FileHelper.read_file(resolved) do
       # Strip BOM so the LLM sees clean text (BOM is invisible and would
       # cause mismatches if the LLM later tries to edit the file).
       {_had_bom, content} = Encoding.strip_bom(raw_content)
@@ -81,22 +82,6 @@ defmodule Opal.Tool.Read do
 
   def execute(%{"path" => _}, _context), do: {:error, "Missing working_dir in context"}
   def execute(_args, _context), do: {:error, "Missing required parameter: path"}
-
-  defp resolve_path(path, working_dir) do
-    case Opal.Path.safe_relative(path, working_dir) do
-      {:ok, resolved} -> {:ok, resolved}
-      {:error, :outside_base_dir} -> {:error, "Path escapes working directory: #{path}"}
-    end
-  end
-
-  defp read_file(path) do
-    case File.read(path) do
-      {:ok, content} -> {:ok, content}
-      {:error, :enoent} -> {:error, "File not found: #{path}"}
-      {:error, :eisdir} -> {:error, "Path is a directory: #{path}"}
-      {:error, reason} -> {:error, "Failed to read file: #{reason}"}
-    end
-  end
 
   defp maybe_slice(content, nil, nil), do: Hashline.tag_lines(content)
 

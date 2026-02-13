@@ -34,14 +34,13 @@ defmodule Opal.RPC.Handler do
 
     case Opal.start_session(opts) do
       {:ok, agent} ->
-        state = Opal.Agent.get_state(agent)
-        session_dir = Path.join(Opal.Config.sessions_dir(state.config), state.session_id)
+        info = Opal.get_info(agent)
         {:ok, %{
-          session_id: state.session_id,
-          session_dir: session_dir,
-          context_files: state.context_files,
-          available_skills: Enum.map(state.available_skills, & &1.name),
-          mcp_servers: Enum.map(state.mcp_servers, & &1.name),
+          session_id: info.session_id,
+          session_dir: info.session_dir,
+          context_files: info.context_files,
+          available_skills: Enum.map(info.available_skills, & &1.name),
+          mcp_servers: Enum.map(info.mcp_servers, & &1.name),
           node_name: Atom.to_string(Node.self())
         }}
 
@@ -98,8 +97,8 @@ defmodule Opal.RPC.Handler do
   def handle("agent/state", %{"session_id" => sid}) do
     case lookup_agent(sid) do
       {:ok, agent} ->
-        state = Opal.Agent.get_state(agent)
-        {:ok, serialize_state(state)}
+        info = Opal.get_info(agent)
+        {:ok, serialize_info(info)}
 
       {:error, reason} ->
         {:error, Opal.RPC.invalid_params(), "Session not found", reason}
@@ -137,9 +136,9 @@ defmodule Opal.RPC.Handler do
 
   def handle("session/compact", %{"session_id" => sid} = params) do
     with {:ok, agent} <- find_agent_by_session_id(sid) do
-      state = Opal.Agent.get_state(agent)
+      info = Opal.get_info(agent)
 
-      case state.session do
+      case info.session do
         nil ->
           {:error, Opal.RPC.internal_error(), "Session persistence not enabled — cannot compact", nil}
 
@@ -150,15 +149,14 @@ defmodule Opal.RPC.Handler do
           end
 
           compact_opts = [
-            provider: state.provider,
-            model: state.model
+            provider: info.provider,
+            model: info.model
           ] ++ if(keep_tokens, do: [keep_recent_tokens: keep_tokens], else: [])
 
           case Opal.Session.Compaction.compact(session, compact_opts) do
             :ok ->
-              # Sync the agent's message list with the compacted session path
               new_path = Opal.Session.get_path(session)
-              GenServer.call(agent, {:sync_messages, new_path})
+              Opal.sync_messages(agent, new_path)
               {:ok, %{}}
 
             {:error, reason} ->
@@ -177,7 +175,7 @@ defmodule Opal.RPC.Handler do
 
   def handle("models/list", params) do
     copilot_models =
-      Opal.Auth.list_models()
+      Opal.Auth.Copilot.list_models()
       |> Enum.map(fn m -> Map.put(m, :provider, "copilot") end)
 
     # Include models from direct providers if requested
@@ -201,10 +199,8 @@ defmodule Opal.RPC.Handler do
     with {:ok, agent} <- find_agent_by_session_id(sid) do
       thinking_level = parse_thinking_level(params["thinking_level"])
       model = Opal.Model.coerce(model_id, thinking_level: thinking_level)
-      provider = Opal.Model.provider_module(model)
 
-      GenServer.call(agent, {:set_model, model})
-      GenServer.call(agent, {:set_provider, provider})
+      Opal.set_model(agent, model)
       {:ok, %{model: %{provider: model.provider, id: model.id, thinking_level: model.thinking_level}}}
     end
   end
@@ -216,9 +212,7 @@ defmodule Opal.RPC.Handler do
   def handle("thinking/set", %{"session_id" => sid, "level" => level_str}) do
     with {:ok, agent} <- find_agent_by_session_id(sid) do
       level = parse_thinking_level(level_str)
-      state = Opal.Agent.get_state(agent)
-      model = %{state.model | thinking_level: level}
-      GenServer.call(agent, {:set_model, model})
+      Opal.set_thinking_level(agent, level)
       {:ok, %{thinking_level: level}}
     end
   end
@@ -228,7 +222,7 @@ defmodule Opal.RPC.Handler do
   end
 
   def handle("auth/status", _params) do
-    case Opal.Auth.get_token() do
+    case Opal.Auth.Copilot.get_token() do
       {:ok, _token_data} ->
         {:ok, %{authenticated: true}}
 
@@ -238,7 +232,7 @@ defmodule Opal.RPC.Handler do
   end
 
   def handle("auth/login", _params) do
-    case Opal.Auth.start_device_flow() do
+    case Opal.Auth.Copilot.start_device_flow() do
       {:ok, flow} ->
         {:ok, %{
           user_code: flow["user_code"],
@@ -255,9 +249,9 @@ defmodule Opal.RPC.Handler do
   def handle("tasks/list", %{"session_id" => sid}) do
     case lookup_agent(sid) do
       {:ok, agent} ->
-        state = Opal.Agent.get_state(agent)
+        info = Opal.get_info(agent)
 
-        case Opal.Tool.Tasks.query_raw(state.working_dir, nil) do
+        case Opal.Tool.Tasks.query_raw(info.working_dir, nil) do
           {:ok, tasks} -> {:ok, %{tasks: tasks}}
           {:error, reason} -> {:error, Opal.RPC.internal_error(), "Tasks query failed", reason}
         end
@@ -324,39 +318,14 @@ defmodule Opal.RPC.Handler do
   end
 
   defp lookup_agent(session_id) do
-    case Registry.lookup(Opal.Registry, {:tool_sup, session_id}) do
-      [{_pid, _}] ->
-        # The agent is a sibling in the same SessionServer supervisor.
-        # We find it by walking the supervision tree from the tool supervisor.
-        find_agent_by_session_id(session_id)
-
-      [] ->
-        {:error, "No session with id: #{session_id}"}
-    end
+    find_agent_by_session_id(session_id)
   end
 
   defp find_agent_by_session_id(session_id) do
-    # Walk DynamicSupervisor children to find the SessionServer for this session
-    children = DynamicSupervisor.which_children(Opal.SessionSupervisor)
-
-    result =
-      Enum.find_value(children, fn
-        {_, pid, :supervisor, _} when is_pid(pid) ->
-          agent = Opal.SessionServer.agent(pid)
-
-          if agent && Process.alive?(agent) do
-            state = Opal.Agent.get_state(agent)
-
-            if state.session_id == session_id do
-              {:ok, agent}
-            end
-          end
-
-        _ ->
-          nil
-      end)
-
-    result || {:error, "No session with id: #{session_id}"}
+    case Registry.lookup(Opal.Registry, {:agent, session_id}) do
+      [{pid, _}] -> {:ok, pid}
+      [] -> {:error, "No session with id: #{session_id}"}
+    end
   end
 
   defp lookup_session(session_id) do
@@ -366,18 +335,18 @@ defmodule Opal.RPC.Handler do
     end
   end
 
-  defp serialize_state(%Opal.Agent.State{} = state) do
+  defp serialize_info(info) do
     %{
-      session_id: state.session_id,
-      status: state.status,
+      session_id: info.session_id,
+      status: info.status,
       model: %{
-        provider: state.model.provider,
-        id: state.model.id,
-        thinking_level: state.model.thinking_level
+        provider: info.model.provider,
+        id: info.model.id,
+        thinking_level: info.model.thinking_level
       },
-      message_count: length(state.messages),
-      tools: Enum.map(state.tools, fn t -> t.name() end),
-      token_usage: state.token_usage
+      message_count: info.message_count,
+      tools: Enum.map(info.tools, fn t -> t.name() end),
+      token_usage: info.token_usage
     }
   end
 

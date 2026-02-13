@@ -23,6 +23,7 @@ defmodule Opal.Tool.EditLines do
   @behaviour Opal.Tool
 
   alias Opal.Tool.Encoding
+  alias Opal.Tool.FileHelper
   alias Opal.Tool.Hashline
 
   @impl true
@@ -76,8 +77,8 @@ defmodule Opal.Tool.EditLines do
     new_string = Map.get(args, "new_string", "")
     operation = Map.get(args, "operation", "replace")
 
-    with {:ok, resolved} <- resolve_path(path, working_dir),
-         {:ok, raw_content} <- read_file(resolved),
+    with {:ok, resolved} <- FileHelper.resolve_path(path, working_dir),
+         {:ok, raw_content} <- FileHelper.read_file(resolved),
          {:ok, {start_line, start_hash}} <- Hashline.parse_anchor(start_anchor),
          {:ok, {end_line, end_hash}} <- Hashline.parse_anchor(end_anchor) do
       # Strip encoding artifacts before editing
@@ -112,21 +113,6 @@ defmodule Opal.Tool.EditLines do
     do: {:error, "Missing required parameters: path and start"}
 
   # --- Private helpers ---
-
-  defp resolve_path(path, working_dir) do
-    case Opal.Path.safe_relative(path, working_dir) do
-      {:ok, resolved} -> {:ok, resolved}
-      {:error, :outside_base_dir} -> {:error, "Path escapes working directory: #{path}"}
-    end
-  end
-
-  defp read_file(path) do
-    case File.read(path) do
-      {:ok, content} -> {:ok, content}
-      {:error, :enoent} -> {:error, "File not found: #{path}"}
-      {:error, reason} -> {:error, "Failed to read file: #{reason}"}
-    end
-  end
 
   defp validate_range(start_line, end_line, total, operation) do
     cond do

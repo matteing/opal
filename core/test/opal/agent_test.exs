@@ -813,11 +813,12 @@ defmodule Opal.AgentTest do
       Agent.prompt(pid, "Hello")
       state = wait_for_idle(pid)
 
-      assert length(state.messages) == 2
-      assert Enum.at(state.messages, 0).role == :user
-      assert Enum.at(state.messages, 0).content == "Hello"
-      assert Enum.at(state.messages, 1).role == :assistant
-      assert Enum.at(state.messages, 1).content == "Hello world!"
+      messages = Enum.reverse(state.messages)
+      assert length(messages) == 2
+      assert Enum.at(messages, 0).role == :user
+      assert Enum.at(messages, 0).content == "Hello"
+      assert Enum.at(messages, 1).role == :assistant
+      assert Enum.at(messages, 1).content == "Hello world!"
     end
   end
 

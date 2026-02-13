@@ -1,4 +1,4 @@
-defmodule Opal.Auth do
+defmodule Opal.Auth.Copilot do
   @moduledoc """
   Manages GitHub Copilot OAuth credentials.
 

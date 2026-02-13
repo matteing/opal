@@ -57,4 +57,24 @@ defmodule Opal.Provider do
   Converts tool modules implementing `Opal.Tool` to the provider's wire format.
   """
   @callback convert_tools(tools :: [module()]) :: [map()]
+
+  @doc """
+  Converts tool modules to the OpenAI function-calling format.
+
+  This is the shared default implementation used by all built-in providers.
+  """
+  @spec convert_tools(tools :: [module()]) :: [map()]
+  def convert_tools(tools) do
+    Enum.map(tools, fn tool ->
+      %{
+        type: "function",
+        function: %{
+          name: tool.name(),
+          description: tool.description(),
+          parameters: tool.parameters(),
+          strict: false
+        }
+      }
+    end)
+  end
 end

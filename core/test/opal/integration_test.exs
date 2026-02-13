@@ -254,7 +254,7 @@ defmodule Opal.IntegrationTest do
       state = wait_for_idle(pid)
       assert length(state.messages) == 4
 
-      roles = Enum.map(state.messages, & &1.role)
+      roles = state.messages |> Enum.reverse() |> Enum.map(& &1.role)
       assert roles == [:user, :assistant, :user, :assistant]
     end
   end

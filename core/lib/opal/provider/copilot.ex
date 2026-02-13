@@ -26,9 +26,9 @@ defmodule Opal.Provider.Copilot do
 
   @impl true
   def stream(model, messages, tools, opts \\ []) do
-    with {:ok, token_data} <- Opal.Auth.get_token() do
+    with {:ok, token_data} <- Opal.Auth.Copilot.get_token() do
       copilot_token = token_data["copilot_token"]
-      base = token_data["base_url"] || Opal.Auth.base_url(token_data)
+      base = token_data["base_url"] || Opal.Auth.Copilot.base_url(token_data)
 
       req =
         Req.new(
@@ -307,24 +307,8 @@ defmodule Opal.Provider.Copilot do
 
   # ── convert_tools/1 ──────────────────────────────────────────────────
 
-  @doc """
-  Converts tool modules to the OpenAI function-calling format.
-  Works for both Chat Completions and Responses API.
-  """
   @impl true
-  def convert_tools(tools) do
-    Enum.map(tools, fn tool ->
-      %{
-        type: "function",
-        function: %{
-          name: tool.name(),
-          description: tool.description(),
-          parameters: tool.parameters(),
-          strict: false
-        }
-      }
-    end)
-  end
+  defdelegate convert_tools(tools), to: Opal.Provider
 
   # ── Chat Completions message format ──────────────────────────────────
 

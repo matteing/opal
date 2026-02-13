@@ -50,7 +50,7 @@ defmodule Opal.LiveTest do
       do: Opal.Provider.Copilot.convert_messages(model, messages)
 
     @impl true
-    def convert_tools(tools), do: Opal.Provider.Copilot.convert_tools(tools)
+    def convert_tools(tools), do: Opal.Provider.convert_tools(tools)
 
     def start_recording do
       :persistent_term.put({__MODULE__, :recording}, true)
@@ -65,7 +65,7 @@ defmodule Opal.LiveTest do
   end
 
   setup do
-    case Opal.Auth.get_token() do
+    case Opal.Auth.Copilot.get_token() do
       {:ok, _token} -> :ok
       {:error, _} -> {:skip, "No valid Copilot auth token available"}
     end

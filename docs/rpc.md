@@ -81,6 +81,16 @@ This module is the single source of truth. The TypeScript SDK types are auto-gen
 
 ## Architecture
 
+`Opal.RPC.Stdio` is started by default as part of the core supervision tree. To
+use the core library as an embedded SDK without the stdio transport, disable it:
+
+```elixir
+config :opal, start_rpc: false
+```
+
+The default is `true`, preserving backward compatibility. The CLI relies on the
+default and does not need any extra configuration.
+
 ```mermaid
 graph LR
     stdin --> Stdio["Opal.RPC.Stdio<br/><small>parse JSON-RPC</small>"]
