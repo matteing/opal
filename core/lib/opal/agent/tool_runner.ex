@@ -35,7 +35,16 @@ defmodule Opal.Agent.ToolRunner do
         tool_context: context
     }
 
-    dispatch_next_tool(state)
+    schedule_dispatch_next_tool(state)
+  end
+
+  @doc """
+  Schedules dispatch of the next queued tool call.
+  """
+  @spec schedule_dispatch_next_tool(State.t()) :: {:noreply, State.t()}
+  def schedule_dispatch_next_tool(%State{} = state) do
+    send(self(), :dispatch_next_tool)
+    {:noreply, state}
   end
 
   @doc """
@@ -51,9 +60,6 @@ defmodule Opal.Agent.ToolRunner do
   end
 
   def dispatch_next_tool(%State{remaining_tool_calls: [tc | rest]} = state) do
-    # Check for steering before starting next tool
-    state = drain_mailbox_steers(state)
-
     if state.pending_steers != [] do
       # Skip remaining tools
       skipped =
@@ -83,7 +89,7 @@ defmodule Opal.Agent.ToolRunner do
           execute_single_tool(tool_mod, tc.arguments, ctx)
         end)
 
-      state = %{state | remaining_tool_calls: rest, pending_tool_task: {task.ref, tc}}
+      state = %{state | remaining_tool_calls: rest, pending_tool_task: {task, tc}}
       {:noreply, state}
     end
   end
@@ -134,127 +140,6 @@ defmodule Opal.Agent.ToolRunner do
       Map.put(ctx, :question_handler, state.question_handler)
     else
       ctx
-    end
-  end
-
-  @doc """
-  Legacy blocking tool execution for compatibility.
-
-  This is kept as execute_tool_calls_sync in case any tests depend on it.
-  """
-  @spec execute_tool_calls_sync([map()], State.t()) :: term()
-  def execute_tool_calls_sync(tool_calls, %State{} = state) do
-    context = build_tool_context(state)
-
-    {results, state} =
-      Enum.reduce(tool_calls, {[], state}, fn tc, {acc, st} ->
-        # Drain pending steer casts from the process mailbox before each tool
-        st = drain_mailbox_steers(st)
-
-        if st.pending_steers != [] do
-          # User sent a steering message — skip this and all remaining tools.
-          # The cascade works because once pending_steers is non-empty,
-          # every subsequent iteration hits this branch too.
-          broadcast(st, {:tool_skipped, tc.name, tc.call_id})
-          result = {tc, {:error, "Skipped — user sent a steering message"}}
-          {[result | acc], st}
-        else
-          result = execute_single_tool_supervised_sync(tc, st, context)
-          {[result | acc], st}
-        end
-      end)
-
-    results = Enum.reverse(results)
-
-    # Convert results to tool_result messages
-    tool_result_messages =
-      Enum.map(results, fn {tc, result} ->
-        case result do
-          {:ok, output} ->
-            Opal.Message.tool_result(tc.call_id, output)
-
-          {:error, reason} ->
-            Opal.Message.tool_result(tc.call_id, reason, true)
-        end
-      end)
-
-    state = append_messages(state, tool_result_messages)
-
-    # Auto-load skills whose globs match files touched by this batch
-    state = maybe_auto_load_skills(results, state)
-
-    # Process any steers that arrived during the last tool execution
-    state = check_for_steering(state)
-
-    # Start next turn by calling the main agent function
-    Opal.Agent.run_turn(state)
-  end
-
-  @doc """
-  Legacy blocking single tool execution with Task.await.
-
-  Kept for compatibility with execute_tool_calls_sync.
-  """
-  @spec execute_single_tool_supervised_sync(map(), State.t(), map()) :: {map(), term()}
-  def execute_single_tool_supervised_sync(tc, %State{} = state, context) do
-    tool_mod = find_tool_module(tc.name, active_tools(state))
-    meta = if tool_mod, do: Opal.Tool.meta(tool_mod, tc.arguments), else: tc.name
-
-    Logger.debug(
-      "Tool start session=#{state.session_id} tool=#{tc.name} args=#{inspect(tc.arguments, limit: 5, printable_limit: 200)}"
-    )
-
-    broadcast(state, {:tool_execution_start, tc.name, tc.call_id, tc.arguments, meta})
-
-    started_at = System.monotonic_time(:millisecond)
-
-    # Provide an emit callback so tools can stream output chunks
-    emit = fn chunk -> broadcast(state, {:tool_output, tc.name, chunk}) end
-    ctx = context |> Map.put(:emit, emit) |> Map.put(:call_id, tc.call_id)
-
-    result =
-      Task.Supervisor.async_nolink(state.tool_supervisor, fn ->
-        :proc_lib.set_label("tool:#{tc.name}")
-        execute_single_tool(tool_mod, tc.arguments, ctx)
-      end)
-      |> Task.await(:infinity)
-
-    elapsed = System.monotonic_time(:millisecond) - started_at
-
-    Logger.debug(
-      "Tool done session=#{state.session_id} tool=#{tc.name} elapsed=#{elapsed}ms result=#{result_tag(result)}"
-    )
-
-    broadcast(state, {:tool_execution_end, tc.name, tc.call_id, result})
-
-    {tc, result}
-  catch
-    # Task.await/2 re-raises EXIT signals from crashed tasks. We catch
-    # them here so a single tool crash doesn't bring down the agent —
-    # the error is recorded as a tool_result and the LLM decides how
-    # to proceed.
-    :exit, reason ->
-      error_msg = "Tool execution crashed: #{inspect(reason)}"
-      Logger.error(error_msg)
-      broadcast(state, {:tool_execution_end, tc.name, tc.call_id, {:error, error_msg}})
-      {tc, {:error, error_msg}}
-  end
-
-  @doc """
-  Selectively receives :steer GenServer casts from the process mailbox.
-
-  Uses a zero timeout so it returns immediately when there are no pending 
-  steers — this is the mechanism that lets us check for user redirection 
-  between sequential tool calls.
-  """
-  @spec drain_mailbox_steers(State.t()) :: State.t()
-  def drain_mailbox_steers(state) do
-    receive do
-      {:"$gen_cast", {:steer, text}} ->
-        state = %{state | pending_steers: state.pending_steers ++ [text]}
-        drain_mailbox_steers(state)
-    after
-      0 -> state
     end
   end
 
@@ -384,11 +269,6 @@ defmodule Opal.Agent.ToolRunner do
   end
 
   # Private helper functions
-
-  defp result_tag({:ok, _}), do: "ok"
-  defp result_tag({:error, _}), do: "error"
-  defp result_tag(_), do: "unknown"
-
   defp broadcast(%State{session_id: session_id}, event) do
     Opal.Events.broadcast(session_id, event)
   end

@@ -187,7 +187,7 @@ defmodule Opal.Config do
       Defaults to `~/.opal` on Unix or `%APPDATA%/opal` on Windows.
 
     * `:shell` — shell used by `Opal.Tool.Shell` for command execution.
-      Accepts `:bash`, `:zsh`, `:sh`, `:fish`, `:powershell`, or `:cmd`.
+      Accepts `:bash`, `:zsh`, `:sh`, `:powershell`, or `:cmd`.
       Defaults to auto-detection based on the current platform.
 
     * `:default_model` — a `{provider_atom, model_id}` tuple or a

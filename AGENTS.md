@@ -86,7 +86,7 @@ opal --connect myagent@localhost --inspect
 ### Environment Variables
 
 - `OPAL_DATA_DIR` - Root directory for Opal data (sessions, logs, auth)
-- `OPAL_SHELL` - Shell for tool execution (bash, zsh, sh, fish, powershell, cmd)
+- `OPAL_SHELL` - Shell for tool execution (bash, zsh, sh, powershell, cmd)
 - `OPAL_COPILOT_DOMAIN` - GitHub domain for auth (default: github.com)
 
 ### Context Discovery

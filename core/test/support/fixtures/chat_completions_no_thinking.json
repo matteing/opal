@@ -1,0 +1,15 @@
+{
+  "description": "Recorded live fixture: chat_completions_no_thinking.json",
+  "events": [
+    {
+      "data": "{\"choices\":[{\"index\":0,\"delta\":{\"content\":\"7 * 8 =\",\"role\":\"assistant\"}}],\"created\":1770976112,\"id\":\"msg_vrtx_018EegYBxUkMSEZ98ekgTDxH\",\"model\":\"claude-sonnet-4\"}"
+    },
+    {
+      "data": "{\"choices\":[{\"index\":0,\"delta\":{\"content\":\" 56.\",\"role\":\"assistant\"}}],\"created\":1770976112,\"id\":\"msg_vrtx_018EegYBxUkMSEZ98ekgTDxH\",\"model\":\"claude-sonnet-4\"}"
+    },
+    {
+      "data": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"delta\":{\"content\":null}}],\"created\":1770976112,\"id\":\"msg_vrtx_018EegYBxUkMSEZ98ekgTDxH\",\"usage\":{\"completion_tokens\":14,\"prompt_tokens\":23,\"prompt_tokens_details\":{\"cached_tokens\":0},\"total_tokens\":37},\"model\":\"claude-sonnet-4\"}"
+    }
+  ],
+  "recorded_at": "2026-02-13T09:48:32.429638Z"
+}

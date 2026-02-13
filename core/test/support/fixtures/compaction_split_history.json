@@ -1,0 +1,20 @@
+{
+  "description": "Compaction split-turn summary \u2014 history portion before the split turn",
+  "events": [
+    {
+      "data": "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"message\",\"id\":\"item_001\"}}"
+    },
+    {
+      "data": "{\"type\":\"response.output_text.delta\",\"delta\":\"## Goal\\nRefactor the authentication module across all files in lib/auth/.\\n\\n\"}"
+    },
+    {
+      "data": "{\"type\":\"response.output_text.delta\",\"delta\":\"## Progress\\n### Done\\n- [x] Reviewed existing auth module structure\\n- [x] Discussed refactoring approach with user\\n\\n## Key Decisions\\n- **Extract shared logic into Auth.Base**: Reduces duplication across auth modules\\n\\n## Next Steps\\n1. Continue applying refactoring to remaining modules\"}"
+    },
+    {
+      "data": "{\"type\":\"response.output_text.done\",\"text\":\"## Goal\\nRefactor the authentication module across all files in lib/auth/.\\n\\n## Progress\\n### Done\\n- [x] Reviewed existing auth module structure\\n- [x] Discussed refactoring approach with user\\n\\n## Key Decisions\\n- **Extract shared logic into Auth.Base**: Reduces duplication across auth modules\\n\\n## Next Steps\\n1. Continue applying refactoring to remaining modules\"}"
+    },
+    {
+      "data": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_compact_001\",\"status\":\"completed\",\"usage\":{\"input_tokens\":5000,\"output_tokens\":350}}}"
+    }
+  ]
+}

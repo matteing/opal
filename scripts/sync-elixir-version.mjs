@@ -5,6 +5,8 @@
  * Usage: node scripts/sync-elixir-version.mjs <version>
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const version = process.argv[2];
 if (!version) {
@@ -12,7 +14,8 @@ if (!version) {
   process.exit(1);
 }
 
-const mixPath = "core/mix.exs";
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const mixPath = resolve(root, "core/mix.exs");
 const content = readFileSync(mixPath, "utf-8");
 const updated = content.replace(/@version "[^"]+"/, `@version "${version}"`);
 

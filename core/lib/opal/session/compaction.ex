@@ -337,57 +337,11 @@ defmodule Opal.Session.Compaction do
 
     case provider.stream(model, summary_messages, []) do
       {:ok, resp} ->
-        text = collect_stream_text(resp, provider, "")
+        text = Opal.Provider.StreamCollector.collect_text(resp, provider, 30_000)
         if text != "", do: {:ok, String.trim(text)}, else: {:error, :empty}
 
       {:error, reason} ->
         {:error, reason}
-    end
-  end
-
-  # Synchronously collects all text from a streaming response.
-  defp collect_stream_text(resp, provider, acc) do
-    receive do
-      message ->
-        case Req.parse_message(resp, message) do
-          {:ok, chunks} when is_list(chunks) ->
-            new_acc =
-              Enum.reduce(chunks, acc, fn
-                {:data, data}, text_acc ->
-                  binary = IO.iodata_to_binary(data)
-
-                  binary
-                  |> String.split("\n", trim: true)
-                  |> Enum.reduce(text_acc, fn
-                    "data: [DONE]", inner ->
-                      inner
-
-                    "data: " <> json, inner ->
-                      events = provider.parse_stream_event(json)
-
-                      Enum.reduce(events, inner, fn
-                        {:text_delta, delta}, t -> t <> delta
-                        _, t -> t
-                      end)
-
-                    _, inner ->
-                      inner
-                  end)
-
-                :done, text_acc ->
-                  text_acc
-
-                _, text_acc ->
-                  text_acc
-              end)
-
-            if :done in chunks, do: new_acc, else: collect_stream_text(resp, provider, new_acc)
-
-          :unknown ->
-            collect_stream_text(resp, provider, acc)
-        end
-    after
-      30_000 -> acc
     end
   end
 

@@ -129,6 +129,11 @@ defmodule Opal.RPC.HandlerTest do
         assert Map.has_key?(model, :thinking_levels)
       end
     end
+
+    test "returns invalid_params for unknown providers in list" do
+      assert {:error, -32602, "Unknown provider in providers list", _} =
+               Handler.handle("models/list", %{"providers" => ["definitely_not_a_provider"]})
+    end
   end
 
   describe "handle/2 model/set missing params" do

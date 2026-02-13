@@ -1,0 +1,20 @@
+{
+  "description": "Compaction split-turn summary \u2014 turn-prefix portion of an in-progress turn",
+  "events": [
+    {
+      "data": "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"message\",\"id\":\"item_001\"}}"
+    },
+    {
+      "data": "{\"type\":\"response.output_text.delta\",\"delta\":\"## Turn Context\\nThe assistant began applying the auth module refactoring across multiple files in lib/auth/.\\n\\n\"}"
+    },
+    {
+      "data": "{\"type\":\"response.output_text.delta\",\"delta\":\"## Actions Taken\\n- Edited several module files to extract shared logic into Auth.Base\\n- Each edit followed the same pattern: move common functions, update references\\n\\n## Intermediate Results\\n- Files edited successfully with no compilation errors\\n- Consistent pattern established for remaining files\"}"
+    },
+    {
+      "data": "{\"type\":\"response.output_text.done\",\"text\":\"## Turn Context\\nThe assistant began applying the auth module refactoring across multiple files in lib/auth/.\\n\\n## Actions Taken\\n- Edited several module files to extract shared logic into Auth.Base\\n- Each edit followed the same pattern: move common functions, update references\\n\\n## Intermediate Results\\n- Files edited successfully with no compilation errors\\n- Consistent pattern established for remaining files\"}"
+    },
+    {
+      "data": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_compact_001\",\"status\":\"completed\",\"usage\":{\"input_tokens\":5000,\"output_tokens\":350}}}"
+    }
+  ]
+}

@@ -67,17 +67,20 @@ defmodule Opal.SubAgent do
         spec -> Opal.Model.coerce(spec)
       end
 
-    # Auto-select provider: use explicit override, or inherit from parent.
-    # Only switch provider when the model is explicitly changed to a provider
-    # that differs from the parent's model provider.
+    # Auto-select provider: explicit override wins.
+    # If model is explicitly overridden, align provider module to that model.
+    # Otherwise inherit the parent's provider module.
     provider =
-      case Map.get(overrides, :provider) do
-        nil ->
-          # Inherit parent's provider by default
-          parent_state.provider
-
-        mod ->
+      case Map.fetch(overrides, :provider) do
+        {:ok, mod} ->
           mod
+
+        :error ->
+          if Map.has_key?(overrides, :model) do
+            Opal.Model.provider_module(model)
+          else
+            parent_state.provider
+          end
       end
 
     session_id = generate_session_id()

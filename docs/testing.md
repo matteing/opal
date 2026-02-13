@@ -102,8 +102,12 @@ Pre-recorded SSE event sequences live in `core/test/support/fixtures/`:
 | `responses_api_tool_call.json` | Responses API | Tool call + arguments |
 | `responses_api_error.json` | Responses API | Error response |
 | `responses_api_high_usage.json` | Responses API | Near-limit token usage |
-| `chat_completions_text.json` | Chat Completions | Text response (legacy format) |
-| `chat_completions_tool_call.json` | Chat Completions | Tool call (legacy format) |
+| `responses_api_thinking.json` | Responses API | Reasoning summary → text |
+| `responses_api_thinking_tool_call.json` | Responses API | Reasoning + tool call |
+| `chat_completions_text.json` | Chat Completions | Text response |
+| `chat_completions_tool_call.json` | Chat Completions | Tool call |
+| `chat_completions_thinking.json` | Chat Completions | `reasoning_content` → text |
+| `chat_completions_thinking_tool_call.json` | Chat Completions | Reasoning + tool call |
 
 Each fixture is a JSON file:
 
@@ -165,11 +169,28 @@ end
 | `:mcp` | MCP integration tests | Included |
 | `:tmp_dir` | ExUnit auto-creates/cleans temp directory | Included |
 
-## Source Files
+## Live Recording
+
+Thinking fixtures can be re-recorded from live API calls. The live test module (`live_thinking_test.exs`) wraps the real Copilot provider in a `RecordingProvider` that captures raw SSE data:
+
+```bash
+# Record new fixtures from live API
+cd core
+mix test --include live --include save_fixtures test/opal/live_thinking_test.exs
+```
+
+This records 6 scenarios: Chat Completions thinking (text, tool call), Responses API thinking (text, tool call), no-thinking baseline, and per-level (low/medium/high) effort responses.
+
+The integration tests (`thinking_integration_test.exs`) replay these fixtures with **structural assertions** — they verify event shapes, ordering, and field presence rather than exact content strings. This means the same tests work with both hand-crafted and real API recordings.
+
+## Source
 
 | File | Purpose |
 |------|---------|
 | `core/test/test_helper.exs` | ExUnit config, tag exclusions |
 | `core/test/support/fixture_helper.ex` | Fixture loading, `Req.Response.Async` simulation |
 | `core/test/support/fixtures/*.json` | Pre-recorded SSE event sequences |
+| `core/test/opal/live_test.exs` | Live API tests (general) |
+| `core/test/opal/live_thinking_test.exs` | Live API tests for reasoning/thinking fixture recording |
+| `core/test/opal/thinking_integration_test.exs` | Fixture-replay integration tests for thinking |
 | `core/config/test.exs` | Logger level for tests |
