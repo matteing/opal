@@ -41,7 +41,7 @@ defmodule Opal.Agent do
             tools: [module()],
             working_dir: String.t(),
             config: Opal.Config.t(),
-            status: :idle | :running | :streaming,
+            status: :idle | :running | :streaming | :executing_tools,
             streaming_resp: Req.Response.t() | nil,
             current_text: String.t(),
             current_tool_calls: [map()],
@@ -67,7 +67,12 @@ defmodule Opal.Agent do
             # Overflow detection — set when usage reports exceed context window
             overflow_detected: boolean(),
             # Optional callback for sub-agents to ask the parent/user questions
-            question_handler: (map() -> {:ok, String.t()} | {:error, term()}) | nil
+            question_handler: (map() -> {:ok, String.t()} | {:error, term()}) | nil,
+            # Tool execution state — tracks pending tool execution
+            pending_tool_task: {reference(), map()} | nil,
+            remaining_tool_calls: [map()],
+            tool_results: [{map(), term()}],
+            tool_context: map() | nil
           }
 
     @enforce_keys [:session_id, :model, :working_dir, :config]
@@ -110,7 +115,12 @@ defmodule Opal.Agent do
       # Hybrid estimation: snapshot of message count when usage was last reported.
       # Messages added after this index are estimated heuristically.
       last_usage_msg_index: 0,
-      question_handler: nil
+      question_handler: nil,
+      # Tool execution state — tracks pending tool execution
+      pending_tool_task: nil,
+      remaining_tool_calls: [],
+      tool_results: [],
+      tool_context: nil
     ]
   end
 
@@ -328,13 +338,14 @@ defmodule Opal.Agent do
   end
 
   def handle_cast({:steer, text}, %State{status: status} = state)
-      when status in [:running, :streaming] do
+      when status in [:running, :streaming, :executing_tools] do
     # Queue steering message — drained between tool executions
     {:noreply, %{state | pending_steers: state.pending_steers ++ [text]}}
   end
 
   def handle_cast(:abort, %State{} = state) do
     state = cancel_streaming(state)
+    state = cancel_tool_execution(state)
     broadcast(state, {:agent_abort})
     {:noreply, %{state | status: :idle}}
   end
@@ -395,6 +406,31 @@ defmodule Opal.Agent do
   end
 
   @impl true
+  def handle_info({ref, result}, %State{status: :executing_tools, pending_tool_task: {task_ref, tc}} = state) 
+      when ref == task_ref do
+    # Tool task completed successfully
+    Process.demonitor(ref, [:flush])
+    broadcast(state, {:tool_execution_end, tc.name, tc.call_id, result})
+    state = %{state | 
+      tool_results: state.tool_results ++ [{tc, result}],
+      pending_tool_task: nil
+    }
+    Opal.Agent.ToolRunner.dispatch_next_tool(state)
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %State{status: :executing_tools, pending_tool_task: {task_ref, tc}} = state) 
+      when ref == task_ref do
+    # Tool task crashed
+    error_msg = "Tool execution crashed: #{inspect(reason)}"
+    Logger.error(error_msg)
+    broadcast(state, {:tool_execution_end, tc.name, tc.call_id, {:error, error_msg}})
+    state = %{state | 
+      tool_results: state.tool_results ++ [{tc, {:error, error_msg}}],
+      pending_tool_task: nil
+    }
+    Opal.Agent.ToolRunner.dispatch_next_tool(state)
+  end
+
   def handle_info(message, %State{status: :streaming, streaming_resp: resp} = state)
       when resp != nil do
     case Req.parse_message(resp, message) do
@@ -665,7 +701,7 @@ defmodule Opal.Agent do
   defp finalize_response_continue(state, tool_calls, assistant_msg) do
     if tool_calls != [] do
       broadcast(state, {:turn_end, assistant_msg, []})
-      Opal.Agent.ToolRunner.execute_tool_calls(tool_calls, state)
+      Opal.Agent.ToolRunner.start_tool_execution(tool_calls, state)
     else
       # Drain any steering messages that arrived during this turn
       state = Opal.Agent.ToolRunner.check_for_steering(state)
@@ -711,6 +747,20 @@ defmodule Opal.Agent do
   # --- Tool Execution ---
 
 
+
+  # Cancels an in-progress tool execution if present.
+  defp cancel_tool_execution(%State{pending_tool_task: nil} = state), do: state
+
+  defp cancel_tool_execution(%State{pending_tool_task: {ref, _tc}} = state) do
+    Process.demonitor(ref, [:flush])
+    # Note: we don't explicitly kill the task process here - we just ignore its result
+    %{state | 
+      pending_tool_task: nil, 
+      remaining_tool_calls: [],
+      tool_results: [],
+      tool_context: nil
+    }
+  end
 
   # Cancels an in-progress streaming response if present.
   defp cancel_streaming(%State{streaming_resp: nil} = state), do: state

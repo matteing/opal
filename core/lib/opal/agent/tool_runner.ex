@@ -14,16 +14,131 @@ defmodule Opal.Agent.ToolRunner do
   @file_tools ~w(write_file edit_file)
 
   @doc """
-  Executes a batch of tool calls sequentially.
+  Starts non-blocking execution of a batch of tool calls.
 
-  Sequential execution trades parallelism for responsiveness: the user
-  can redirect the agent mid-batch instead of waiting for all tools to
-  finish (some of which may be destructive writes or shell commands).
+  Instead of executing tools synchronously, this function sets up the state
+  for sequential tool execution via handle_info callbacks. This allows the
+  GenServer to remain responsive to abort, steer, and other messages while
+  tools are running.
 
-  Returns the result of starting the next turn.
+  Returns {:noreply, state} with status set to :executing_tools.
   """
-  @spec execute_tool_calls([map()], State.t()) :: term()
-  def execute_tool_calls(tool_calls, %State{} = state) do
+  @spec start_tool_execution([map()], State.t()) :: {:noreply, State.t()}
+  def start_tool_execution(tool_calls, %State{} = state) do
+    context = build_tool_context(state)
+    state = %{state | 
+      status: :executing_tools,
+      remaining_tool_calls: tool_calls,
+      tool_results: [],
+      tool_context: context
+    }
+    dispatch_next_tool(state)
+  end
+
+  @doc """
+  Dispatches the next tool in the queue or finalizes if all tools are done.
+
+  This function is called from agent.ex handle_info callbacks and must be public.
+  Checks for steering before starting the next tool, allowing user interruption.
+  """
+  @spec dispatch_next_tool(State.t()) :: {:noreply, State.t()}
+  def dispatch_next_tool(%State{remaining_tool_calls: []} = state) do
+    # All tools done — finalize
+    finalize_tool_batch(state)
+  end
+
+  def dispatch_next_tool(%State{remaining_tool_calls: [tc | rest]} = state) do
+    # Check for steering before starting next tool
+    state = drain_mailbox_steers(state)
+    
+    if state.pending_steers != [] do
+      # Skip remaining tools
+      skipped = Enum.map([tc | rest], fn tc -> 
+        broadcast(state, {:tool_skipped, tc.name, tc.call_id})
+        {tc, {:error, "Skipped — user sent a steering message"}} 
+      end)
+      state = %{state | 
+        remaining_tool_calls: [],
+        tool_results: state.tool_results ++ skipped
+      }
+      finalize_tool_batch(state)
+    else
+      tool_mod = find_tool_module(tc.name, active_tools(state))
+      meta = if tool_mod, do: Opal.Tool.meta(tool_mod, tc.arguments), else: tc.name
+      
+      Logger.debug("Tool start session=#{state.session_id} tool=#{tc.name} args=#{inspect(tc.arguments, limit: 5, printable_limit: 200)}")
+      broadcast(state, {:tool_execution_start, tc.name, tc.call_id, tc.arguments, meta})
+      
+      emit = fn chunk -> broadcast(state, {:tool_output, tc.name, chunk}) end
+      ctx = state.tool_context |> Map.put(:emit, emit) |> Map.put(:call_id, tc.call_id)
+      
+      task = Task.Supervisor.async_nolink(state.tool_supervisor, fn ->
+        :proc_lib.set_label("tool:#{tc.name}")
+        execute_single_tool(tool_mod, tc.arguments, ctx)
+      end)
+      
+      state = %{state | 
+        remaining_tool_calls: rest,
+        pending_tool_task: {task.ref, tc}
+      }
+      {:noreply, state}
+    end
+  end
+
+  @doc """
+  Finalizes the tool execution batch and continues to the next agent turn.
+
+  Converts tool results to messages, handles skill auto-loading, checks for
+  steering, and starts the next turn.
+  """
+  @spec finalize_tool_batch(State.t()) :: {:noreply, State.t()}
+  def finalize_tool_batch(%State{} = state) do
+    results = state.tool_results
+    tool_result_messages = Enum.map(results, fn {tc, result} ->
+      case result do
+        {:ok, output} -> Opal.Message.tool_result(tc.call_id, output)
+        {:error, reason} -> Opal.Message.tool_result(tc.call_id, reason, true)
+      end
+    end)
+    
+    state = append_messages(state, tool_result_messages)
+    state = maybe_auto_load_skills(results, state)
+    state = check_for_steering(state)
+    state = %{state | pending_tool_task: nil, tool_context: nil, tool_results: []}
+    
+    Opal.Agent.run_turn(state)
+  end
+
+  @doc """
+  Builds the shared context map passed to every tool execution.
+
+  Creates a context map containing working directory, session info,
+  configuration, and optional question handler for sub-agents.
+  """
+  @spec build_tool_context(State.t()) :: map()
+  def build_tool_context(%State{} = state) do
+    ctx = %{
+      working_dir: state.working_dir,
+      session_id: state.session_id,
+      config: state.config,
+      agent_pid: self(),
+      agent_state: state
+    }
+
+    if state.question_handler do
+      Map.put(ctx, :question_handler, state.question_handler)
+    else
+      ctx
+    end
+  end
+
+  @doc """
+  Legacy blocking tool execution for compatibility.
+  
+  This is kept as execute_tool_calls_sync in case any tests depend on it.
+  """
+  @spec execute_tool_calls_sync([map()], State.t()) :: term()
+  def execute_tool_calls_sync(tool_calls, %State{} = state) do
     context = build_tool_context(state)
 
     {results, state} =
@@ -39,7 +154,7 @@ defmodule Opal.Agent.ToolRunner do
           result = {tc, {:error, "Skipped — user sent a steering message"}}
           {[result | acc], st}
         else
-          result = execute_single_tool_supervised(tc, st, context)
+          result = execute_single_tool_supervised_sync(tc, st, context)
           {[result | acc], st}
         end
       end)
@@ -71,36 +186,12 @@ defmodule Opal.Agent.ToolRunner do
   end
 
   @doc """
-  Builds the shared context map passed to every tool execution.
-
-  Creates a context map containing working directory, session info,
-  configuration, and optional question handler for sub-agents.
+  Legacy blocking single tool execution with Task.await.
+  
+  Kept for compatibility with execute_tool_calls_sync.
   """
-  @spec build_tool_context(State.t()) :: map()
-  def build_tool_context(%State{} = state) do
-    ctx = %{
-      working_dir: state.working_dir,
-      session_id: state.session_id,
-      config: state.config,
-      agent_pid: self(),
-      agent_state: state
-    }
-
-    if state.question_handler do
-      Map.put(ctx, :question_handler, state.question_handler)
-    else
-      ctx
-    end
-  end
-
-  @doc """
-  Runs a single tool call under the session's Task.Supervisor.
-
-  Broadcasts lifecycle events and catches task crashes to prevent
-  bringing down the agent process.
-  """
-  @spec execute_single_tool_supervised(map(), State.t(), map()) :: {map(), term()}
-  def execute_single_tool_supervised(tc, %State{} = state, context) do
+  @spec execute_single_tool_supervised_sync(map(), State.t(), map()) :: {map(), term()}
+  def execute_single_tool_supervised_sync(tc, %State{} = state, context) do
     tool_mod = find_tool_module(tc.name, active_tools(state))
     meta = if tool_mod, do: Opal.Tool.meta(tool_mod, tc.arguments), else: tc.name
 
