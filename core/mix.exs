@@ -123,7 +123,8 @@ defmodule Opal.MixProject do
             darwin_arm64: [os: :darwin, cpu: :aarch64],
             darwin_x64: [os: :darwin, cpu: :x86_64],
             linux_x64: [os: :linux, cpu: :x86_64],
-            linux_arm64: [os: :linux, cpu: :aarch64]
+            linux_arm64: [os: :linux, cpu: :aarch64],
+            win32_x64: [os: :windows, cpu: :x86_64]
           ]
         ]
       ]

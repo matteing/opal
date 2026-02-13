@@ -47,8 +47,8 @@ jobs:
             target: linux_arm64
             binary: opal_server_linux_arm64
           - runner: windows-latest
-            target: windows_x64
-            binary: opal_server_windows_x64
+            target: win32_x64
+            binary: opal_server_win32_x64
 
     runs-on: ${{ matrix.runner }}
     steps:
@@ -152,7 +152,7 @@ jobs:
           cp artifacts/opal_server_darwin_arm64/* cli/releases/
           cp artifacts/opal_server_linux_x64/*    cli/releases/
           cp artifacts/opal_server_linux_arm64/*   cli/releases/
-          cp artifacts/opal_server_windows_x64/*   cli/releases/
+          cp artifacts/opal_server_win32_x64/*     cli/releases/
           chmod +x cli/releases/* 2>/dev/null || true
 
           echo "==> Package contents:"
@@ -179,4 +179,4 @@ jobs:
             artifacts/opal_server_darwin_arm64/*
             artifacts/opal_server_linux_x64/*
             artifacts/opal_server_linux_arm64/*
-            artifacts/opal_server_windows_x64/*
+            artifacts/opal_server_win32_x64/*
