@@ -110,6 +110,7 @@ The old `Opal.Tool.Edit` module (str_replace with fuzzy fallback) still exists i
 - `core/lib/opal/tool/read.ex` — File reading with hashline-tagged output
 - `core/lib/opal/tool/edit.ex` — Legacy str_replace tool (not in default tools)
 - `core/lib/opal/tool/encoding.ex` — BOM and CRLF handling
+- `core/lib/opal/tool/file_helper.ex` — Shared path resolution and file I/O helpers
 
 ## References
 

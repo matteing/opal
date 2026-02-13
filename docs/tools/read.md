@@ -38,8 +38,8 @@ Head-truncation is intentional — file structure, imports, and module definitio
 
 ## Encoding
 
-UTF-8 BOM is stripped before output. The LLM never sees it, preventing invisible mismatches in subsequent edits. CRLF normalization is not applied to read output (only to edit matching).
+UTF-8 BOM is stripped before output. The LLM never sees it, preventing invisible mismatches in subsequent edits. CRLF line endings are normalized to LF for consistent line splitting and hashline tagging.
 
 ## Source
 
-`core/lib/opal/tool/read.ex`
+`core/lib/opal/tool/read.ex`, `core/lib/opal/tool/file_helper.ex`

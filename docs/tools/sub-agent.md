@@ -25,7 +25,7 @@ Sub-agents are limited to **one level** — no recursive spawning. This is enfor
 
 ## Event Forwarding
 
-While the sub-agent runs, all its events (text deltas, tool executions, etc.) are re-broadcast to the parent session as `{:sub_agent_event, sub_session_id, inner_event}`. The CLI renders these with visual nesting.
+While the sub-agent runs, all its events (text deltas, tool executions, etc.) are re-broadcast to the parent session as `{:sub_agent_event, parent_call_id, sub_session_id, inner_event}`. The CLI renders these with visual nesting.
 
 ## Tool Filtering
 
@@ -67,7 +67,7 @@ sequenceDiagram
 
 ### Why this works without deadlocks
 
-The parent tool task is **not** the Agent GenServer — it's a supervised `Task` started by `Task.Supervisor.async_stream_nolink`. While this task blocks in `collect_and_forward`, the Agent GenServer is also blocked (waiting for tool results), but neither process needs the other's mailbox. The sub-agent's tool task sends directly to the parent task, bypassing both GenServers entirely.
+The parent tool task is **not** the Agent GenServer — it's a supervised `Task` started by `Task.Supervisor.async_nolink`. While this task blocks in `collect_and_forward`, the Agent GenServer remains responsive (processing other `handle_info` messages). The sub-agent's tool task sends directly to the parent task, bypassing both GenServers entirely.
 
 During the RPC call (waiting for the user), the sub-agent is blocked too (its tool task is in a `receive`), so no new events flow. Once the user answers, everything unblocks in order: parent task replies → sub-agent task resumes → sub-agent continues its agent loop → events flow again → parent task collects them.
 

@@ -195,7 +195,7 @@ defmodule Opal.Config do
       Default: `{"copilot", "claude-sonnet-4"}`.
 
     * `:default_tools` — list of modules implementing `Opal.Tool` available
-      to the agent. Default: `[Opal.Tool.Read, Opal.Tool.Write, Opal.Tool.Edit, Opal.Tool.Shell]`.
+      to the agent. Default: `[Read, Write, EditLines, Shell, SubAgent, Tasks, UseSkill, AskUser]`.
 
     * `:provider` — module implementing `Opal.Provider` for LLM communication.
       Default: `Opal.Provider.Copilot`. Use `Opal.Provider.LLM` for ReqLLM-backed
@@ -223,7 +223,8 @@ defmodule Opal.Config do
         data_dir: "~/.opal",
         shell: :zsh,
         default_model: {"copilot", "claude-sonnet-4-5"},
-        default_tools: [Opal.Tool.Read, Opal.Tool.Write, Opal.Tool.Edit, Opal.Tool.Shell],
+        default_tools: [Opal.Tool.Read, Opal.Tool.Write, Opal.Tool.EditLines, Opal.Tool.Shell,
+                        Opal.Tool.SubAgent, Opal.Tool.Tasks, Opal.Tool.UseSkill, Opal.Tool.AskUser],
         copilot: [
           client_id: "Iv1.b507a08c87ecfe98",
           domain: "github.com"

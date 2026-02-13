@@ -99,7 +99,15 @@ defmodule Opal.Tool.AskParent do
   def execute(%{"question" => question} = args, context) do
     case Map.get(context, :question_handler) do
       handler when is_function(handler, 1) ->
-        handler.(%{question: question, choices: Map.get(args, "choices", [])})
+        request = %{
+          question: question,
+          choices: Map.get(args, "choices", [])
+        }
+
+        case handler.(request) do
+          {:ok, answer} -> {:ok, answer}
+          {:error, reason} -> {:error, "Question failed: #{inspect(reason)}"}
+        end
 
       nil ->
         Opal.Tool.Ask.ask_via_rpc(args, context)

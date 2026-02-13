@@ -48,13 +48,13 @@ See the [installation guide](docs/installing.md) for authentication, API keys, c
 
 ## What's interesting about this?
 
-**You can [connect to a running agent](docs/inspecting.md) and watch it think.** Opal uses Erlang distribution — connect from another terminal and stream every event from every agent and sub-agent in real time. Crack open `:observer` and see the full process tree, message queues, memory — everything.
+**[Live introspection.](docs/inspecting.md)** Connect to a running agent from another terminal and stream every event in real time — what it's thinking, which tools it's calling, memory usage, the works. Under the hood, Elixir sits on the Erlang VM (the BEAM), which has built-in node-to-node networking. That means zero extra infrastructure for remote debugging.
 
-**Sub-agents are just processes.** Spawn a child agent — it gets its own message history, tools, and model. Runs in parallel, fully isolated. Parent dies? [Cleaned up automatically](docs/supervision.md). No thread pools, no `Promise.all`. Just OTP.
+**[Lightweight sub-agents.](docs/supervision.md)** Spawn a child agent with its own context, tools, and model. It runs in parallel, fully isolated. If the parent dies, children are [cleaned up automatically](docs/supervision.md). This is OTP's *supervision tree* — a battle-tested pattern for managing process lifecycles — doing the heavy lifting. No thread pools, no manual resource cleanup.
 
-**The process mailbox is the steering queue.** `Opal.steer(agent, "focus on tests instead")` drops a message into the GenServer's mailbox. Between tool executions, the [agent loop](docs/agent-loop.md) checks for it. No polling, no callback chains.
+**[Redirect the agent mid-flight.](docs/agent-loop.md)** Call `Opal.steer(agent, "focus on tests instead")` and the agent picks it up between tool calls. This works because every Erlang process has a *mailbox* — a built-in message queue. The [agent loop](docs/agent-loop.md) checks it between steps. No polling, no callback chains.
 
-**It's an embeddable library.** Add `{:opal, ...}` to your deps and the full harness lives inside your Elixir app — just Erlang message passing. Or consume it over [JSON-RPC](docs/rpc.md) from any language. See the [SDK docs](docs/sdk.md).
+**Embeddable as a library.** Add `{:opal, ...}` to your Elixir deps and the full agent system runs inside your app. Since it's all Erlang processes, there's no sidecar, no serialization — just message passing. Or consume it over [JSON-RPC](docs/rpc.md) from any language. See the [SDK docs](docs/sdk.md).
 
 ## What you get
 

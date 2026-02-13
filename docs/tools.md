@@ -26,6 +26,7 @@ The agent converts tool modules to JSON Schema for the LLM. When the LLM request
 | `sub_agent` | `Opal.Tool.SubAgent` | Spawn parallel child agents |
 | `tasks` | `Opal.Tool.Tasks` | DETS-backed task tracker |
 | `use_skill` | `Opal.Tool.UseSkill` | Load agent skills dynamically |
+| `ask_user` | `Opal.Tool.AskUser` | Ask the user a question (top-level agents) |
 
 Each tool has a detailed doc in `docs/tools/`:
 
@@ -36,6 +37,7 @@ Each tool has a detailed doc in `docs/tools/`:
 - [**sub_agent**](tools/sub-agent.md) — Spawn child agents with depth enforcement
 - [**tasks**](tools/tasks.md) — DETS-backed persistent task tracker
 - [**use_skill**](tools/use-skill.md) — Progressive skill loading
+- [**ask_user**](tools/user-input.md) — User input with question escalation for sub-agents
 
 ## MCP Tools
 
@@ -56,3 +58,4 @@ This shared module is used by `Read`, `EditLines`, and `Write` to prevent encodi
 - `core/lib/opal/tool/` — All tool implementations
 - `core/lib/opal/tool/hashline.ex` — Hash computation and line tagging
 - `core/lib/opal/tool/encoding.ex` — BOM and CRLF handling
+- `core/lib/opal/tool/file_helper.ex` — Shared path resolution and file I/O helpers

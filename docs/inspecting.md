@@ -91,8 +91,11 @@ Tool events include the tool name and a truncated preview of arguments or output
 Since the inspector is a full IEx session on the remote node, you can run any Elixir expression against the live agent:
 
 ```elixir
-# List active sessions
-Opal.SessionServer.list()
+# List active agents (returns [{session_id, pid}, ...])
+Registry.select(Opal.Registry, [{{{:agent, :"$1"}, :"$2", :_}, [], [{{:"$1", :"$2"}}]}])
+
+# Look up a specific agent by session ID
+Registry.lookup(Opal.Registry, {:agent, "session-id"})
 
 # Check agent state
 :sys.get_state(agent_pid)

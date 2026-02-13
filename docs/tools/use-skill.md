@@ -38,8 +38,8 @@ globs:
 
 | Result | Meaning |
 |--------|---------|
-| `"Skill 'docs' loaded successfully"` | Instructions now active |
-| `"Skill 'docs' is already loaded"` | Idempotent — no error |
+| `"Skill 'docs' loaded. Its instructions are now in your context."` | Instructions now active |
+| `"Skill 'docs' is already loaded."` | Idempotent — no error |
 | `"Skill 'docs' not found"` | No matching skill discovered |
 
 ## Progressive Disclosure

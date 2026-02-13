@@ -12,10 +12,10 @@ Persistent task tracker backed by DETS. The LLM uses this to maintain a structur
 | `status` | string | no | `open`, `in_progress`, `done`, `blocked` |
 | `priority` | string | no | `low`, `medium`, `high`, `critical` |
 | `group_name` | string | no | Group/category label |
-| `tags` | string[] | no | Tags for filtering |
+| `tags` | string | no | Comma-separated tags for filtering |
 | `due` | string | no | Due date |
 | `notes` | string | no | Additional notes |
-| `blocked_by` | string[] | no | IDs of blocking tasks |
+| `blocked_by` | string | no | Comma-separated IDs of blocking tasks |
 
 ## Actions
 
@@ -27,7 +27,7 @@ Persistent task tracker backed by DETS. The LLM uses this to maintain a structur
 
 ## Storage
 
-Tasks are stored in a DETS file at `.opal/tasks.dets` in the working directory. DETS is Erlang's disk-based term storage — tasks survive agent restarts. Each task has `created_at` and `updated_at` timestamps.
+Tasks are stored in a DETS file at `~/.opal/tasks/<hash>.dets`, where `<hash>` is derived from the working directory so each project gets its own task database. DETS is Erlang's disk-based term storage — tasks survive agent restarts. Each task has `created_at` and `updated_at` timestamps.
 
 ## Source
 

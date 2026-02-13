@@ -23,23 +23,26 @@ stateDiagram-v2
     streaming --> streaming : handle_info SSE chunks
     streaming --> running : finalize response
     running --> idle : no tool calls, agent_end
-    running --> running : tools, execute, run_turn
+    running --> executing_tools : tool calls dispatched
+    executing_tools --> executing_tools : handle_info tool results
+    executing_tools --> running : all tools done, run_turn
 
     note right of streaming : SSE chunks arrive\nvia handle_info
-    note right of running : Tool execution blocks\nthen loops back
+    note right of executing_tools : Tools run under\nTask.Supervisor (non-blocking)
 ```
 
 ---
 
 ## State Machine
 
-The Agent has three states, tracked by the `status` field:
+The Agent has four states, tracked by the `status` field:
 
-| State        | Meaning                                    | Accepts prompts? |
-|--------------|--------------------------------------------|------------------|
-| `:idle`      | Waiting for user input                     | Yes              |
-| `:running`   | Processing (building messages, dispatching)| Via steering     |
-| `:streaming` | Receiving SSE chunks from the LLM          | Via steering     |
+| State              | Meaning                                    | Accepts prompts? |
+|--------------------|--------------------------------------------|------------------|
+| `:idle`            | Waiting for user input                     | Yes              |
+| `:running`         | Processing (building messages, dispatching)| Via steering     |
+| `:streaming`       | Receiving SSE chunks from the LLM          | Via steering     |
+| `:executing_tools` | Running tool calls via Task.Supervisor     | Via steering     |
 
 State transitions are driven by OTP callbacks:
 
@@ -52,14 +55,10 @@ stateDiagram-v2
 
     streaming --> streaming : handle_info SSE chunks
     streaming --> idle : finalize, no tool calls
-    streaming --> tool_execution : finalize, has tool calls
+    streaming --> executing_tools : finalize, has tool calls
 
-    tool_execution --> running : steering check, run_turn
-
-    state tool_execution {
-        [*] --> dispatched
-        dispatched --> results : async_stream_nolink
-    }
+    executing_tools --> executing_tools : handle_info (tool result)
+    executing_tools --> running : all tools done, run_turn
 ```
 
 ---
@@ -217,9 +216,9 @@ defp finalize_response(%State{} = state) do
 
   if tool_calls != [] do
     broadcast(state, {:turn_end, assistant_msg, []})
-    execute_tool_calls(tool_calls, state)
+    Opal.Agent.ToolRunner.start_tool_execution(tool_calls, state)
   else
-    broadcast(state, {:agent_end, state.messages})
+    broadcast(state, {:agent_end, Enum.reverse(state.messages), final_usage})
     {:noreply, %{state | status: :idle}}
   end
 end
@@ -227,112 +226,108 @@ end
 
 This is the branching point of the loop:
 
-- **No tool calls** → The agent is done. Broadcast `agent_end`, go `:idle`.
-  The GenServer sits in its mailbox waiting for the next `handle_cast`.
+- **No tool calls** → The agent is done. Broadcast `agent_end` (with reversed
+  messages), go `:idle`. The GenServer sits in its mailbox waiting for the
+  next `handle_cast`.
 
-- **Has tool calls** → Execute them, then loop back to `run_turn`. The
-  GenServer stays in `:running` status.
+- **Has tool calls** → Dispatch via `ToolRunner.start_tool_execution`, which
+  sets status to `:executing_tools` and starts dispatching tools one at a
+  time via `async_nolink` + `handle_info`.
 
 **OTP mapping:** `finalize_response` is called from within `handle_info`.
 It returns `{:noreply, state}` either directly (no tools) or through
-`execute_tool_calls` → `run_turn` (tools). In both cases, the GenServer
-callback contract is satisfied — the return value is always `{:noreply, state}`.
+`start_tool_execution` (tools). In both cases, the GenServer callback
+contract is satisfied — the return value is always `{:noreply, state}`.
 
 ---
 
-## Phase 5: Concurrent Tool Execution
+## Phase 5: Non-Blocking Tool Execution
+
+Tool execution uses `Task.Supervisor.async_nolink` with `handle_info` callbacks,
+keeping the GenServer responsive throughout. Tools are dispatched one at a time
+via `Opal.Agent.ToolRunner`:
 
 ```elixir
-defp execute_tool_calls(tool_calls, %State{} = state) do
-  context = %{
-    working_dir: state.working_dir,
-    session_id: state.session_id,
-    config: state.config,
-    agent_pid: self(),
-    agent_state: state          # ← snapshot, not a live reference
+def start_tool_execution(tool_calls, %State{} = state) do
+  context = build_tool_context(state)
+
+  state = %{
+    state
+    | status: :executing_tools,
+      remaining_tool_calls: tool_calls,
+      tool_results: [],
+      tool_context: context
   }
 
-  tasks = Enum.map(tool_calls, fn tc ->
-    {tc, find_tool_module(tc.name, active_tools(state))}
-  end)
+  dispatch_next_tool(state)
+end
 
-  results =
-    Task.Supervisor.async_stream_nolink(
-      state.tool_supervisor,       # ← per-session supervisor
-      tasks,
-      fn {tc, tool_mod} -> ... end,
-      ordered: true,
-      timeout: :infinity
-    )
-    |> Enum.zip(tasks)
-    |> Enum.map(fn ... end)
+def dispatch_next_tool(%State{remaining_tool_calls: [tc | rest]} = state) do
+  state = drain_mailbox_steers(state)
+  # ... steering check, skip remaining if steered ...
 
-  state = append_messages(state, tool_result_messages)
-  state = check_for_steering(state)
-  run_turn(state)
+  task =
+    Task.Supervisor.async_nolink(state.tool_supervisor, fn ->
+      execute_single_tool(tool_mod, tc.arguments, ctx)
+    end)
+
+  state = %{state | remaining_tool_calls: rest, pending_tool_task: {task.ref, tc}}
+  {:noreply, state}
 end
 ```
 
-This is the most OTP-integrated phase. Let's break down every decision:
+Results arrive via `handle_info` in the Agent GenServer:
 
-### Why `Task.Supervisor.async_stream_nolink`?
+```elixir
+def handle_info(
+      {ref, result},
+      %State{status: :executing_tools, pending_tool_task: {task_ref, tc}} = state
+    ) when ref == task_ref do
+  Process.demonitor(ref, [:flush])
+  state = %{state | tool_results: state.tool_results ++ [{tc, result}], pending_tool_task: nil}
+  ToolRunner.dispatch_next_tool(state)
+end
+```
 
-This is an OTP primitive that provides exactly the semantics an agent loop
-needs:
+### Why `Task.Supervisor.async_nolink` + `handle_info`?
+
+This is the key architectural choice. Each tool runs as a supervised,
+unlinked task. The Agent dispatches one tool at a time and receives results
+via `handle_info` — keeping the GenServer **non-blocking** throughout.
 
 | Property          | What it means for agents                        |
 |-------------------|-------------------------------------------------|
 | **Supervised**    | Tasks run under a `Task.Supervisor`, not wild   |
-| **Concurrent**    | All tool calls execute in parallel automatically|
 | **Unlinked**      | A crashing tool doesn't crash the Agent         |
-| **Ordered**       | Results arrive in input order                   |
-| **Streaming**     | Results are consumed as they complete           |
-| **Back-pressure** | The Agent blocks until all tools finish         |
+| **Non-blocking**  | Agent can process abort/steer during execution  |
+| **Sequential**    | Tools run one at a time with steering checks    |
 
-Compare with alternatives:
+Compare with the previous approach:
 
 | Alternative | Verdict | Why |
 |---|---|---|
+| `async_stream_nolink` | ✗ | Blocks the GenServer, prevents abort/steer |
 | `Task.async/1` | ✗ | Linked — crash propagates to Agent |
-| `Task.async_stream/3` | ✗ | Linked |
 | `spawn/1` | ✗ | Unsupervised, no result collection |
-| GenServer pool | ✗ | Over-engineered for ephemeral work |
-| `async_stream_nolink` | ✓ | Supervised, isolated, ordered |
+| `async_nolink` + `handle_info` | ✓ | Supervised, isolated, non-blocking |
 
-### The Blocking Model
+### The Non-Blocking Model
 
-While tool tasks run, the Agent GenServer is **blocked** inside
-`Enum.zip(results, tasks)` — it cannot process `handle_info` or `handle_cast`.
+While tool tasks run, the Agent GenServer remains **responsive** — it can
+process `handle_info`, `handle_cast`, and other messages. This is a deliberate
+design choice:
 
-This is intentional:
+1. Users can abort or steer mid-execution
+2. Tool results arrive as messages, not blocking return values
+3. Between tools, `drain_mailbox_steers` checks for steering
 
-1. The agent cannot stream a new LLM response while tools are running
-2. Tool results must be collected before the next `run_turn`
-3. The conversation must stay consistent — no interleaved mutations
+The `:executing_tools` status distinguishes tool execution from other states,
+and `pending_tool_task: {ref, tc}` tracks the currently-running tool so
+`handle_info` can match on the task reference.
 
-But this blocking creates two constraints that require specific solutions:
+### State Snapshot for Tools
 
-### Constraint 1: No Calling Back to the Agent
-
-Since the Agent is blocked, any `GenServer.call(agent_pid, ...)` from a tool
-task would deadlock:
-
-```mermaid
-sequenceDiagram
-    participant Agent as Agent (blocked)
-    participant Task as Tool Task
-
-    Agent->>Task: async_stream_nolink(...)
-    Note over Agent: waiting for results...
-
-    Task->>Agent: GenServer.call(agent_pid, :get_state)
-    Note over Task: blocks waiting for reply
-
-    Note over Agent,Task: ╳ DEADLOCK (5s timeout)
-```
-
-**Solution: State snapshot.** Before dispatching tasks, the Agent captures
-its entire state into the context map:
+Before dispatching tasks, the Agent captures its state into the context map:
 
 ```elixir
 context = %{agent_state: state, ...}
@@ -343,57 +338,46 @@ calling back to the live GenServer. The `SubAgent` tool uses
 `spawn_from_state(context.agent_state, overrides)` instead of
 `spawn(agent_pid, overrides)`.
 
-### Constraint 2: Steering Messages
+### Steering Between Tools
 
-Users may want to inject guidance while tools are running ("actually, skip
-that file"). Since the Agent is blocked, it can't process `handle_cast`
-messages. But those messages still accumulate in the GenServer mailbox.
-
-**Solution: Selective receive.** After tool execution completes, the Agent
-performs a zero-timeout selective receive on its own mailbox:
+Users may inject guidance while tools are running ("actually, skip
+that file"). Since tools now execute non-blockingly, steering messages
+arrive as normal `handle_cast` messages. Between each tool dispatch,
+`drain_mailbox_steers` checks for pending steers:
 
 ```elixir
-defp check_for_steering(%State{} = state) do
+def drain_mailbox_steers(state) do
   receive do
     {:"$gen_cast", {:steer, text}} ->
-      user_msg = Opal.Message.user(text)
-      state = append_message(state, user_msg)
-      check_for_steering(state)
+      state = %{state | pending_steers: state.pending_steers ++ [text]}
+      drain_mailbox_steers(state)
   after
     0 -> state
   end
 end
 ```
 
-This reaches directly into the GenServer's internal message format
-(`:"$gen_cast"`) to extract steering messages that arrived during tool
-execution. The `after 0` clause ensures it never blocks — if no steering
-messages are waiting, it returns immediately.
+If steering messages are found, remaining tools are **skipped** and the
+batch is finalized immediately. The steer text is injected as a user
+message before the next `run_turn`.
 
 ```mermaid
 sequenceDiagram
     participant User
     participant Agent
-    participant Tasks as Tool Tasks
+    participant Task as Tool Task
 
     User->>Agent: cast(:prompt)
-    Agent->>Tasks: async_stream_nolink(...)
-    Note over Agent: blocked waiting for results
+    Note over Agent: status → :executing_tools
+    Agent->>Task: async_nolink(tool_1)
+    Task-->>Agent: handle_info {ref, result}
 
     User->>Agent: cast(:steer, "skip that file")
-    Note over Agent: steer message queued in mailbox
-
-    Tasks-->>Agent: results collected
-    Note over Agent: check_for_steering drains mailbox
-    Note over Agent: steer message appended to msgs
+    Note over Agent: drain_mailbox_steers before tool_2
+    Note over Agent: steer found → skip remaining tools
+    Note over Agent: inject steer as user message
     Agent->>Agent: run_turn (with steering)
 ```
-
-**OTP mapping:** This is a standard Erlang selective receive. OTP GenServers
-process messages in order via `handle_*` callbacks, but within a callback
-implementation, you can use `receive` to selectively pull specific messages
-from the mailbox. The BEAM's per-process mailbox makes this a zero-cost
-operation.
 
 ---
 
@@ -426,11 +410,11 @@ sequenceDiagram
     Provider-->>Agent: handle_info chunk_N with done
     Note over Agent: tool_call_done, finalize_response
 
-    Note over Agent: streaming to running, broadcast turn_end
+    Note over Agent: streaming to executing_tools, broadcast turn_end
 
-    Agent->>TaskSup: async_stream_nolink edit_call
-    Note over Agent: blocked waiting for results
-    TaskSup-->>Agent: results collected
+    Agent->>TaskSup: async_nolink edit_call
+    Note over Agent: status :executing_tools
+    TaskSup-->>Agent: handle_info {ref, result}
 
     Note over Agent: Append tool_result, check_for_steering
 
@@ -451,23 +435,25 @@ to it:
 
 ```elixir
 defp append_message(%State{session: nil} = state, msg) do
-  %{state | messages: state.messages ++ [msg]}
+  %{state | messages: [msg | state.messages]}
 end
 
 defp append_message(%State{session: session} = state, msg) do
   Opal.Session.append(session, msg)        # ← GenServer.call to Session
-  %{state | messages: state.messages ++ [msg]}
+  %{state | messages: [msg | state.messages]}
 end
 ```
 
-The Agent maintains its own flat `messages` list for LLM context building
-(fast, in-process), while the Session maintains a tree structure in ETS for
-branching, persistence, and history. Both are always in sync.
+The Agent maintains its own `messages` list in **reverse order** (newest
+first) for O(1) prepend. When building the LLM context, `build_messages/1`
+calls `Enum.reverse/1` to produce chronological order. The Session maintains
+a tree structure in ETS for branching, persistence, and history. Both are
+always in sync.
 
 ```mermaid
 graph TD
-    subgraph agent["Agent state.messages (flat list for LLM)"]
-        AM["[user, assistant, tool_result, assistant]"]
+    subgraph agent["Agent state.messages (reverse order, newest first)"]
+        AM["[assistant, tool_result, assistant, user]"]
     end
 
     subgraph session["Session ETS table (tree for persistence)"]
@@ -566,7 +552,7 @@ The Agent converts tool modules to JSON Schema for the LLM via
 `Provider.convert_tools/1`. When the LLM requests a tool call, the Agent
 looks up the module by name and calls `execute/2` inside a supervised task.
 
-**Context map passed to every tool:**
+**Context map passed to every tool** (built by `ToolRunner.build_tool_context/1`):
 
 | Key              | Type              | Purpose                           |
 |------------------|-------------------|-----------------------------------|
@@ -576,8 +562,8 @@ looks up the module by name and calls `execute/2` inside a supervised task.
 | `agent_pid`      | `pid()`           | Reference only — do not call!     |
 | `agent_state`    | `State.t()`       | Frozen snapshot of agent state    |
 
-The `agent_state` snapshot is the key to avoiding deadlocks. Tools can read
-any agent state they need without calling back to the blocked GenServer.
+The `agent_state` snapshot keeps tool execution self-contained. Tools can read
+any agent state they need without calling back to the GenServer.
 
 ---
 

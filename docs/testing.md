@@ -5,6 +5,8 @@ Opal's test suite uses ExUnit with no external mocking libraries. External depen
 ## Running Tests
 
 ```bash
+pnpm test                             # all tests from repo root (runs nx run-many -t test)
+
 cd core
 
 mix test                              # all tests (excludes :live)
@@ -73,15 +75,15 @@ end)
 
 ### Scenario-Based Testing
 
-For tests that need multiple different responses (e.g. first turn returns tool calls, second turn returns text), providers use `persistent_term` to select scenarios:
+For tests that need multiple different responses (e.g. first turn returns tool calls, second turn returns text), providers use `:persistent_term` to select scenarios:
 
 ```elixir
 # In the test
-persistent_term.put({__MODULE__, :scenario}, :tool_then_text)
+:persistent_term.put({__MODULE__, :scenario}, :tool_then_text)
 
 # In the provider
 def stream(_messages, _tools, _config, _opts) do
-  case persistent_term.get({TestProvider, :scenario}) do
+  case :persistent_term.get({TestProvider, :scenario}) do
     :tool_then_text -> build_fixture_response("responses_api_tool_call")
     :text_only -> build_fixture_response("responses_api_text")
   end
@@ -159,7 +161,7 @@ end
 | Tag | Purpose | Default |
 |-----|---------|---------|
 | `:live` | Real GitHub Copilot API calls | Excluded |
-| `:save_fixtures` | Record API responses to fixture files | Excluded |
+| `:save_fixtures` | Record API responses to fixture files (checked conditionally inside the test, not excluded by ExUnit) | Included |
 | `:mcp` | MCP integration tests | Included |
 | `:tmp_dir` | ExUnit auto-creates/cleans temp directory | Included |
 

@@ -19,7 +19,7 @@ Output is streamed back in real-time via an `emit` callback, so the CLI shows pr
 
 Output is **tail-truncated** (opposite of `read_file`) — the last 2,000 lines or 50 KB are kept. Error output and final status are at the end, so tail-truncation preserves the most useful information.
 
-When truncated, full output is saved to a temp file (`/tmp/opal-shell-*.log`) and the path is included in the result.
+When truncated, full output is saved to a temp file (`<System.tmp_dir!()>/opal-shell-*.log`) and the path is included in the result.
 
 ## Exit Codes
 

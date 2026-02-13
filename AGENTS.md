@@ -44,14 +44,14 @@ All tools implement `Opal.Tool` behavior:
 # Install dependencies
 nx run-many -t deps
 
-# Run TUI with auto-recompilation
-cd cli && mix opal
+# Run TUI in dev mode
+nx run cli:dev
 
 # Run tests
 nx run-many -t test
 
-# Build binary
-nx run cli:escript
+# Build CLI
+nx run cli:build
 ```
 
 ### Verifying Your Work
@@ -85,9 +85,9 @@ opal --connect myagent@localhost --inspect
 
 ### Environment Variables
 
-- `OPAL_MODEL` - Default LLM model
-- `OPAL_WORKING_DIR` - Agent working directory
-- `OPAL_LOG_LEVEL` - Logging verbosity
+- `OPAL_DATA_DIR` - Root directory for Opal data (sessions, logs, auth)
+- `OPAL_SHELL` - Shell for tool execution (bash, zsh, sh, fish, powershell, cmd)
+- `OPAL_COPILOT_DOMAIN` - GitHub domain for auth (default: github.com)
 
 ### Context Discovery
 
@@ -122,17 +122,19 @@ defmodule MyTool do
   @behaviour Opal.Tool
 
   @impl true
-  def spec do
+  def name, do: "my_tool"
+
+  @impl true
+  def description, do: "Does something useful"
+
+  @impl true
+  def parameters do
     %{
-      name: "my_tool",
-      description: "Does something useful",
-      parameters: %{
-        type: "object",
-        properties: %{
-          input: %{type: "string", description: "Input text"}
-        },
-        required: ["input"]
-      }
+      "type" => "object",
+      "properties" => %{
+        "input" => %{"type" => "string", "description" => "Input text"}
+      },
+      "required" => ["input"]
     }
   end
 
@@ -148,17 +150,24 @@ end
 ```
 core/lib/opal/
 ├── agent.ex              # Main agent GenServer
+├── agent/                # Agent loop internals (stream, tool_runner, retry, etc.)
+├── auth.ex               # Authentication system
+├── config.ex             # Typed configuration
+├── context.ex            # Walk-up context discovery
+├── events.ex             # Registry-based event system
 ├── session.ex            # Session management
-├── events.ex             # Event system
-├── provider/              # LLM provider implementations
-├── tool/                  # Built-in tool implementations
-├── mcp/                   # MCP bridge components
-└── rpc/                   # JSON-RPC server
+├── session_server.ex     # Session GenServer
+├── provider/             # LLM provider implementations
+├── tool/                 # Built-in tool implementations
+├── mcp/                  # MCP bridge components
+└── rpc/                  # JSON-RPC server
 
-cli/lib/opal/cli/
-├── app.ex                 # TUI application
-├── main.ex                # Binary entry point
-└── views/                 # UI components
+cli/src/
+├── app.tsx               # TUI application (React/Ink)
+├── bin.ts                # Entry point
+├── components/           # UI components
+├── hooks/                # React hooks
+└── sdk/                  # TypeScript SDK client
 ```
 
 This codebase leverages Elixir's mature concurrency and fault-tolerance primitives. Focus on using OTP patterns rather than fighting against them.

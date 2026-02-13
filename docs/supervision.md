@@ -13,10 +13,12 @@ fully isolated unit — its own processes, its own failure domain, its own clean
 ```mermaid
 graph TD
     OpalSup["Opal.Supervisor<br/><i>:rest_for_one</i>"]
-    Registry["Opal.Events.Registry<br/><i>shared pubsub backbone</i>"]
+    AgentRegistry["Opal.Registry<br/><i>:unique — agent/session lookup</i>"]
+    Registry["Opal.Events.Registry<br/><i>:duplicate — pubsub backbone</i>"]
     SessionSup["Opal.SessionSupervisor<br/><i>DynamicSupervisor :one_for_one</i>"]
     Stdio["Opal.RPC.Stdio<br/><i>optional, gated by :start_rpc</i>"]
 
+    OpalSup --> AgentRegistry
     OpalSup --> Registry
     OpalSup --> SessionSup
     OpalSup -.-> Stdio
@@ -75,10 +77,17 @@ graph TD
 
 ## Process Roles
 
+### `Opal.Registry`
+
+A `Registry` with `:unique` keys used for looking up agent and session
+processes by session ID. Processes register with keys like `{:agent, session_id}`
+and `{:session, session_id}`, enabling direct lookup without walking supervisor
+children.
+
 ### `Opal.Events.Registry`
 
 A `Registry` with `:duplicate` keys. Any process can subscribe to a session ID
-and receive events. This is the **only shared global process** — everything else
+and receive events. This is the **pubsub backbone** — everything else
 is per-session. The registry never holds state; it simply routes messages.
 
 ### `Opal.RPC.Stdio` (optional)
@@ -160,14 +169,12 @@ These are standard GenServer synchronous calls — the caller blocks until the
 server replies. Used when the caller needs a consistent snapshot of state.
 
 **Key design decision:** Tool tasks never call `Agent.get_state(agent_pid)`
-during execution. The Agent is blocked in `Task.Supervisor.async_stream_nolink`
-waiting for tool results — a `GenServer.call` from a tool task back to the
-Agent would deadlock. Instead, the Agent snapshots its state into the tool
+during execution. Instead, the Agent snapshots its state into the tool
 execution context *before* dispatching tasks:
 
 ```mermaid
 flowchart LR
-    Agent["Agent<br/><i>(blocked)</i>"] -- "snapshot state" --> Context["context =<br/>%{agent_state: ...}"]
+    Agent["Agent<br/><i>(:executing_tools)</i>"] -- "snapshot state" --> Context["context =<br/>%{agent_state: ...}"]
     Context -- "start tasks" --> Tasks["Tool Tasks<br/><i>read from context</i>"]
 ```
 
@@ -256,26 +263,23 @@ with a tree border (┌─ / │ / └─) to visually distinguish them from the
 
 ## Tool Execution
 
-Tool calls are executed concurrently using `Task.Supervisor.async_stream_nolink`:
+Tool calls are executed sequentially using `Task.Supervisor.async_nolink` with
+results delivered via `handle_info`, keeping the Agent GenServer non-blocking:
 
 ```mermaid
 flowchart LR
-    Agent["Agent<br/><i>blocked, waiting</i>"] -- "async_stream_nolink(tasks)" --> TaskSup["Task.Supervisor<br/><i>per-session</i>"]
-    TaskSup --> T1["Task: read"]
-    TaskSup --> T2["Task: shell"]
-    TaskSup --> T3["Task: write"]
-    T1 -- "results" --> Agent
-    T2 -- "results" --> Agent
-    T3 -- "results" --> Agent
+    Agent["Agent<br/><i>:executing_tools</i>"] -- "async_nolink(tool)" --> TaskSup["Task.Supervisor<br/><i>per-session</i>"]
+    TaskSup --> T1["Task: current tool"]
+    T1 -- "handle_info {ref, result}" --> Agent
+    Agent -- "dispatch_next_tool" --> TaskSup
 ```
 
-**Why `async_stream_nolink`?**
+**Why `async_nolink` + `handle_info`?**
 
-- **`async_stream`** — tasks are linked to the caller. If one crashes, the
-  Agent crashes. Bad for reliability.
-- **`async_stream_nolink`** — tasks are *not* linked. A crashing tool produces
-  `{:exit, reason}` in the result stream. The Agent converts this to an error
-  tool result and continues.
+- **`async_stream_nolink`** — blocks the GenServer until all tools finish.
+  Prevents abort/steer during execution.
+- **`async_nolink`** — tasks are *not* linked, and results arrive as messages.
+  The Agent stays responsive to abort, steer, and other messages throughout.
 
 **Why per-session `Task.Supervisor`?**
 
@@ -288,16 +292,18 @@ flowchart LR
 
 ### Crash Recovery
 
-When a tool task crashes, the Agent preserves the original tool call metadata
-by zipping results with the original task list:
+When a tool task crashes, the Agent receives a `{:DOWN, ref, :process, _pid, reason}`
+message via `handle_info`. It converts this to an error tool result and continues:
 
 ```elixir
-results
-|> Enum.zip(tasks)
-|> Enum.map(fn
-  {{:ok, {tc, result}}, _}        -> {tc, result}
-  {{:exit, reason}, {tc, _mod}}   -> {tc, {:error, "crashed: #{inspect(reason)}"}}
-end)
+def handle_info(
+      {:DOWN, ref, :process, _pid, reason},
+      %State{status: :executing_tools, pending_tool_task: {task_ref, tc}} = state
+    ) when ref == task_ref do
+  error_msg = "Tool execution crashed: #{inspect(reason)}"
+  state = %{state | tool_results: state.tool_results ++ [{tc, {:error, error_msg}}], ...}
+  ToolRunner.dispatch_next_tool(state)
+end
 ```
 
 This ensures the LLM always receives a `tool_result` message with the correct
@@ -404,14 +410,12 @@ flowchart TD
 This guarantees the Agent never runs without a working `Task.Supervisor`. But
 if the Agent crashes, the supervisors and session store remain intact.
 
-### Deadlock Prevention
+### State Snapshot for Tools
 
-The Agent loop is a GenServer that blocks during tool execution (waiting for
-`async_stream_nolink` results). Any `GenServer.call` to the Agent from a tool
-task would deadlock with a 5-second timeout.
-
-**Solution:** Before dispatching tool tasks, the Agent snapshots its entire
-state into the execution context:
+Although the Agent is no longer blocked during tool execution (tools use
+`async_nolink` + `handle_info`), tools still receive a state **snapshot**
+in their execution context rather than calling back to the GenServer. This
+avoids race conditions and keeps tool execution self-contained:
 
 ```elixir
 context = %{
@@ -454,14 +458,12 @@ everything.
 - **Automatic cleanup** — when a subscriber process dies, its registrations
   are removed
 
-### Why `async_stream_nolink` for tools?
+### Why `async_nolink` + `handle_info` for tools?
 
-- **Concurrent execution** — multiple tools run in parallel automatically
+- **Non-blocking execution** — the Agent stays responsive during tool runs
 - **Fault isolation** — one crashing tool doesn't take down the agent
-- **Ordered results** — results come back in the same order as the input,
-  making it easy to match results with their original tool calls
-- **Back-pressure** — the Agent blocks until all tools complete before
-  starting the next LLM turn (required for correct conversation flow)
+- **Steering support** — `drain_mailbox_steers` checks between tool dispatches
+- **Sequential with control** — tools run one at a time with abort/skip support
 
 ### Why sub-agents share the parent's Task.Supervisor?
 

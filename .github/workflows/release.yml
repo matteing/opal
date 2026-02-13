@@ -106,6 +106,10 @@ jobs:
         with:
           ref: v${{ needs.release.outputs.version }}
 
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
       - uses: erlef/setup-beam@v1
         with:
           elixir-version: ${{ env.ELIXIR_VERSION }}

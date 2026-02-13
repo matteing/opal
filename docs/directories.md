@@ -11,9 +11,9 @@ Opal uses two directory hierarchies: a **global data directory** for runtime sta
 ├── node                          # Erlang distribution discovery file
 ├── sessions/                     # Saved conversation history
 │   └── {session_id}.jsonl        # One session per file (JSON Lines)
-├── tasks/                        # Per-project task databases (runtime)
+├── tasks/                        # Per-project task databases (created on first use by tasks tool)
 │   └── {project_hash}.dets       # DETS file keyed by working directory
-├── skills/                       # Global skill directories
+├── skills/                       # Global skill directories (user-created, not auto-created)
 └── logs/                         # Reserved for structured logging
 
 {project}/.opal/                  # Per-project configuration (committed to repo)
@@ -43,7 +43,7 @@ Context file discovery (`AGENTS.md`, `OPAL.md`) walks up from the working direct
 
 ### `auth.json`
 
-GitHub Copilot OAuth credentials. Managed by `Opal.Auth`.
+GitHub Copilot OAuth credentials. Managed by `Opal.Auth.Copilot`.
 
 ```json
 {
@@ -54,8 +54,8 @@ GitHub Copilot OAuth credentials. Managed by `Opal.Auth`.
 }
 ```
 
-- Written by `Opal.Auth.save_token/1` after device-code OAuth or token refresh
-- Read by `Opal.Auth.get_token/0` on every Copilot API call
+- Written by `Opal.Auth.Copilot.save_token/1` after device-code OAuth or token refresh
+- Read by `Opal.Auth.Copilot.get_token/0` on every Copilot API call
 - Auto-refreshed 5 minutes before `expires_at`
 - Only used by the Copilot provider — the LLM provider uses environment-variable API keys
 
@@ -132,12 +132,12 @@ Opal.start_session(%{data_dir: "/custom/path"})
 config :opal, data_dir: System.get_env("OPAL_DATA_DIR", "~/.opal")
 ```
 
-All subdirectories are auto-created by `Opal.Config.ensure_dirs!/1` on session start.
+`Opal.Config.ensure_dirs!/1` auto-creates `data_dir`, `sessions/`, and `logs/` on session start. The `tasks/` directory is created lazily by `Opal.Tool.Tasks` on first use; `skills/` is scanned if present but must be created manually.
 
 ## Source
 
 - `core/lib/opal/config.ex` — Data directory paths and `ensure_dirs!/1`
-- `core/lib/opal/auth.ex` — Token persistence (`save_token/1`, `load_token/0`)
+- `core/lib/opal/auth/copilot.ex` — Copilot token persistence (`save_token/1`, `load_token/0`)
 - `core/lib/opal/settings.ex` — User preferences persistence
 - `core/lib/opal/session.ex` — Session save/load in JSONL format
 - `core/lib/opal/tool/tasks.ex` — DETS-backed task storage

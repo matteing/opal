@@ -114,6 +114,7 @@ State uses a nested `AgentView` shape. The `main` field holds the primary agent'
 | `modelPicker` | `object \| null` | Model picker overlay state |
 | `sessionReady` | `boolean` | Server connection established |
 | `sessionDir` | `string` | Session data directory path |
+| `availableSkills` | `string[]` | Discovered skill names from session start |
 | `authFlow` | `AuthFlow \| null` | Active auth setup wizard state (providers, device code, API key input) |
 | `error` | `string \| null` | Current error message |
 | `workingDir` | `string` | Resolved working directory |
