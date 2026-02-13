@@ -3,6 +3,15 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      specifier:
+        description: "Version bump (leave empty for auto-detect via conventional commits)"
+        type: choice
+        options:
+          - ""
+          - patch
+          - minor
+          - major
+        default: ""
       dry-run:
         description: "Dry run (preview only, no publish)"
         type: boolean
@@ -55,11 +64,24 @@ jobs:
             FLAGS="--dry-run"
           fi
 
+          SPECIFIER="${{ inputs.specifier }}"
+          if [ -n "$SPECIFIER" ]; then
+            FLAGS="$FLAGS --specifier=$SPECIFIER"
+          fi
+
           # Run nx release (version + changelog + git commit/tag + GitHub release)
           pnpm nx release $FLAGS 2>&1 | tee release-output.txt
 
-          # Extract version from output
+          # Extract version: try "New version X.Y.Z" first, fall back to "Resolved the current version as X.Y.Z"
           VERSION=$(grep -oP 'New version \K[0-9]+\.[0-9]+\.[0-9]+[^ ]*' release-output.txt | head -1)
+          if [ -z "$VERSION" ]; then
+            # If specifier was given but Nx didn't bump (e.g. already at that version),
+            # extract the resolved current version to allow re-publishing
+            if [ -n "$SPECIFIER" ]; then
+              VERSION=$(grep -oP 'Resolved the current version as \K[0-9]+\.[0-9]+\.[0-9]+' release-output.txt | head -1)
+            fi
+          fi
+
           if [ -z "$VERSION" ]; then
             echo "skipped=true" >> "$GITHUB_OUTPUT"
             echo "No version bump detected."
@@ -70,9 +92,9 @@ jobs:
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "skipped=false" >> "$GITHUB_OUTPUT"
 
-          # Push commit and tag
+          # Push commit and tag (may already exist, that's ok)
           if [ "${{ inputs.dry-run }}" != "true" ]; then
-            git push --follow-tags
+            git push --follow-tags || true
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
