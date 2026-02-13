@@ -113,7 +113,6 @@ jobs:
           name: cli-dist
           path: |
             cli/dist
-            cli/bin
             cli/package.json
           retention-days: 1
 
@@ -145,7 +144,6 @@ jobs:
         run: |
           # CLI dist
           cp -r artifacts/cli-dist/dist cli/dist
-          cp -r artifacts/cli-dist/bin cli/bin
 
           # Burrito binaries
           mkdir -p cli/releases

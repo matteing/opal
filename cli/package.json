@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "opal": "bin/opal"
+    "opal": "dist/bin.js"
   },
   "main": "dist/sdk/index.js",
   "types": "dist/sdk/index.d.ts",
@@ -16,7 +16,6 @@
     }
   },
   "files": [
-    "bin",
     "dist",
     "releases"
   ],
