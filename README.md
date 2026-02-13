@@ -85,7 +85,7 @@ opal --auto-confirm                         # skip tool confirmations
 
 ## Providers
 
-Opal supports two provider paths — use one or both:
+Opal supports two provider paths:
 
 | Provider | What it connects to | Auth |
 |----------|-------------------|------|
