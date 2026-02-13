@@ -522,9 +522,17 @@ defmodule Opal.Session do
   end
 
   defp atomize_metadata(map) when is_map(map) do
-    Map.new(map, fn {k, v} -> {String.to_atom(k), v} end)
+    Map.new(map, fn {k, v} -> {safe_to_atom(k), v} end)
   end
   defp atomize_metadata(_), do: %{}
+
+  defp safe_to_atom(key) when is_binary(key) do
+    String.to_existing_atom(key)
+  rescue
+    ArgumentError -> key
+  end
+
+  defp safe_to_atom(key), do: key
 
   # Replaces a contiguous segment of the current path with a summary message.
   # The summary message bridges the gap: its parent_id is set to the parent

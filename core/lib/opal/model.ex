@@ -74,7 +74,17 @@ defmodule Opal.Model do
   def parse(spec, opts \\ []) when is_binary(spec) do
     {provider, id} =
       case String.split(spec, ":", parts: 2) do
-        [provider_str, model_id] -> {String.to_atom(provider_str), model_id}
+        [provider_str, model_id] ->
+          provider =
+            try do
+              String.to_existing_atom(provider_str)
+            rescue
+              ArgumentError ->
+                raise ArgumentError,
+                      "unknown provider: #{inspect(provider_str)}"
+            end
+
+          {provider, model_id}
         [model_id] -> {:copilot, model_id}
       end
 

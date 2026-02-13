@@ -282,10 +282,18 @@ defmodule Opal.Provider.LLM do
   defp decode_opal_event(_, _), do: []
 
   defp atomize_keys(map) when is_map(map) do
-    Map.new(map, fn {k, v} -> {String.to_atom(k), v} end)
+    Map.new(map, fn {k, v} -> {safe_to_atom(k), v} end)
   end
 
   defp atomize_keys(other), do: other
+
+  defp safe_to_atom(key) when is_binary(key) do
+    String.to_existing_atom(key)
+  rescue
+    ArgumentError -> key
+  end
+
+  defp safe_to_atom(key), do: key
 
   # ── convert_messages/2 ──────────────────────────────────────────────
 
