@@ -36,7 +36,7 @@ graph LR
     CLI["CLI<br/><small>TypeScript</small>"]
     Stdio["Opal.RPC.Stdio"]
     Handler["Opal.RPC.Handler"]
-    Agent["Opal.Agent<br/><small>GenServer</small>"]
+    Agent["Opal.Agent<br/><small>:gen_statem</small>"]
     Provider["Provider.stream<br/><small>SSE → handle_info</small>"]
     Tools["Tool execution<br/><small>Task.Supervisor</small>"]
     Session["Opal.Session<br/><small>ETS tree</small>"]
@@ -53,11 +53,11 @@ graph LR
 
 | Subsystem | What it does | Doc |
 |-----------|-------------|-----|
-| **Agent Loop** | GenServer implementing prompt → stream → tools → repeat | [agent-loop.md](agent-loop.md) |
+| **Agent Loop** | `:gen_statem` FSM implementing prompt → stream → tools → repeat | [agent-loop.md](agent-loop.md) |
 | **System Prompt** | Dynamic prompt assembly: context discovery, tool guidelines, skills | [system-prompt.md](system-prompt.md) |
 | **Session** | Conversation tree with branching and persistence | [session.md](session.md) |
 | **Compaction** | Summarizes old messages to stay within context window | [compaction.md](compaction.md) |
-| **OTP Patterns** | GenServer patterns, Registry, ETS/DETS, message passing | [otp.md](otp.md) |
+| **OTP Patterns** | State-machine/GenServer patterns, Registry, ETS/DETS, message passing | [otp.md](otp.md) |
 | **Supervision** | Per-session process trees, fault isolation, message passing | [supervision.md](supervision.md) |
 | **Tools** | Built-in tool implementations (read, edit, write, shell, sub-agent) | [tools.md](tools.md) |
 | **RPC** | JSON-RPC 2.0 protocol over stdio between CLI and server | [rpc.md](rpc.md) |
@@ -72,7 +72,7 @@ graph LR
 
 ## Key Design Decisions
 
-- **Everything is a process.** The agent loop, session store, tool execution, and sub-agents are all GenServers or supervised tasks. The BEAM scheduler handles concurrency.
+- **Everything is a process.** The agent loop, session store, tool execution, and sub-agents are all OTP servers (`:gen_statem`/`GenServer`) or supervised tasks. The BEAM scheduler handles concurrency.
 - **Per-session isolation.** Each session owns its entire process tree. Terminating a session cleanly stops all its tools, sub-agents, and streaming connections.
 - **Provider-agnostic.** The agent loop never touches raw API formats. The `Provider` behaviour translates between semantic events and wire protocols.
 - **Hashline editing.** `read_file` tags every line with a content hash. `edit_file` references lines by hash instead of reproducing content. See [tools/edit.md](tools/edit.md).
@@ -82,8 +82,9 @@ graph LR
 
 ```
 core/lib/opal/
-├── agent.ex                 # Agent loop GenServer
-├── agent/                   # Overflow detection, retry, system prompt
+├── agent/agent.ex           # Agent loop :gen_statem
+├── agent/state.ex           # Agent runtime state struct
+├── agent/                   # Stream/tools/retry/compaction/reducer helpers
 ├── session.ex               # Conversation tree (ETS)
 ├── session/                 # Compaction, branch summaries
 ├── events.ex                # Registry-based pub/sub

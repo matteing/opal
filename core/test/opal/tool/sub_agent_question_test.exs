@@ -67,6 +67,36 @@ defmodule Opal.Tool.SubAgent.QuestionHandlerTest do
 
       assert {:ok, "right"} = Task.await(task)
     end
+
+    test "propagates explicit question errors back to AskParent" do
+      parent = self()
+
+      handler = fn %{question: question, choices: choices} ->
+        ref = make_ref()
+        monitor = Process.monitor(parent)
+        send(parent, {:sub_agent_question, self(), ref, %{question: question, choices: choices}})
+
+        receive do
+          {:sub_agent_answer, ^ref, answer} ->
+            Process.demonitor(monitor, [:flush])
+            {:ok, answer}
+
+          {:sub_agent_answer_error, ^ref, reason} ->
+            Process.demonitor(monitor, [:flush])
+            {:error, reason}
+
+          {:DOWN, ^monitor, :process, _pid, reason} ->
+            {:error, {:parent_task_down, reason}}
+        end
+      end
+
+      task = Task.async(fn -> handler.(%{question: "Deploy?", choices: []}) end)
+
+      assert_receive {:sub_agent_question, from, ref, %{question: "Deploy?", choices: []}}
+      send(from, {:sub_agent_answer_error, ref, :rpc_unavailable})
+
+      assert {:error, :rpc_unavailable} = Task.await(task)
+    end
   end
 
   describe "AskParent integration with handler" do

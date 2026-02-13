@@ -245,7 +245,7 @@ Provider EventStream → {ref, {:events, [{:thinking_delta, "..."}]}}
 - `core/lib/opal/provider/llm.ex` — `maybe_add_thinking/2` → ReqLLM `reasoning_effort`, thinking roundtrip via metadata
 - `core/lib/opal/provider/event_stream.ex` — EventStream struct for native event delivery
 - `core/lib/opal/agent/stream.ex` — Thinking accumulation and auto-start detection
-- `core/lib/opal/agent.ex` — `current_thinking` state, dual `handle_info` (SSE + EventStream), `finalize_response`
+- `core/lib/opal/agent/agent.ex` — `current_thinking` state, dual stream handling (SSE + EventStream), `finalize_response`
 - `core/lib/opal/session.ex` — Thinking persistence in JSONL
 - `core/lib/opal/rpc/handler.ex` — `thinking/set` and `model/set` with `thinking_level`
 - `cli/src/hooks/use-opal.ts` — Timeline thinking entries, `appendThinkingDelta`

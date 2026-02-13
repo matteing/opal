@@ -18,39 +18,39 @@ Every active session is a cluster of processes:
 
 | Process | OTP Behaviour | Purpose |
 |---------|--------------|---------|
-| `Opal.Agent` | GenServer | Agent loop — LLM streaming, tool dispatch, state machine |
+| `Opal.Agent` | `:gen_statem` | Agent loop — LLM streaming, tool dispatch, explicit FSM |
 | `Opal.Session` | GenServer | Conversation tree — message storage, branching, compaction |
 | `Opal.RPC.Stdio` | GenServer | JSON-RPC transport over stdin/stdout |
 | `Opal.SessionServer` | Supervisor | Per-session supervisor (`:rest_for_one`) |
 | `Opal.MCP.Supervisor` | Supervisor | Per-session MCP client group (`:one_for_one`) |
-| Tool tasks | Task (under Task.Supervisor) | Concurrent tool execution |
+| Tool tasks | Task (under Task.Supervisor) | Supervised non-blocking tool execution |
 | Sub-agents | Opal.Agent (under DynamicSupervisor) | Delegated child agents |
 
 Each session is isolated. A crash in one session's agent cannot affect another session.
 
-## GenServer Patterns
+## State Machine and GenServer Patterns
 
 ### Agent — The Core Loop
 
-`Opal.Agent` is the largest GenServer in the system (~700 lines of state transitions). It uses all three callback types:
+`Opal.Agent` is implemented as a `:gen_statem` with `:state_functions` mode (`idle`, `running`, `streaming`, `executing_tools`). It handles the same event families as before, but now through explicit FSM states:
 
-**`handle_cast`** for fire-and-forget actions from the CLI:
+**Casts** for fire-and-forget actions from the CLI:
 - `{:prompt, text}` — start a new turn
 - `{:steer, text}` — inject guidance mid-turn (queued if busy)
 - `:abort` — cancel the current streaming response
 
-**`handle_call`** for synchronous queries:
+**Calls** for synchronous queries:
 - `:get_state` — snapshot for sub-agent spawning
 - `{:set_model, id}` — runtime model swap
 - `{:load_skill, name}` — activate a skill
 
-**`handle_info`** for system messages:
+**Info messages** for system events:
 - Stream chunks from `Req` HTTP responses (SSE parsing)
 - `:stream_watchdog` — periodic timeout check during streaming
 - `:retry_turn` — exponential backoff after transient failures
 - Tool task completion messages
 
-The key insight: `handle_cast` for user intent, `handle_call` for coordination, `handle_info` for I/O events. This keeps the agent responsive — a prompt never blocks on a synchronous call.
+The key insight is unchanged: async commands for user intent, calls for coordination, and mailbox-driven I/O for streaming/tool completion. The explicit FSM makes legal transitions first-class and easier to reason about.
 
 ### Session — Tree in a Process
 
@@ -133,12 +133,12 @@ DETS is opened/closed per tool invocation rather than held open in a process. Th
 Each session has a `Task.Supervisor` registered under `{:tool_sup, session_id}`. When the agent needs to run tools:
 
 ```elixir
-Task.Supervisor.async(tool_supervisor, fn ->
+Task.Supervisor.async_nolink(tool_supervisor, fn ->
   tool_module.execute(params, context)
 end)
 ```
 
-Tasks run concurrently — multiple tool calls in the same turn execute in parallel. The agent collects results as they complete. If the session supervisor crashes, the Task.Supervisor's children are automatically terminated.
+Tool calls are dispatched sequentially per turn, but each tool runs in a supervised async task so the agent loop stays responsive. Results are delivered back through mailbox messages, and if the session supervisor crashes, the Task.Supervisor's children are automatically terminated.
 
 This is safer than spawning raw processes: supervised tasks are tracked, limited, and cleaned up on shutdown.
 
@@ -184,7 +184,7 @@ The `:line` mode handles buffering: partial reads become `{:noeol, chunk}` messa
 The agent broadcasts events during a turn:
 
 ```
-Agent (GenServer state change)
+Agent (state machine transition)
   → Opal.Events.broadcast(session_id, {:message_delta, %{delta: "hello"}})
     → Registry.dispatch sends {:opal_event, ...} to all subscribers
       → Stdio.handle_info serializes to JSON, writes to stdout
@@ -207,14 +207,14 @@ When a turn fails (rate limit, network error), the Agent schedules a retry:
 Process.send_after(self(), :retry_turn, delay_ms)
 ```
 
-`Process.send_after` is an OTP primitive that delivers a message after a delay. The Agent increments `retry_count` and computes exponential backoff. When `:retry_turn` arrives in `handle_info`, the turn restarts. This keeps retry logic inside the GenServer state machine — no external timer process needed.
+`Process.send_after` is an OTP primitive that delivers a message after a delay. The Agent increments `retry_count` and computes exponential backoff. When `:retry_turn` arrives, the turn restarts. This keeps retry logic inside the agent state machine — no external timer process needed.
 
 ## Source Files
 
 | File | Contains |
 |------|----------|
 | `core/lib/opal/application.ex` | Application startup, root supervisor children |
-| `core/lib/opal/agent.ex` | Agent GenServer (~700 lines) |
+| `core/lib/opal/agent/agent.ex` | Agent `:gen_statem` loop |
 | `core/lib/opal/session.ex` | Session GenServer with ETS |
 | `core/lib/opal/session_server.ex` | Per-session Supervisor |
 | `core/lib/opal/events.ex` | Pub/sub helpers (subscribe, broadcast) |

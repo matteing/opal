@@ -76,10 +76,15 @@ defmodule Opal.SubAgent do
           mod
 
         :error ->
-          if Map.has_key?(overrides, :model) do
-            Opal.Model.provider_module(model)
-          else
-            parent_state.provider
+          cond do
+            not Map.has_key?(overrides, :model) ->
+              parent_state.provider
+
+            model.provider == parent_state.model.provider ->
+              parent_state.provider
+
+            true ->
+              Opal.Model.provider_module(model)
           end
       end
 

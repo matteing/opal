@@ -128,11 +128,11 @@ Each child is registered with a session-scoped atom name for discoverability:
 
 ### `Opal.Agent`
 
-A `GenServer` that implements the core agent loop:
+A `:gen_statem` process that implements the core agent loop:
 
-1. Receive a user prompt (`handle_cast`)
+1. Receive a user prompt (`:cast`)
 2. Stream an LLM response via the configured `Provider`
-3. If the LLM returns tool calls → execute them concurrently → loop to step 2
+3. If the LLM returns tool calls → execute them via supervised tasks → loop to step 2
 4. If the LLM returns text only → broadcast `agent_end` → go idle
 
 The Agent holds references to its session-local `tool_supervisor` and
@@ -152,20 +152,20 @@ serialization to disk.
 Opal uses three distinct message passing patterns, each chosen for a specific
 purpose.
 
-### 1. GenServer Calls — Synchronous State Access
+### 1. Synchronous Calls — State Access
 
 ```mermaid
 sequenceDiagram
     participant Caller
     participant Agent
 
-    Caller->>Agent: GenServer.call(:get_state)
+    Caller->>Agent: Agent.get_state/1 (:gen_statem.call)
     Agent-->>Caller: %Agent.State{}
 ```
 
 Used for: `Agent.get_state/1`, `Session.append/2`, `Session.get_path/1`
 
-These are standard GenServer synchronous calls — the caller blocks until the
+These are synchronous server calls — the caller blocks until the
 server replies. Used when the caller needs a consistent snapshot of state.
 
 **Key design decision:** Tool tasks never call `Agent.get_state(agent_pid)`
@@ -178,14 +178,14 @@ flowchart LR
     Context -- "start tasks" --> Tasks["Tool Tasks<br/><i>read from context</i>"]
 ```
 
-### 2. GenServer Casts — Asynchronous Commands
+### 2. Asynchronous Casts — Commands
 
 ```mermaid
 sequenceDiagram
     participant Caller
     participant Agent
 
-    Caller->>Agent: GenServer.cast({:prompt, text})
+    Caller->>Agent: Agent.prompt/2 (:gen_statem.cast)
     Note right of Caller: :ok (immediate)
     Note right of Agent: begins turn...
 ```
@@ -264,7 +264,7 @@ with a tree border (┌─ / │ / └─) to visually distinguish them from the
 ## Tool Execution
 
 Tool calls are executed sequentially using `Task.Supervisor.async_nolink` with
-results delivered via `handle_info`, keeping the Agent GenServer non-blocking:
+results delivered via mailbox `:info` events, keeping the agent process non-blocking:
 
 ```mermaid
 flowchart LR
@@ -276,7 +276,7 @@ flowchart LR
 
 **Why `async_nolink` + `handle_info`?**
 
-- **`async_stream_nolink`** — blocks the GenServer until all tools finish.
+- **`async_stream_nolink`** — blocks the server loop until all tools finish.
   Prevents abort/steer during execution.
 - **`async_nolink`** — tasks are *not* linked, and results arrive as messages.
   The Agent stays responsive to abort, steer, and other messages throughout.
@@ -387,7 +387,7 @@ propagate to another:
 |------------------------------------|-------------------------------------|
 | Tool task crashes                  | Error result to LLM, agent continues|
 | Sub-agent crashes                  | Tool returns error, parent continues|
-| Agent GenServer crashes            | SessionServer restarts it (`:rest_for_one`) |
+| Agent state machine crashes        | SessionServer restarts it (`:rest_for_one`) |
 | Task.Supervisor crashes            | Agent restarts too (`:rest_for_one`)  |
 | Entire SessionServer crashes       | Only that session is lost             |
 | `Events.Registry` crashes          | All sessions lose pubsub temporarily  |
@@ -414,7 +414,7 @@ if the Agent crashes, the supervisors and session store remain intact.
 
 Although the Agent is no longer blocked during tool execution (tools use
 `async_nolink` + `handle_info`), tools still receive a state **snapshot**
-in their execution context rather than calling back to the GenServer. This
+in their execution context rather than calling back to the agent process. This
 avoids race conditions and keeps tool execution self-contained:
 
 ```elixir
