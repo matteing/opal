@@ -182,7 +182,6 @@ The `opal-server` binary is available as a pre-built release for each platform:
 | macOS x64 | `opal_server_darwin_x64` |
 | Linux x64 | `opal_server_linux_x64` |
 | Linux ARM | `opal_server_linux_arm64` |
-| Windows x64 | `opal_server_win32_x64.exe` |
 
 During development, you can also run from source:
 

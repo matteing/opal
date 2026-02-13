@@ -12,8 +12,6 @@
   <img src="./docs/assets/screenshot.png" width="700" />
 </p>
 
----
-
 Opal is two things:
 
 - A **minimal coding agent CLI** you can use to build things.
