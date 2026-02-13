@@ -1,21 +1,9 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      specifier:
-        description: "Version bump (leave empty for auto-detect via conventional commits)"
-        type: choice
-        options:
-          - ""
-          - patch
-          - minor
-          - major
-        default: ""
-      dry-run:
-        description: "Dry run (preview only, no publish)"
-        type: boolean
-        default: false
+  push:
+    tags:
+      - "v*"
 
 env:
   MIX_ENV: prod
@@ -27,85 +15,25 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Version, changelog, git tag (via Nx Release)
+  # Extract version from the pushed tag
   # ---------------------------------------------------------------------------
-  release:
+  prepare:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
-      skipped: ${{ steps.version.outputs.skipped }}
+      version: ${{ steps.meta.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install deps
-        run: pnpm install --frozen-lockfile
-
-      - name: Configure git
+      - name: Extract version from tag
+        id: meta
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Nx Release
-        id: version
-        run: |
-          FLAGS=""
-          if [ "${{ inputs.dry-run }}" = "true" ]; then
-            FLAGS="--dry-run"
-          fi
-
-          SPECIFIER="${{ inputs.specifier }}"
-          if [ -n "$SPECIFIER" ]; then
-            FLAGS="$FLAGS --specifier=$SPECIFIER"
-          fi
-
-          # Run nx release (version + changelog + git commit/tag + GitHub release)
-          pnpm nx release $FLAGS 2>&1 | tee release-output.txt
-
-          # Extract version: try "New version X.Y.Z" first, fall back to "Resolved the current version as X.Y.Z"
-          VERSION=$(grep -oP 'New version \K[0-9]+\.[0-9]+\.[0-9]+[^ ]*' release-output.txt | head -1)
-          if [ -z "$VERSION" ]; then
-            # If specifier was given but Nx didn't bump (e.g. already at that version),
-            # extract the resolved current version to allow re-publishing
-            if [ -n "$SPECIFIER" ]; then
-              VERSION=$(grep -oP 'Resolved the current version as \K[0-9]+\.[0-9]+\.[0-9]+' release-output.txt | head -1)
-            fi
-          fi
-
-          if [ -z "$VERSION" ]; then
-            echo "skipped=true" >> "$GITHUB_OUTPUT"
-            echo "No version bump detected."
-            exit 0
-          fi
-
+          VERSION="${GITHUB_REF_NAME#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          echo "skipped=false" >> "$GITHUB_OUTPUT"
-
-          # Push commit and tag (may already exist, that's ok)
-          if [ "${{ inputs.dry-run }}" != "true" ]; then
-            git push --follow-tags || true
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          echo "Releasing version: $VERSION"
 
   # ---------------------------------------------------------------------------
   # Build Burrito binaries on each native platform
   # ---------------------------------------------------------------------------
   build-binary:
-    needs: release
-    if: needs.release.outputs.skipped != 'true' && inputs.dry-run != true
+    needs: prepare
     strategy:
       matrix:
         include:
@@ -125,8 +53,6 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: v${{ needs.release.outputs.version }}
 
       - uses: goto-bus-stop/setup-zig@v2
         with:
@@ -156,13 +82,10 @@ jobs:
   # Build CLI TypeScript package
   # ---------------------------------------------------------------------------
   build-cli:
-    needs: release
-    if: needs.release.outputs.skipped != 'true' && inputs.dry-run != true
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: v${{ needs.release.outputs.version }}
 
       - uses: erlef/setup-beam@v1
         with:
@@ -198,13 +121,10 @@ jobs:
   # Assemble and publish
   # ---------------------------------------------------------------------------
   publish:
-    needs: [release, build-binary, build-cli]
-    if: needs.release.outputs.skipped != 'true' && inputs.dry-run != true
+    needs: [prepare, build-binary, build-cli]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: v${{ needs.release.outputs.version }}
 
       - uses: erlef/setup-beam@v1
         with:
@@ -254,7 +174,7 @@ jobs:
       - name: Upload binaries to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ needs.release.outputs.version }}
+          tag_name: v${{ needs.prepare.outputs.version }}
           files: |
             artifacts/opal_server_darwin_arm64/*
             artifacts/opal_server_darwin_x64/*
