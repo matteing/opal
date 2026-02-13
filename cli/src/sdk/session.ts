@@ -17,17 +17,35 @@ import type {
 
 type EventMap = {
   agentStart: [];
-  agentEnd: [usage?: { promptTokens: number; completionTokens: number; totalTokens: number; contextWindow: number }];
+  agentEnd: [
+    usage?: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+      contextWindow: number;
+    },
+  ];
   agentAbort: [];
   messageStart: [];
   messageDelta: [delta: string];
   thinkingStart: [];
   thinkingDelta: [delta: string];
   toolExecutionStart: [tool: string, callId: string, args: Record<string, unknown>, meta: string];
-  toolExecutionEnd: [tool: string, callId: string, result: { ok: boolean; output?: string; error?: string }];
+  toolExecutionEnd: [
+    tool: string,
+    callId: string,
+    result: { ok: boolean; output?: string; error?: string },
+  ];
   subAgentEvent: [parentCallId: string, subSessionId: string, inner: Record<string, unknown>];
   turnEnd: [message: string];
-  usageUpdate: [usage: { promptTokens: number; completionTokens: number; totalTokens: number; contextWindow: number }];
+  usageUpdate: [
+    usage: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+      contextWindow: number;
+    },
+  ];
   statusUpdate: [message: string];
   error: [reason: string];
   contextDiscovered: [files: string[]];
@@ -63,10 +81,7 @@ export class Session {
   private client: OpalClient;
   private listeners = new Map<EventName, Set<(...args: unknown[]) => void>>();
 
-  private constructor(
-    client: OpalClient,
-    result: SessionStartResult,
-  ) {
+  private constructor(client: OpalClient, result: SessionStartResult) {
     this.client = client;
     this.sessionId = result.sessionId;
     this.sessionDir = result.sessionDir;
@@ -81,10 +96,7 @@ export class Session {
   /**
    * Start a new session.
    */
-  static async start(
-    opts: SessionOptions = {},
-    clientOpts?: OpalClientOptions,
-  ): Promise<Session> {
+  static async start(opts: SessionOptions = {}, clientOpts?: OpalClientOptions): Promise<Session> {
     const { onConfirm, onInput, onAskUser, autoConfirm, verbose, ...startParams } = opts;
 
     const client = new OpalClient({
@@ -161,7 +173,9 @@ export class Session {
           if (event.type === "error") return;
         }
         if (done) return;
-        await new Promise<void>((r) => { resolve = r; });
+        await new Promise<void>((r) => {
+          resolve = r;
+        });
       }
     } finally {
       this.client.removeListener("agent/event", handler);

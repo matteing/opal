@@ -1,43 +1,110 @@
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version to publish (e.g. 0.2.0)"
-        required: true
+      dry-run:
+        description: "Dry run (preview only, no publish)"
+        type: boolean
+        default: false
 
 env:
   MIX_ENV: prod
   ELIXIR_VERSION: "1.18.4"
   OTP_VERSION: "28.0"
 
+permissions:
+  contents: write
+
 jobs:
+  # ---------------------------------------------------------------------------
+  # Version, changelog, git tag (via Nx Release)
+  # ---------------------------------------------------------------------------
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      skipped: ${{ steps.version.outputs.skipped }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Nx Release
+        id: version
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.dry-run }}" = "true" ]; then
+            FLAGS="--dry-run"
+          fi
+
+          # Run nx release (version + changelog + git commit/tag + GitHub release)
+          pnpm nx release $FLAGS 2>&1 | tee release-output.txt
+
+          # Extract version from output
+          VERSION=$(grep -oP 'New version \K[0-9]+\.[0-9]+\.[0-9]+[^ ]*' release-output.txt | head -1)
+          if [ -z "$VERSION" ]; then
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            echo "No version bump detected."
+            exit 0
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+
+          # Push commit and tag
+          if [ "${{ inputs.dry-run }}" != "true" ]; then
+            git push --follow-tags
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
   # ---------------------------------------------------------------------------
   # Build Burrito binaries on each native platform
   # ---------------------------------------------------------------------------
   build-binary:
+    needs: release
+    if: needs.release.outputs.skipped != 'true' && inputs.dry-run != true
     strategy:
       matrix:
         include:
-          - runner: macos-14          # Apple Silicon
+          - runner: macos-14
             target: darwin_arm64
             binary: opal_server_darwin_arm64
-          - runner: macos-13          # Intel Mac
+          - runner: macos-13
             target: darwin_x64
             binary: opal_server_darwin_x64
-          - runner: ubuntu-latest     # x86_64 Linux
+          - runner: ubuntu-latest
             target: linux_x64
             binary: opal_server_linux_x64
-          - runner: ubuntu-24.04-arm  # ARM Linux
+          - runner: ubuntu-24.04-arm
             target: linux_arm64
             binary: opal_server_linux_arm64
 
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.release.outputs.version }}
 
       - uses: erlef/setup-beam@v1
         with:
@@ -63,9 +130,13 @@ jobs:
   # Build CLI TypeScript package
   # ---------------------------------------------------------------------------
   build-cli:
+    needs: release
+    if: needs.release.outputs.skipped != 'true' && inputs.dry-run != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.release.outputs.version }}
 
       - uses: erlef/setup-beam@v1
         with:
@@ -101,26 +172,23 @@ jobs:
   # Assemble and publish
   # ---------------------------------------------------------------------------
   publish:
-    needs: [build-binary, build-cli]
+    needs: [release, build-binary, build-cli]
+    if: needs.release.outputs.skipped != 'true' && inputs.dry-run != true
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.release.outputs.version }}
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-
-      - name: Determine version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -129,8 +197,6 @@ jobs:
 
       - name: Assemble npm package
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
           # CLI dist
           cp -r artifacts/cli-dist/dist cli/dist
           cp -r artifacts/cli-dist/bin cli/bin
@@ -143,14 +209,6 @@ jobs:
           cp artifacts/opal_server_linux_arm64/*   cli/releases/
           chmod +x cli/releases/*
 
-          # Stamp version
-          node -e "
-            const fs = require('fs');
-            const p = JSON.parse(fs.readFileSync('cli/package.json', 'utf8'));
-            p.version = '$VERSION';
-            fs.writeFileSync('cli/package.json', JSON.stringify(p, null, 2) + '\n');
-          "
-
           echo "==> Package contents:"
           ls -lh cli/releases/
 
@@ -159,16 +217,18 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Install Elixir deps
+        run: cd core && mix deps.get
+
       - name: Publish to Hex
         run: cd core && mix hex.publish --yes
         env:
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Upload binaries to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          tag_name: v${{ needs.release.outputs.version }}
           files: |
             artifacts/opal_server_darwin_arm64/*
             artifacts/opal_server_darwin_x64/*

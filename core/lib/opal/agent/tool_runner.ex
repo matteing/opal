@@ -26,12 +26,15 @@ defmodule Opal.Agent.ToolRunner do
   @spec start_tool_execution([map()], State.t()) :: {:noreply, State.t()}
   def start_tool_execution(tool_calls, %State{} = state) do
     context = build_tool_context(state)
-    state = %{state | 
-      status: :executing_tools,
-      remaining_tool_calls: tool_calls,
-      tool_results: [],
-      tool_context: context
+
+    state = %{
+      state
+      | status: :executing_tools,
+        remaining_tool_calls: tool_calls,
+        tool_results: [],
+        tool_context: context
     }
+
     dispatch_next_tool(state)
   end
 
@@ -50,37 +53,37 @@ defmodule Opal.Agent.ToolRunner do
   def dispatch_next_tool(%State{remaining_tool_calls: [tc | rest]} = state) do
     # Check for steering before starting next tool
     state = drain_mailbox_steers(state)
-    
+
     if state.pending_steers != [] do
       # Skip remaining tools
-      skipped = Enum.map([tc | rest], fn tc -> 
-        broadcast(state, {:tool_skipped, tc.name, tc.call_id})
-        {tc, {:error, "Skipped — user sent a steering message"}} 
-      end)
-      state = %{state | 
-        remaining_tool_calls: [],
-        tool_results: state.tool_results ++ skipped
-      }
+      skipped =
+        Enum.map([tc | rest], fn tc ->
+          broadcast(state, {:tool_skipped, tc.name, tc.call_id})
+          {tc, {:error, "Skipped — user sent a steering message"}}
+        end)
+
+      state = %{state | remaining_tool_calls: [], tool_results: state.tool_results ++ skipped}
       finalize_tool_batch(state)
     else
       tool_mod = find_tool_module(tc.name, active_tools(state))
       meta = if tool_mod, do: Opal.Tool.meta(tool_mod, tc.arguments), else: tc.name
-      
-      Logger.debug("Tool start session=#{state.session_id} tool=#{tc.name} args=#{inspect(tc.arguments, limit: 5, printable_limit: 200)}")
+
+      Logger.debug(
+        "Tool start session=#{state.session_id} tool=#{tc.name} args=#{inspect(tc.arguments, limit: 5, printable_limit: 200)}"
+      )
+
       broadcast(state, {:tool_execution_start, tc.name, tc.call_id, tc.arguments, meta})
-      
+
       emit = fn chunk -> broadcast(state, {:tool_output, tc.name, chunk}) end
       ctx = state.tool_context |> Map.put(:emit, emit) |> Map.put(:call_id, tc.call_id)
-      
-      task = Task.Supervisor.async_nolink(state.tool_supervisor, fn ->
-        :proc_lib.set_label("tool:#{tc.name}")
-        execute_single_tool(tool_mod, tc.arguments, ctx)
-      end)
-      
-      state = %{state | 
-        remaining_tool_calls: rest,
-        pending_tool_task: {task.ref, tc}
-      }
+
+      task =
+        Task.Supervisor.async_nolink(state.tool_supervisor, fn ->
+          :proc_lib.set_label("tool:#{tc.name}")
+          execute_single_tool(tool_mod, tc.arguments, ctx)
+        end)
+
+      state = %{state | remaining_tool_calls: rest, pending_tool_task: {task.ref, tc}}
       {:noreply, state}
     end
   end
@@ -94,18 +97,20 @@ defmodule Opal.Agent.ToolRunner do
   @spec finalize_tool_batch(State.t()) :: {:noreply, State.t()}
   def finalize_tool_batch(%State{} = state) do
     results = state.tool_results
-    tool_result_messages = Enum.map(results, fn {tc, result} ->
-      case result do
-        {:ok, output} -> Opal.Message.tool_result(tc.call_id, output)
-        {:error, reason} -> Opal.Message.tool_result(tc.call_id, reason, true)
-      end
-    end)
-    
+
+    tool_result_messages =
+      Enum.map(results, fn {tc, result} ->
+        case result do
+          {:ok, output} -> Opal.Message.tool_result(tc.call_id, output)
+          {:error, reason} -> Opal.Message.tool_result(tc.call_id, reason, true)
+        end
+      end)
+
     state = append_messages(state, tool_result_messages)
     state = maybe_auto_load_skills(results, state)
     state = check_for_steering(state)
     state = %{state | pending_tool_task: nil, tool_context: nil, tool_results: []}
-    
+
     Opal.Agent.run_turn(state)
   end
 
@@ -134,7 +139,7 @@ defmodule Opal.Agent.ToolRunner do
 
   @doc """
   Legacy blocking tool execution for compatibility.
-  
+
   This is kept as execute_tool_calls_sync in case any tests depend on it.
   """
   @spec execute_tool_calls_sync([map()], State.t()) :: term()
@@ -187,7 +192,7 @@ defmodule Opal.Agent.ToolRunner do
 
   @doc """
   Legacy blocking single tool execution with Task.await.
-  
+
   Kept for compatibility with execute_tool_calls_sync.
   """
   @spec execute_single_tool_supervised_sync(map(), State.t(), map()) :: {map(), term()}
@@ -195,7 +200,10 @@ defmodule Opal.Agent.ToolRunner do
     tool_mod = find_tool_module(tc.name, active_tools(state))
     meta = if tool_mod, do: Opal.Tool.meta(tool_mod, tc.arguments), else: tc.name
 
-    Logger.debug("Tool start session=#{state.session_id} tool=#{tc.name} args=#{inspect(tc.arguments, limit: 5, printable_limit: 200)}")
+    Logger.debug(
+      "Tool start session=#{state.session_id} tool=#{tc.name} args=#{inspect(tc.arguments, limit: 5, printable_limit: 200)}"
+    )
+
     broadcast(state, {:tool_execution_start, tc.name, tc.call_id, tc.arguments, meta})
 
     started_at = System.monotonic_time(:millisecond)
@@ -212,7 +220,11 @@ defmodule Opal.Agent.ToolRunner do
       |> Task.await(:infinity)
 
     elapsed = System.monotonic_time(:millisecond) - started_at
-    Logger.debug("Tool done session=#{state.session_id} tool=#{tc.name} elapsed=#{elapsed}ms result=#{result_tag(result)}")
+
+    Logger.debug(
+      "Tool done session=#{state.session_id} tool=#{tc.name} elapsed=#{elapsed}ms result=#{result_tag(result)}"
+    )
+
     broadcast(state, {:tool_execution_end, tc.name, tc.call_id, result})
 
     {tc, result}
@@ -281,7 +293,9 @@ defmodule Opal.Agent.ToolRunner do
   def active_tools(%State{tools: tools, config: config, available_skills: skills}) do
     tools
     |> then(fn t ->
-      if config.features.sub_agents.enabled, do: t, else: Enum.reject(t, &(&1 == Opal.Tool.SubAgent))
+      if config.features.sub_agents.enabled,
+        do: t,
+        else: Enum.reject(t, &(&1 == Opal.Tool.SubAgent))
     end)
     |> then(fn t ->
       if skills != [], do: t, else: Enum.reject(t, &(&1 == Opal.Tool.UseSkill))
@@ -298,10 +312,12 @@ defmodule Opal.Agent.ToolRunner do
   def check_for_steering(%State{pending_steers: []} = state), do: state
 
   def check_for_steering(%State{pending_steers: steers} = state) do
-    state = Enum.reduce(steers, state, fn text, acc ->
-      Logger.debug("Steering message received: #{String.slice(text, 0, 50)}...")
-      append_message(acc, Opal.Message.user(text))
-    end)
+    state =
+      Enum.reduce(steers, state, fn text, acc ->
+        Logger.debug("Steering message received: #{String.slice(text, 0, 50)}...")
+        append_message(acc, Opal.Message.user(text))
+      end)
+
     %{state | pending_steers: []}
   end
 
@@ -355,7 +371,8 @@ defmodule Opal.Agent.ToolRunner do
         skill_msg = %Opal.Message{
           id: "skill:#{skill.name}",
           role: :user,
-          content: "[System] Skill '#{skill.name}' auto-activated (file matched glob). Instructions:\n\n#{skill.instructions}"
+          content:
+            "[System] Skill '#{skill.name}' auto-activated (file matched glob). Instructions:\n\n#{skill.instructions}"
         }
 
         new_active = [skill.name | acc.active_skills]

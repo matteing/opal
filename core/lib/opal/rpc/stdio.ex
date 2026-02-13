@@ -25,7 +25,13 @@ defmodule Opal.RPC.Stdio do
   use GenServer
   require Logger
 
-  defstruct [:port, :buffer, pending_requests: %{}, next_server_id: 1, subscriptions: MapSet.new()]
+  defstruct [
+    :port,
+    :buffer,
+    pending_requests: %{},
+    next_server_id: 1,
+    subscriptions: MapSet.new()
+  ]
 
   @doc "Starts the stdio transport GenServer."
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -224,7 +230,9 @@ defmodule Opal.RPC.Stdio do
     do: {"tool_execution_start", %{tool: tool, call_id: "", args: args, meta: tool}}
 
   defp serialize_event({:tool_execution_end, tool, call_id, result}),
-    do: {"tool_execution_end", %{tool: tool, call_id: call_id, result: serialize_tool_result(result)}}
+    do:
+      {"tool_execution_end",
+       %{tool: tool, call_id: call_id, result: serialize_tool_result(result)}}
 
   defp serialize_event({:tool_execution_end, tool, result}),
     do: {"tool_execution_end", %{tool: tool, call_id: "", result: serialize_tool_result(result)}}
@@ -234,7 +242,13 @@ defmodule Opal.RPC.Stdio do
 
   defp serialize_event({:sub_agent_event, parent_call_id, sub_session_id, inner_event}) do
     {inner_type, inner_data} = serialize_event(inner_event)
-    {"sub_agent_event", %{parent_call_id: parent_call_id, sub_session_id: sub_session_id, inner: Map.put(inner_data, :type, inner_type)}}
+
+    {"sub_agent_event",
+     %{
+       parent_call_id: parent_call_id,
+       sub_session_id: sub_session_id,
+       inner: Map.put(inner_data, :type, inner_type)
+     }}
   end
 
   defp serialize_event({:context_discovered, files}),

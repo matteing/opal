@@ -50,8 +50,11 @@ defmodule Opal.SubAgentTest do
     @impl true
     def convert_tools(tools), do: tools
 
-    defp do_parse(%{"type" => "response.output_item.added", "item" => %{"type" => "message"} = item}),
-      do: [{:text_start, %{item_id: item["id"]}}]
+    defp do_parse(%{
+           "type" => "response.output_item.added",
+           "item" => %{"type" => "message"} = item
+         }),
+         do: [{:text_start, %{item_id: item["id"]}}]
 
     defp do_parse(%{"type" => "response.output_text.delta", "delta" => delta}),
       do: [{:text_delta, delta}]
@@ -242,7 +245,11 @@ defmodule Opal.SubAgentTest do
 
       results = Task.await_many(tasks, 5000)
 
-      assert [{:ok, "Sub-agent response!"}, {:ok, "Sub-agent response!"}, {:ok, "Sub-agent response!"}] =
+      assert [
+               {:ok, "Sub-agent response!"},
+               {:ok, "Sub-agent response!"},
+               {:ok, "Sub-agent response!"}
+             ] =
                results
     end
   end

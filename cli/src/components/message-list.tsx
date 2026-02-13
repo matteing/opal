@@ -1,6 +1,6 @@
 import React, { type FC, useRef, memo } from "react";
 import { Box, Text, useStdout } from "ink";
-import { Marked } from "marked";
+import { Marked, type MarkedExtension } from "marked";
 import { markedTerminal } from "marked-terminal";
 import { TaskList, Task as InkTask } from "ink-task-list";
 import type {
@@ -8,7 +8,6 @@ import type {
   SubAgent,
   Message,
   Task,
-  Skill,
   Context,
   TimelineEntry,
 } from "../hooks/use-opal.js";
@@ -21,7 +20,7 @@ function getMd(width: number): Marked {
   if (_cachedMd && _cachedWidth === width) return _cachedMd;
   _cachedWidth = width;
   _cachedMd = new Marked(
-    markedTerminal({ width, reflowText: true, tableOptions: {} }) as any,
+    markedTerminal({ width, reflowText: true, tableOptions: {} }) as MarkedExtension,
   );
   return _cachedMd;
 }
@@ -42,7 +41,7 @@ export const MessageList: FC<MessageListProps> = ({
   view,
   subAgents,
   showToolOutput = false,
-  sessionReady = true,
+  sessionReady: _sessionReady = true,
 }) => {
   const { stdout } = useStdout();
   const width = stdout?.columns ?? 80;
@@ -71,7 +70,7 @@ export const MessageList: FC<MessageListProps> = ({
               let showBadge = true;
               if (entry.message.role === "assistant") {
                 for (let j = i - 1; j >= 0; j--) {
-                  const prev = view.timeline[j]!;
+                  const prev = view.timeline[j];
                   if (prev.kind === "message") {
                     if (prev.message.role === "assistant") showBadge = false;
                     break;
@@ -82,7 +81,8 @@ export const MessageList: FC<MessageListProps> = ({
               if (view.isRunning && entry.message.role === "assistant") {
                 let isLast = true;
                 for (let j = i + 1; j < view.timeline.length; j++) {
-                  if (view.timeline[j]!.kind === "message" && (view.timeline[j] as any).message.role === "assistant") {
+                  const next = view.timeline[j];
+                  if (next && next.kind === "message" && next.message.role === "assistant") {
                     isLast = false;
                     break;
                   }
@@ -90,16 +90,25 @@ export const MessageList: FC<MessageListProps> = ({
                 isStreaming = isLast;
               }
               return (
-                <MessageBlock key={i} message={entry.message} width={width} showBadge={showBadge} isStreaming={isStreaming} />
+                <MessageBlock
+                  key={i}
+                  message={entry.message}
+                  width={width}
+                  showBadge={showBadge}
+                  isStreaming={isStreaming}
+                />
               );
             }
             if (entry.kind === "tool") {
               // Sub-agent tool: show collapsed summary
-              const subAgent = entry.task.tool === "sub_agent"
-                ? findSubAgentByCallId(subAgents, entry.task.callId)
-                : null;
+              const subAgent =
+                entry.task.tool === "sub_agent"
+                  ? findSubAgentByCallId(subAgents, entry.task.callId)
+                  : null;
               if (subAgent) {
-                return <SubAgentSummary key={entry.task.callId} task={entry.task} subAgent={subAgent} />;
+                return (
+                  <SubAgentSummary key={entry.task.callId} task={entry.task} subAgent={subAgent} />
+                );
               }
               return (
                 <ToolBlock
@@ -114,7 +123,8 @@ export const MessageList: FC<MessageListProps> = ({
               return (
                 <Box key={i}>
                   <Text>
-                    <Text color="green">●</Text> <Text dimColor>Loaded skill: {entry.skill.name}</Text>
+                    <Text color="green">●</Text>{" "}
+                    <Text dimColor>Loaded skill: {entry.skill.name}</Text>
                   </Text>
                 </Box>
               );
@@ -130,57 +140,61 @@ export const MessageList: FC<MessageListProps> = ({
   );
 };
 
-const MessageBlock: FC<{ message: Message; width: number; showBadge?: boolean; isStreaming?: boolean }> = memo(({
-  message,
-  width,
-  showBadge = true,
-  isStreaming = false,
-}) => {
-  const isUser = message.role === "user";
-  const badge = isUser ? "❯ You" : "✦ opal";
-  const color = isUser ? "cyan" : "magenta";
+const MessageBlock: FC<{
+  message: Message;
+  width: number;
+  showBadge?: boolean;
+  isStreaming?: boolean;
+}> = memo(
+  ({ message, width, showBadge = true, isStreaming = false }) => {
+    const isUser = message.role === "user";
+    const badge = isUser ? "❯ You" : "✦ opal";
+    const color = isUser ? "cyan" : "magenta";
 
-  const cacheRef = useRef({ content: "", rendered: "" });
+    const cacheRef = useRef({ content: "", rendered: "" });
 
-  let rendered: string;
-  if (isUser) {
-    rendered = message.content;
-  } else {
-    const contentWidth = Math.min(width - 4, 120);
-    const cached = cacheRef.current;
-    // Re-parse if: content differs significantly (>80 chars since last parse) or is shorter (edit/new msg)
-    const delta = message.content.length - cached.content.length;
-    if (cached.content === message.content) {
-      rendered = cached.rendered;
-    } else if (isStreaming && delta > 0 && delta < 80) {
-      // During streaming with small delta, return cached version (skip expensive re-parse)
-      rendered = cached.rendered;
+    let rendered: string;
+    if (isUser) {
+      rendered = message.content;
     } else {
-      rendered = renderMarkdown(message.content || "", contentWidth);
-      cacheRef.current = { content: message.content, rendered };
+      const contentWidth = Math.min(width - 4, 120);
+      const cached = cacheRef.current;
+      // Re-parse if: content differs significantly (>80 chars since last parse) or is shorter (edit/new msg)
+      const delta = message.content.length - cached.content.length;
+      if (cached.content === message.content) {
+        rendered = cached.rendered;
+      } else if (isStreaming && delta > 0 && delta < 80) {
+        // During streaming with small delta, return cached version (skip expensive re-parse)
+        rendered = cached.rendered;
+      } else {
+        rendered = renderMarkdown(message.content || "", contentWidth);
+        cacheRef.current = { content: message.content, rendered };
+      }
     }
-  }
 
-  return (
-    <Box flexDirection="column" marginBottom={1}>
-      {showBadge && (
-        <Text bold color={color}>
-          {badge}
-        </Text>
-      )}
-      <Box marginLeft={2} width={Math.min(width - 4, 120)}>
-        {isUser ? (
-          <Text wrap="wrap">{rendered}</Text>
-        ) : (
-          <Text>{rendered}</Text>
+    return (
+      <Box flexDirection="column" marginBottom={1}>
+        {showBadge && (
+          <Text bold color={color}>
+            {badge}
+          </Text>
         )}
+        <Box marginLeft={2} width={Math.min(width - 4, 120)}>
+          {isUser ? <Text wrap="wrap">{rendered}</Text> : <Text>{rendered}</Text>}
+        </Box>
       </Box>
-    </Box>
-  );
-}, (prev, next) => {
-  // Custom comparison: skip re-render if content/width/badge haven't changed
-  return prev.message === next.message && prev.width === next.width && prev.showBadge === next.showBadge && prev.isStreaming === next.isStreaming;
-});
+    );
+  },
+  (prev, next) => {
+    // Custom comparison: skip re-render if content/width/badge haven't changed
+    return (
+      prev.message === next.message &&
+      prev.width === next.width &&
+      prev.showBadge === next.showBadge &&
+      prev.isStreaming === next.isStreaming
+    );
+  },
+);
 
 const TOOL_ICONS: Record<Task["status"], string> = {
   running: "◐",
@@ -204,7 +218,8 @@ const ToolBlock: FC<{ task: Task; width: number; showOutput?: boolean }> = ({
   const maxOutput = width - 6;
 
   // Special rendering for tasks tool with list action
-  const isTasksList = task.tool === "tasks" && task.status === "done" && task.result?.ok && task.result.output;
+  const isTasksList =
+    task.tool === "tasks" && task.status === "done" && task.result?.ok && task.result.output;
   const parsedTasks = isTasksList ? parseTasksOutput(task.result!.output!) : null;
 
   return (
@@ -239,11 +254,7 @@ const ToolBlock: FC<{ task: Task; width: number; showOutput?: boolean }> = ({
   );
 };
 
-function truncateOutput(
-  output: string,
-  maxLines: number,
-  maxWidth: number,
-): string {
+function truncateOutput(output: string, maxLines: number, maxWidth: number): string {
   const lines = output.split(/\r?\n/).slice(-maxLines);
   return lines.map((l) => l.slice(0, maxWidth)).join("\n");
 }
@@ -327,7 +338,10 @@ const TasksDisplay: FC<{ tasks: ParsedTask[] }> = ({ tasks }) => {
 
 // --- Sub-agent collapsed summary ---
 
-function findSubAgentByCallId(subAgents: Record<string, SubAgent>, callId: string): SubAgent | null {
+function findSubAgentByCallId(
+  subAgents: Record<string, SubAgent>,
+  callId: string,
+): SubAgent | null {
   for (const sub of Object.values(subAgents)) {
     if (sub.parentCallId === callId) return sub;
   }
@@ -337,7 +351,9 @@ function findSubAgentByCallId(subAgents: Record<string, SubAgent>, callId: strin
 const SubAgentSummary: FC<{ task: Task; subAgent: SubAgent }> = ({ task, subAgent }) => {
   const icon = subAgent.isRunning ? "◐" : TOOL_ICONS[task.status];
   const color = subAgent.isRunning ? "yellow" : TOOL_COLORS[task.status];
-  const elapsed = Math.round(((subAgent.isRunning ? Date.now() : Date.now()) - subAgent.startedAt) / 1000);
+  const elapsed = Math.round(
+    ((subAgent.isRunning ? Date.now() : Date.now()) - subAgent.startedAt) / 1000,
+  );
 
   const details = [
     `${subAgent.toolCount} tool${subAgent.toolCount !== 1 ? "s" : ""}`,

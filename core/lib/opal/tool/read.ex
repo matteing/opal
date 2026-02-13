@@ -155,7 +155,9 @@ defmodule Opal.Tool.Read do
     truncated = binary_part(content, 0, min(max_bytes, byte_size(content)))
 
     case :binary.matches(truncated, "\n") do
-      [] -> truncated
+      [] ->
+        truncated
+
       matches ->
         {last_pos, _} = List.last(matches)
         binary_part(truncated, 0, last_pos)

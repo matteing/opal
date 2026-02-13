@@ -85,7 +85,9 @@ defmodule Opal.Model do
             end
 
           {provider, model_id}
-        [model_id] -> {:copilot, model_id}
+
+        [model_id] ->
+          {:copilot, model_id}
       end
 
     new(provider, id, opts)

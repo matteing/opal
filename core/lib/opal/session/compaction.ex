@@ -181,10 +181,14 @@ defmodule Opal.Session.Compaction do
   # Resolve provider/model from opts — either explicit or via agent pid
   defp resolve_provider(opts) do
     case {Keyword.get(opts, :provider), Keyword.get(opts, :model)} do
-      {p, m} when p != nil and m != nil -> {p, m}
+      {p, m} when p != nil and m != nil ->
+        {p, m}
+
       _ ->
         case Keyword.get(opts, :agent) do
-          nil -> {nil, nil}
+          nil ->
+            {nil, nil}
+
           agent ->
             state = Opal.Agent.get_state(agent)
             {state.provider, state.model}
@@ -248,8 +252,15 @@ defmodule Opal.Session.Compaction do
     roles = messages |> Enum.map(& &1.role) |> Enum.frequencies()
     role_str = roles |> Enum.map(fn {r, n} -> "#{n} #{r}" end) |> Enum.join(", ")
 
-    read = if file_ops.read != [], do: "\n\n<read-files>\n#{Enum.join(file_ops.read, "\n")}\n</read-files>", else: ""
-    modified = if file_ops.modified != [], do: "\n\n<modified-files>\n#{Enum.join(file_ops.modified, "\n")}\n</modified-files>", else: ""
+    read =
+      if file_ops.read != [],
+        do: "\n\n<read-files>\n#{Enum.join(file_ops.read, "\n")}\n</read-files>",
+        else: ""
+
+    modified =
+      if file_ops.modified != [],
+        do: "\n\n<modified-files>\n#{Enum.join(file_ops.modified, "\n")}\n</modified-files>",
+        else: ""
 
     "[Compacted #{count} messages: #{role_str}]#{read}#{modified}"
   end
@@ -348,18 +359,26 @@ defmodule Opal.Session.Compaction do
                   binary
                   |> String.split("\n", trim: true)
                   |> Enum.reduce(text_acc, fn
-                    "data: [DONE]", inner -> inner
+                    "data: [DONE]", inner ->
+                      inner
+
                     "data: " <> json, inner ->
                       events = provider.parse_stream_event(json)
+
                       Enum.reduce(events, inner, fn
                         {:text_delta, delta}, t -> t <> delta
                         _, t -> t
                       end)
-                    _, inner -> inner
+
+                    _, inner ->
+                      inner
                   end)
 
-                :done, text_acc -> text_acc
-                _, text_acc -> text_acc
+                :done, text_acc ->
+                  text_acc
+
+                _, text_acc ->
+                  text_acc
               end)
 
             if :done in chunks, do: new_acc, else: collect_stream_text(resp, provider, new_acc)
@@ -384,40 +403,42 @@ defmodule Opal.Session.Compaction do
     body =
       messages
       |> Enum.map(fn msg ->
-      case msg.role do
-        :user ->
-          "[User]: #{msg.content || ""}"
+        case msg.role do
+          :user ->
+            "[User]: #{msg.content || ""}"
 
-        :assistant ->
-          lines = ["[Assistant]: #{msg.content || ""}"]
+          :assistant ->
+            lines = ["[Assistant]: #{msg.content || ""}"]
 
-          tool_lines =
-            case msg.tool_calls do
-              calls when is_list(calls) and calls != [] ->
-                tools = Enum.map_join(calls, "; ", fn tc ->
-                  args = tc.arguments |> Jason.encode!() |> String.slice(0, 200)
-                  "#{tc.name}(#{args})"
-                end)
-                ["[Assistant tool calls]: #{tools}"]
+            tool_lines =
+              case msg.tool_calls do
+                calls when is_list(calls) and calls != [] ->
+                  tools =
+                    Enum.map_join(calls, "; ", fn tc ->
+                      args = tc.arguments |> Jason.encode!() |> String.slice(0, 200)
+                      "#{tc.name}(#{args})"
+                    end)
 
-              _ ->
-                []
-            end
+                  ["[Assistant tool calls]: #{tools}"]
 
-          Enum.join(lines ++ tool_lines, "\n")
+                _ ->
+                  []
+              end
 
-        :tool_result ->
-          output = String.slice(msg.content || "", 0, 500)
-          "[Tool result (#{msg.name || msg.call_id})]: #{output}"
+            Enum.join(lines ++ tool_lines, "\n")
 
-        :system ->
-          "[System]: #{msg.content || ""}"
+          :tool_result ->
+            output = String.slice(msg.content || "", 0, 500)
+            "[Tool result (#{msg.name || msg.call_id})]: #{output}"
 
-        _ ->
-          "[#{msg.role}]: #{msg.content || ""}"
-      end
-    end)
-    |> Enum.join("\n")
+          :system ->
+            "[System]: #{msg.content || ""}"
+
+          _ ->
+            "[#{msg.role}]: #{msg.content || ""}"
+        end
+      end)
+      |> Enum.join("\n")
 
     "<conversation>\n#{body}\n</conversation>"
   end

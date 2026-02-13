@@ -1,6 +1,7 @@
 {
   "name": "opal",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@10.12.1",
   "engines": {
     "node": ">=22"
@@ -9,13 +10,26 @@
     "build": "nx run-many -t build",
     "test": "nx run-many -t test",
     "lint": "nx run-many -t lint",
-    "typecheck": "nx run-many -t typecheck",
+    "format": "nx run-many -t format",
+    "deps": "nx run-many -t deps",
     "dev": "cross-env NX_TUI=false nx run cli:build && cd cli && node dist/bin.js",
     "codegen": "nx run cli:codegen",
-    "inspect": "iex --sname inspector --cookie opal --remsh opal --dot-iex scripts/inspect.exs"
+    "inspect": "iex --sname inspector --cookie opal --remsh opal --dot-iex scripts/inspect.exs",
+    "release": "nx release",
+    "release:dry-run": "nx release --dry-run",
+    "prepare": "lefthook install"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@nx/js": "^22.5.0",
     "cross-env": "^10.1.0",
-    "nx": "^22.5.0"
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "lefthook": "^2.1.1",
+    "nx": "^22.5.0",
+    "prettier": "^3.8.1",
+    "typescript-eslint": "^8.55.0"
   }
 }

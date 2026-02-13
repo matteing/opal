@@ -215,15 +215,17 @@ defmodule Opal.Agent.Stream do
             {before, %{state | status_tag_buffer: rest}}
 
           String.ends_with?(text, "<") or
-          String.ends_with?(text, "<s") or
-          String.ends_with?(text, "<st") or
-          String.ends_with?(text, "<sta") or
-          String.ends_with?(text, "<stat") or
-          String.ends_with?(text, "<statu") or
-            String.ends_with?(text, "<status") ->
+            String.ends_with?(text, "<s") or
+            String.ends_with?(text, "<st") or
+            String.ends_with?(text, "<sta") or
+            String.ends_with?(text, "<stat") or
+            String.ends_with?(text, "<statu") or
+              String.ends_with?(text, "<status") ->
             # Might be start of a tag — buffer the trailing potential match
             idx = String.length(text) - partial_tag_length(text)
-            {String.slice(text, 0, idx), %{state | status_tag_buffer: String.slice(text, idx..-1//1)}}
+
+            {String.slice(text, 0, idx),
+             %{state | status_tag_buffer: String.slice(text, idx..-1//1)}}
 
           true ->
             {text, %{state | status_tag_buffer: ""}}
@@ -237,6 +239,7 @@ defmodule Opal.Agent.Stream do
   @spec partial_tag_length(String.t()) :: non_neg_integer()
   def partial_tag_length(text) do
     suffixes = ["<status", "<statu", "<stat", "<sta", "<st", "<s", "<"]
+
     Enum.find_value(suffixes, 0, fn s ->
       if String.ends_with?(text, s), do: String.length(s)
     end)

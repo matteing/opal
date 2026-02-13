@@ -35,9 +35,8 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
   }, [state.main.timeline.length]);
 
   // Resolve the active agent view (main or a sub-agent tab)
-  const activeView = state.activeTab === "main"
-    ? state.main
-    : state.subAgents[state.activeTab] ?? state.main;
+  const activeView =
+    state.activeTab === "main" ? state.main : (state.subAgents[state.activeTab] ?? state.main);
 
   // Keep ref in sync so the interval can read it without re-creating
   useEffect(() => {
@@ -68,20 +67,30 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
       status = "thinking…";
     } else if (activeView.isRunning) {
       // Check for active tool execution
-      const runningTool = [...activeView.timeline].reverse().find(
-        (e): e is { kind: "tool"; task: Task } =>
-          e.kind === "tool" && e.task.status === "running"
-      );
+      const runningTool = [...activeView.timeline]
+        .reverse()
+        .find(
+          (e): e is { kind: "tool"; task: Task } =>
+            e.kind === "tool" && e.task.status === "running",
+        );
       status = runningTool ? runningTool.task.tool : "responding…";
     } else {
       status = "idle";
     }
     process.stdout.write(`\x1b]0;✦ opal · ${status}\x07`);
-  }, [state.sessionReady, activeView.isRunning, activeView.thinking, activeView.statusMessage, activeView.timeline]);
+  }, [
+    state.sessionReady,
+    activeView.isRunning,
+    activeView.thinking,
+    activeView.statusMessage,
+    activeView.timeline,
+  ]);
 
   // Restore terminal title on unmount
   useEffect(() => {
-    return () => { process.stdout.write("\x1b]0;\x07"); };
+    return () => {
+      process.stdout.write("\x1b]0;\x07");
+    };
   }, []);
 
   useInput((input, key) => {
@@ -105,7 +114,9 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
   if (state.error && !state.sessionReady) {
     return (
       <Box flexDirection="column" padding={1} minHeight={rows}>
-        <Text color="red" bold>Error: {state.error}</Text>
+        <Text color="red" bold>
+          Error: {state.error}
+        </Text>
       </Box>
     );
   }
@@ -131,20 +142,21 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
         sessionReady={state.sessionReady}
       />
 
-      {(activeView.thinking !== null || stalled || (activeView.isRunning && !lastEntryIsAssistant(activeView.timeline))) && (
+      {(activeView.thinking !== null ||
+        stalled ||
+        (activeView.isRunning && !lastEntryIsAssistant(activeView.timeline))) && (
         <Box paddingX={1} justifyContent="space-between">
           <ThinkingIndicator label={activeView.statusMessage ?? "thinking…"} />
           {subAgentCount > 0 && (
-            <Text dimColor>{subAgentCount} sub-agent{subAgentCount > 1 ? "s" : ""} · <Text bold>/agents</Text></Text>
+            <Text dimColor>
+              {subAgentCount} sub-agent{subAgentCount > 1 ? "s" : ""} · <Text bold>/agents</Text>
+            </Text>
           )}
         </Box>
       )}
 
       {state.confirmation && (
-        <ConfirmDialog
-          request={state.confirmation}
-          onResolve={actions.resolveConfirmation}
-        />
+        <ConfirmDialog request={state.confirmation} onResolve={actions.resolveConfirmation} />
       )}
 
       {state.askUser && (
@@ -172,7 +184,7 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
 
 function lastEntryIsAssistant(timeline: { kind: string; message?: { role: string } }[]): boolean {
   for (let i = timeline.length - 1; i >= 0; i--) {
-    const entry = timeline[i]!;
+    const entry = timeline[i];
     if (entry.kind === "message") return entry.message?.role === "assistant";
   }
   return false;

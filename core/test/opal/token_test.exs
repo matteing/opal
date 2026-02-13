@@ -40,7 +40,8 @@ defmodule Opal.TokenTest do
 
       # Content tokens + overhead
       assert result > 0
-      assert result >= 10  # at least the overhead
+      # at least the overhead
+      assert result >= 10
     end
 
     test "assistant message with tool calls" do

@@ -248,7 +248,8 @@ defmodule Opal.AgentChatCompletionsTest do
                       {:tool_execution_start, "echo_tool", _call_id, %{"input" => "test"}, _meta}},
                      2000
 
-      assert_receive {:opal_event, ^sid, {:tool_execution_end, "echo_tool", _call_id2, {:ok, "Echo: test"}}},
+      assert_receive {:opal_event, ^sid,
+                      {:tool_execution_end, "echo_tool", _call_id2, {:ok, "Echo: test"}}},
                      2000
 
       assert_receive {:opal_event, ^sid, {:agent_end, messages, _usage}}, 2000

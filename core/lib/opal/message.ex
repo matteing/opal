@@ -37,7 +37,17 @@ defmodule Opal.Message do
         }
 
   @enforce_keys [:id, :role]
-  defstruct [:id, :parent_id, :role, :content, :tool_calls, :call_id, :name, :metadata, is_error: false]
+  defstruct [
+    :id,
+    :parent_id,
+    :role,
+    :content,
+    :tool_calls,
+    :call_id,
+    :name,
+    :metadata,
+    is_error: false
+  ]
 
   @doc """
   Creates a user message with the given text content.

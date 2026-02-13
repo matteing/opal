@@ -8,11 +8,7 @@ export interface AskUserDialogProps {
   onResolve: (answer: string) => void;
 }
 
-export const AskUserDialog: FC<AskUserDialogProps> = ({
-  question,
-  choices,
-  onResolve,
-}) => {
+export const AskUserDialog: FC<AskUserDialogProps> = ({ question, choices, onResolve }) => {
   const [selected, setSelected] = useState(0);
   const [freeform, setFreeform] = useState("");
   const hasChoices = choices.length > 0;
@@ -24,7 +20,7 @@ export const AskUserDialog: FC<AskUserDialogProps> = ({
       } else if (key.downArrow) {
         setSelected((s) => Math.min(choices.length - 1, s + 1));
       } else if (key.return && !freeform) {
-        onResolve(choices[selected]!);
+        onResolve(choices[selected]);
       }
     }
   });
@@ -36,13 +32,7 @@ export const AskUserDialog: FC<AskUserDialogProps> = ({
   };
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor="cyan"
-      paddingX={2}
-      paddingY={1}
-    >
+    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1}>
       <Text bold color="cyan">
         Agent Question
       </Text>
@@ -53,11 +43,7 @@ export const AskUserDialog: FC<AskUserDialogProps> = ({
       {hasChoices && (
         <Box flexDirection="column" marginTop={1}>
           {choices.map((choice, i) => (
-            <Text
-              key={choice}
-              bold={i === selected}
-              color={i === selected ? "cyan" : undefined}
-            >
+            <Text key={choice} bold={i === selected} color={i === selected ? "cyan" : undefined}>
               {i === selected ? "▸ " : "  "}
               {choice}
             </Text>

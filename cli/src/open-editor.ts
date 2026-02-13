@@ -18,9 +18,7 @@ export function openPlanInEditor(sessionDir: string): void {
   }
 
   const editor =
-    process.env.VISUAL ||
-    process.env.EDITOR ||
-    (process.platform === "win32" ? "notepad" : "code");
+    process.env.VISUAL || process.env.EDITOR || (process.platform === "win32" ? "notepad" : "code");
 
   const child = spawn(editor, [planPath], {
     detached: true,

@@ -97,26 +97,70 @@ defmodule Opal.RPC.Protocol do
       direction: :client_to_server,
       description: "Start a new agent session.",
       params: [
-        %{name: "model", type: {:object, %{"provider" => :string, "id" => :string}}, required: false,
-          description: "Model to use. Defaults to config default."},
-        %{name: "system_prompt", type: :string, required: false,
-          description: "System prompt for the agent."},
-        %{name: "working_dir", type: :string, required: false,
-          description: "Working directory. Defaults to server cwd."},
-        %{name: "tools", type: {:array, :string}, required: false,
-          description: "Tool names to enable."},
-        %{name: "mcp_servers", type: {:array, :object}, required: false,
-          description: "MCP server configurations."},
-        %{name: "session", type: :boolean, required: false,
-          description: "If true, enable session persistence."}
+        %{
+          name: "model",
+          type: {:object, %{"provider" => :string, "id" => :string}},
+          required: false,
+          description: "Model to use. Defaults to config default."
+        },
+        %{
+          name: "system_prompt",
+          type: :string,
+          required: false,
+          description: "System prompt for the agent."
+        },
+        %{
+          name: "working_dir",
+          type: :string,
+          required: false,
+          description: "Working directory. Defaults to server cwd."
+        },
+        %{
+          name: "tools",
+          type: {:array, :string},
+          required: false,
+          description: "Tool names to enable."
+        },
+        %{
+          name: "mcp_servers",
+          type: {:array, :object},
+          required: false,
+          description: "MCP server configurations."
+        },
+        %{
+          name: "session",
+          type: :boolean,
+          required: false,
+          description: "If true, enable session persistence."
+        }
       ],
       result: [
         %{name: "session_id", type: :string, description: "The new session's unique ID."},
-        %{name: "session_dir", type: :string, description: "Filesystem path to the session's data directory."},
-        %{name: "context_files", type: {:array, :string}, description: "Paths of loaded context files."},
-        %{name: "available_skills", type: {:array, :string}, description: "Names of discovered skills (not yet loaded)."},
-        %{name: "mcp_servers", type: {:array, :string}, description: "Names of connected MCP servers."},
-        %{name: "node_name", type: :string, description: "Erlang node name of the server (for debugging)."}
+        %{
+          name: "session_dir",
+          type: :string,
+          description: "Filesystem path to the session's data directory."
+        },
+        %{
+          name: "context_files",
+          type: {:array, :string},
+          description: "Paths of loaded context files."
+        },
+        %{
+          name: "available_skills",
+          type: {:array, :string},
+          description: "Names of discovered skills (not yet loaded)."
+        },
+        %{
+          name: "mcp_servers",
+          type: {:array, :string},
+          description: "Names of connected MCP servers."
+        },
+        %{
+          name: "node_name",
+          type: :string,
+          description: "Erlang node name of the server (for debugging)."
+        }
       ]
     },
     %{
@@ -124,10 +168,8 @@ defmodule Opal.RPC.Protocol do
       direction: :client_to_server,
       description: "Send an async user prompt. Results stream as agent/event notifications.",
       params: [
-        %{name: "session_id", type: :string, required: true,
-          description: "Target session ID."},
-        %{name: "text", type: :string, required: true,
-          description: "The user's prompt text."}
+        %{name: "session_id", type: :string, required: true, description: "Target session ID."},
+        %{name: "text", type: :string, required: true, description: "The user's prompt text."}
       ],
       result: []
     },
@@ -136,10 +178,8 @@ defmodule Opal.RPC.Protocol do
       direction: :client_to_server,
       description: "Steer the agent mid-run. If idle, acts like agent/prompt.",
       params: [
-        %{name: "session_id", type: :string, required: true,
-          description: "Target session ID."},
-        %{name: "text", type: :string, required: true,
-          description: "The steering message."}
+        %{name: "session_id", type: :string, required: true, description: "Target session ID."},
+        %{name: "text", type: :string, required: true, description: "The steering message."}
       ],
       result: []
     },
@@ -148,8 +188,7 @@ defmodule Opal.RPC.Protocol do
       direction: :client_to_server,
       description: "Abort the current agent run.",
       params: [
-        %{name: "session_id", type: :string, required: true,
-          description: "Target session ID."}
+        %{name: "session_id", type: :string, required: true, description: "Target session ID."}
       ],
       result: []
     },
@@ -158,13 +197,16 @@ defmodule Opal.RPC.Protocol do
       direction: :client_to_server,
       description: "Get the current agent state.",
       params: [
-        %{name: "session_id", type: :string, required: true,
-          description: "Target session ID."}
+        %{name: "session_id", type: :string, required: true, description: "Target session ID."}
       ],
       result: [
         %{name: "session_id", type: :string, description: "Session ID."},
         %{name: "status", type: :string, description: "One of: idle, running, streaming."},
-        %{name: "model", type: {:object, %{"provider" => :string, "id" => :string, "thinking_level" => :string}}, description: "Current model."},
+        %{
+          name: "model",
+          type: {:object, %{"provider" => :string, "id" => :string, "thinking_level" => :string}},
+          description: "Current model."
+        },
         %{name: "message_count", type: :integer, description: "Number of messages in history."},
         %{name: "tools", type: {:array, :string}, description: "Active tool names."}
       ]
@@ -175,7 +217,11 @@ defmodule Opal.RPC.Protocol do
       description: "List saved sessions on disk.",
       params: [],
       result: [
-        %{name: "sessions", type: {:array, :object}, description: "Array of {id, title, modified}."}
+        %{
+          name: "sessions",
+          type: {:array, :object},
+          description: "Array of {id, title, modified}."
+        }
       ]
     },
     %{
@@ -183,10 +229,13 @@ defmodule Opal.RPC.Protocol do
       direction: :client_to_server,
       description: "Branch the conversation at a specific message.",
       params: [
-        %{name: "session_id", type: :string, required: true,
-          description: "Target session ID."},
-        %{name: "entry_id", type: :string, required: true,
-          description: "Message ID to branch from."}
+        %{name: "session_id", type: :string, required: true, description: "Target session ID."},
+        %{
+          name: "entry_id",
+          type: :string,
+          required: true,
+          description: "Message ID to branch from."
+        }
       ],
       result: []
     },
@@ -195,23 +244,36 @@ defmodule Opal.RPC.Protocol do
       direction: :client_to_server,
       description: "Compact older messages in the session. (Not yet implemented.)",
       params: [
-        %{name: "session_id", type: :string, required: true,
-          description: "Target session ID."},
-        %{name: "keep_recent", type: :integer, required: false,
-          description: "Number of recent messages to keep. Default: 10."}
+        %{name: "session_id", type: :string, required: true, description: "Target session ID."},
+        %{
+          name: "keep_recent",
+          type: :integer,
+          required: false,
+          description: "Number of recent messages to keep. Default: 10."
+        }
       ],
       result: []
     },
     %{
       method: "models/list",
       direction: :client_to_server,
-      description: "List available LLM models. Copilot models are always included. Pass providers to also list direct provider models.",
+      description:
+        "List available LLM models. Copilot models are always included. Pass providers to also list direct provider models.",
       params: [
-        %{name: "providers", type: {:array, :string}, required: false,
-          description: "Optional list of direct providers to include (e.g. [\"anthropic\", \"openai\"])."}
+        %{
+          name: "providers",
+          type: {:array, :string},
+          required: false,
+          description:
+            "Optional list of direct providers to include (e.g. [\"anthropic\", \"openai\"])."
+        }
       ],
       result: [
-        %{name: "models", type: {:array, :object}, description: "Array of {id, name, provider, supports_thinking}."}
+        %{
+          name: "models",
+          type: {:array, :object},
+          description: "Array of {id, name, provider, supports_thinking}."
+        }
       ]
     },
     %{
@@ -219,15 +281,21 @@ defmodule Opal.RPC.Protocol do
       direction: :client_to_server,
       description: "Change the model for a running session.",
       params: [
-        %{name: "session_id", type: :string, required: true,
-          description: "Target session ID."},
-        %{name: "model_id", type: :string, required: true,
-          description: "Model ID to switch to."},
-        %{name: "thinking_level", type: :string, required: false,
-          description: "Reasoning effort: off, low, medium, high."}
+        %{name: "session_id", type: :string, required: true, description: "Target session ID."},
+        %{name: "model_id", type: :string, required: true, description: "Model ID to switch to."},
+        %{
+          name: "thinking_level",
+          type: :string,
+          required: false,
+          description: "Reasoning effort: off, low, medium, high."
+        }
       ],
       result: [
-        %{name: "model", type: {:object, %{"provider" => :string, "id" => :string, "thinking_level" => :string}}, description: "The new active model."}
+        %{
+          name: "model",
+          type: {:object, %{"provider" => :string, "id" => :string, "thinking_level" => :string}},
+          description: "The new active model."
+        }
       ]
     },
     %{
@@ -235,10 +303,13 @@ defmodule Opal.RPC.Protocol do
       direction: :client_to_server,
       description: "Change the reasoning effort level for the current model.",
       params: [
-        %{name: "session_id", type: :string, required: true,
-          description: "Target session ID."},
-        %{name: "level", type: :string, required: true,
-          description: "Reasoning effort: off, low, medium, high."}
+        %{name: "session_id", type: :string, required: true, description: "Target session ID."},
+        %{
+          name: "level",
+          type: :string,
+          required: true,
+          description: "Reasoning effort: off, low, medium, high."
+        }
       ],
       result: [
         %{name: "thinking_level", type: :string, description: "The new thinking level."}
@@ -270,8 +341,7 @@ defmodule Opal.RPC.Protocol do
       direction: :client_to_server,
       description: "List active tasks (open, in_progress, blocked) for a session's project.",
       params: [
-        %{name: "session_id", type: :string, required: true,
-          description: "Target session ID."}
+        %{name: "session_id", type: :string, required: true, description: "Target session ID."}
       ],
       result: [
         %{name: "tasks", type: {:array, :object}, description: "Array of task objects."}
@@ -291,8 +361,12 @@ defmodule Opal.RPC.Protocol do
       direction: :client_to_server,
       description: "Save user settings (merged with existing).",
       params: [
-        %{name: "settings", type: :object, required: true,
-          description: "Map of setting key-value pairs to save."}
+        %{
+          name: "settings",
+          type: :object,
+          required: true,
+          description: "Map of setting key-value pairs to save."
+        }
       ],
       result: [
         %{name: "settings", type: :object, description: "The full settings after merge."}
@@ -306,14 +380,30 @@ defmodule Opal.RPC.Protocol do
       direction: :server_to_client,
       description: "Ask the user for confirmation (e.g., before executing a tool).",
       params: [
-        %{name: "session_id", type: :string, required: true,
-          description: "Session this confirmation belongs to."},
-        %{name: "title", type: :string, required: true,
-          description: "Short title for the confirmation dialog."},
-        %{name: "message", type: :string, required: true,
-          description: "Detailed message to show."},
-        %{name: "actions", type: {:array, :string}, required: true,
-          description: "Available actions (e.g., [\"allow\", \"deny\", \"allow_session\"])."}
+        %{
+          name: "session_id",
+          type: :string,
+          required: true,
+          description: "Session this confirmation belongs to."
+        },
+        %{
+          name: "title",
+          type: :string,
+          required: true,
+          description: "Short title for the confirmation dialog."
+        },
+        %{
+          name: "message",
+          type: :string,
+          required: true,
+          description: "Detailed message to show."
+        },
+        %{
+          name: "actions",
+          type: {:array, :string},
+          required: true,
+          description: "Available actions (e.g., [\"allow\", \"deny\", \"allow_session\"])."
+        }
       ],
       result: [
         %{name: "action", type: :string, description: "The user's chosen action."}
@@ -324,12 +414,24 @@ defmodule Opal.RPC.Protocol do
       direction: :server_to_client,
       description: "Ask the user for freeform text input.",
       params: [
-        %{name: "session_id", type: :string, required: true,
-          description: "Session this input request belongs to."},
-        %{name: "prompt", type: :string, required: true,
-          description: "Prompt to display to the user."},
-        %{name: "sensitive", type: :boolean, required: false,
-          description: "If true, input should be masked (e.g., API keys)."}
+        %{
+          name: "session_id",
+          type: :string,
+          required: true,
+          description: "Session this input request belongs to."
+        },
+        %{
+          name: "prompt",
+          type: :string,
+          required: true,
+          description: "Prompt to display to the user."
+        },
+        %{
+          name: "sensitive",
+          type: :boolean,
+          required: false,
+          description: "If true, input should be masked (e.g., API keys)."
+        }
       ],
       result: [
         %{name: "text", type: :string, description: "The user's input."}
@@ -340,12 +442,24 @@ defmodule Opal.RPC.Protocol do
       direction: :server_to_client,
       description: "Ask the user a question with optional multiple-choice answers.",
       params: [
-        %{name: "session_id", type: :string, required: true,
-          description: "Session this question belongs to."},
-        %{name: "question", type: :string, required: true,
-          description: "The question to display."},
-        %{name: "choices", type: {:array, :string}, required: false,
-          description: "Optional multiple-choice options."}
+        %{
+          name: "session_id",
+          type: :string,
+          required: true,
+          description: "Session this question belongs to."
+        },
+        %{
+          name: "question",
+          type: :string,
+          required: true,
+          description: "The question to display."
+        },
+        %{
+          name: "choices",
+          type: {:array, :string},
+          required: false,
+          description: "Optional multiple-choice options."
+        }
       ],
       result: [
         %{name: "answer", type: :string, description: "The user's response text."}
@@ -358,73 +472,149 @@ defmodule Opal.RPC.Protocol do
   # ---------------------------------------------------------------------------
 
   @event_types [
-    %{type: "agent_start", description: "Agent has started processing.",
-      fields: []},
-    %{type: "agent_end", description: "Agent has finished processing.",
+    %{type: "agent_start", description: "Agent has started processing.", fields: []},
+    %{
+      type: "agent_end",
+      description: "Agent has finished processing.",
       fields: [
-        %{name: "usage", type: {:object, %{"prompt_tokens" => :integer, "completion_tokens" => :integer, "total_tokens" => :integer, "context_window" => :integer, "current_context_tokens" => :integer}}, required: false,
-          description: "Cumulative token usage for the session."}
-      ]},
-    %{type: "agent_abort", description: "Agent run was aborted.",
-      fields: []},
-    %{type: "message_start", description: "LLM has started generating a message.",
-      fields: []},
-    %{type: "message_delta", description: "A chunk of LLM-generated text.",
+        %{
+          name: "usage",
+          type:
+            {:object,
+             %{
+               "prompt_tokens" => :integer,
+               "completion_tokens" => :integer,
+               "total_tokens" => :integer,
+               "context_window" => :integer,
+               "current_context_tokens" => :integer
+             }},
+          required: false,
+          description: "Cumulative token usage for the session."
+        }
+      ]
+    },
+    %{type: "agent_abort", description: "Agent run was aborted.", fields: []},
+    %{type: "message_start", description: "LLM has started generating a message.", fields: []},
+    %{
+      type: "message_delta",
+      description: "A chunk of LLM-generated text.",
       fields: [
         %{name: "delta", type: :string, description: "The text fragment."}
-      ]},
-    %{type: "thinking_start", description: "LLM has started a thinking/reasoning block.",
-      fields: []},
-    %{type: "thinking_delta", description: "A chunk of LLM thinking/reasoning text.",
+      ]
+    },
+    %{
+      type: "thinking_start",
+      description: "LLM has started a thinking/reasoning block.",
+      fields: []
+    },
+    %{
+      type: "thinking_delta",
+      description: "A chunk of LLM thinking/reasoning text.",
       fields: [
         %{name: "delta", type: :string, description: "The thinking text fragment."}
-      ]},
-    %{type: "tool_execution_start", description: "A tool has started executing.",
+      ]
+    },
+    %{
+      type: "tool_execution_start",
+      description: "A tool has started executing.",
       fields: [
         %{name: "tool", type: :string, description: "Tool name."},
         %{name: "call_id", type: :string, description: "Unique call identifier."},
         %{name: "args", type: :object, description: "Tool arguments."},
         %{name: "meta", type: :string, description: "Human-readable summary of the invocation."}
-      ]},
-    %{type: "tool_execution_end", description: "A tool has finished executing.",
+      ]
+    },
+    %{
+      type: "tool_execution_end",
+      description: "A tool has finished executing.",
       fields: [
         %{name: "tool", type: :string, description: "Tool name."},
         %{name: "call_id", type: :string, description: "Unique call identifier."},
-        %{name: "result", type: {:object, %{"ok" => :boolean}},
-          description: "Tool execution result. May include optional output or error string fields."}
-      ]},
-    %{type: "turn_end", description: "An LLM turn has ended (may be followed by tool calls).",
+        %{
+          name: "result",
+          type: {:object, %{"ok" => :boolean}},
+          description:
+            "Tool execution result. May include optional output or error string fields."
+        }
+      ]
+    },
+    %{
+      type: "turn_end",
+      description: "An LLM turn has ended (may be followed by tool calls).",
       fields: [
         %{name: "message", type: :string, description: "The assistant's message text."}
-      ]},
-    %{type: "error", description: "An error occurred during processing.",
+      ]
+    },
+    %{
+      type: "error",
+      description: "An error occurred during processing.",
       fields: [
         %{name: "reason", type: :string, description: "Error description."}
-      ]},
-    %{type: "context_discovered", description: "Project context files were discovered during session initialization.",
+      ]
+    },
+    %{
+      type: "context_discovered",
+      description: "Project context files were discovered during session initialization.",
       fields: [
-        %{name: "files", type: {:array, :string}, description: "Paths of discovered context files."}
-      ]},
-    %{type: "skill_loaded", description: "An agent skill was dynamically loaded into context.",
+        %{
+          name: "files",
+          type: {:array, :string},
+          description: "Paths of discovered context files."
+        }
+      ]
+    },
+    %{
+      type: "skill_loaded",
+      description: "An agent skill was dynamically loaded into context.",
       fields: [
         %{name: "name", type: :string, description: "Skill name."},
         %{name: "description", type: :string, description: "Skill description."}
-      ]},
-    %{type: "sub_agent_event", description: "An event forwarded from a spawned sub-agent.",
+      ]
+    },
+    %{
+      type: "sub_agent_event",
+      description: "An event forwarded from a spawned sub-agent.",
       fields: [
-        %{name: "parent_call_id", type: :string, description: "The call_id of the parent sub_agent tool invocation."},
+        %{
+          name: "parent_call_id",
+          type: :string,
+          description: "The call_id of the parent sub_agent tool invocation."
+        },
         %{name: "sub_session_id", type: :string, description: "The sub-agent's session ID."},
-        %{name: "inner", type: :object, description: "The wrapped agent event from the sub-agent (contains a type field and event-specific data)."}
-      ]},
-    %{type: "usage_update", description: "Live token usage update during a turn.",
+        %{
+          name: "inner",
+          type: :object,
+          description:
+            "The wrapped agent event from the sub-agent (contains a type field and event-specific data)."
+        }
+      ]
+    },
+    %{
+      type: "usage_update",
+      description: "Live token usage update during a turn.",
       fields: [
-        %{name: "usage", type: {:object, %{"prompt_tokens" => :integer, "completion_tokens" => :integer, "total_tokens" => :integer, "context_window" => :integer, "current_context_tokens" => :integer}},
-          description: "Current token usage snapshot."}
-      ]},
-    %{type: "status_update", description: "Short status message describing what the agent is currently working on.",
+        %{
+          name: "usage",
+          type:
+            {:object,
+             %{
+               "prompt_tokens" => :integer,
+               "completion_tokens" => :integer,
+               "total_tokens" => :integer,
+               "context_window" => :integer,
+               "current_context_tokens" => :integer
+             }},
+          description: "Current token usage snapshot."
+        }
+      ]
+    },
+    %{
+      type: "status_update",
+      description: "Short status message describing what the agent is currently working on.",
       fields: [
         %{name: "message", type: :string, description: "Brief human-readable status."}
-      ]}
+      ]
+    }
   ]
 
   # ---------------------------------------------------------------------------
@@ -527,6 +717,7 @@ defmodule Opal.RPC.Protocol do
   def serialize_type(:integer), do: "integer"
   def serialize_type(:object), do: "object"
   def serialize_type({:array, inner}), do: %{kind: "array", item: serialize_type(inner)}
+
   def serialize_type({:object, fields}) when is_map(fields) do
     %{kind: "object", fields: Map.new(fields, fn {k, v} -> {k, serialize_type(v)} end)}
   end
@@ -537,10 +728,12 @@ defmodule Opal.RPC.Protocol do
   @spec spec_json() :: map()
   def spec_json do
     spec = spec()
-    %{spec |
-      methods: Enum.map(spec.methods, &serialize_def/1),
-      server_requests: Enum.map(spec.server_requests, &serialize_def/1),
-      event_types: Enum.map(spec.event_types, &serialize_event_type/1)
+
+    %{
+      spec
+      | methods: Enum.map(spec.methods, &serialize_def/1),
+        server_requests: Enum.map(spec.server_requests, &serialize_def/1),
+        event_types: Enum.map(spec.event_types, &serialize_event_type/1)
     }
   end
 

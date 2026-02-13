@@ -47,11 +47,12 @@ defmodule Mix.Tasks.Opal.Gen.JsonSchema do
       params_schema = params_to_json_schema(m.params)
       result_schema = fields_to_json_schema(m.result)
 
-      {m.method, %{
-        "description" => m.description,
-        "params" => params_schema,
-        "result" => result_schema
-      }}
+      {m.method,
+       %{
+         "description" => m.description,
+         "params" => params_schema,
+         "result" => result_schema
+       }}
     end)
   end
 
@@ -79,13 +80,21 @@ defmodule Mix.Tasks.Opal.Gen.JsonSchema do
 
       base = %{
         "type" => "object",
-        "properties" => Map.merge(
-          %{
-            "type" => %{"type" => "string", "const" => e.type, "description" => "Event type discriminator."},
-            "session_id" => %{"type" => "string", "description" => "Session this event belongs to."}
-          },
-          fields_schema["properties"] || %{}
-        ),
+        "properties" =>
+          Map.merge(
+            %{
+              "type" => %{
+                "type" => "string",
+                "const" => e.type,
+                "description" => "Event type discriminator."
+              },
+              "session_id" => %{
+                "type" => "string",
+                "description" => "Session this event belongs to."
+              }
+            },
+            fields_schema["properties"] || %{}
+          ),
         "required" => ["type", "session_id"] ++ (fields_schema["required"] || []),
         "description" => e.description
       }
@@ -115,6 +124,7 @@ defmodule Mix.Tasks.Opal.Gen.JsonSchema do
     # Parse inline object type like "object{provider:string, id:string}"
     # Supports optional fields with ? suffix: "object{ok:boolean, output?:string}"
     fields_str = String.trim_trailing(rest, "}")
+
     pairs =
       fields_str
       |> String.split(",")
@@ -134,7 +144,9 @@ defmodule Mix.Tasks.Opal.Gen.JsonSchema do
       end)
 
     properties = Map.new(pairs, fn {name, schema, _} -> {name, schema} end)
-    required = pairs |> Enum.reject(fn {_, _, opt?} -> opt? end) |> Enum.map(fn {name, _, _} -> name end)
+
+    required =
+      pairs |> Enum.reject(fn {_, _, opt?} -> opt? end) |> Enum.map(fn {name, _, _} -> name end)
 
     schema = %{"type" => "object", "properties" => properties}
     if required == [], do: schema, else: Map.put(schema, "required", required)

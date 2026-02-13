@@ -72,9 +72,11 @@ defmodule Opal.MCP.Config do
       Path.join(System.user_home!(), ".opal/mcp.json")
     ]
 
-    all_files = project_files ++ Enum.map(extra_files, fn f ->
-      if Path.type(f) == :absolute, do: f, else: Path.join(working_dir, f)
-    end) ++ global_files
+    all_files =
+      project_files ++
+        Enum.map(extra_files, fn f ->
+          if Path.type(f) == :absolute, do: f, else: Path.join(working_dir, f)
+        end) ++ global_files
 
     all_files
     |> Enum.flat_map(&parse_file/1)
@@ -146,15 +148,19 @@ defmodule Opal.MCP.Config do
   defp detect_transport(_), do: :error
 
   defp parse_headers(nil), do: []
+
   defp parse_headers(headers) when is_map(headers) do
     Enum.map(headers, fn {k, v} -> {k, resolve_value(v)} end)
   end
+
   defp parse_headers(_), do: []
 
   defp parse_env(nil), do: %{}
+
   defp parse_env(env) when is_map(env) do
     Map.new(env, fn {k, v} -> {k, resolve_value(v)} end)
   end
+
   defp parse_env(_), do: %{}
 
   # Resolves ${input:...} placeholders — for now, checks env vars.

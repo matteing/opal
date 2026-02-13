@@ -42,7 +42,10 @@ defmodule Opal.MCP.Bridge do
     end
   catch
     kind, reason ->
-      Logger.warning("MCP tool discovery for #{client_name} failed: #{inspect(kind)} #{inspect(reason)}")
+      Logger.warning(
+        "MCP tool discovery for #{client_name} failed: #{inspect(kind)} #{inspect(reason)}"
+      )
+
       []
   end
 
@@ -59,12 +62,18 @@ defmodule Opal.MCP.Bridge do
         end)
 
       {:error, reason} ->
-        Logger.warning("Failed to discover tools from MCP server #{client_name}: #{inspect(reason)}")
+        Logger.warning(
+          "Failed to discover tools from MCP server #{client_name}: #{inspect(reason)}"
+        )
+
         []
     end
   catch
     kind, reason ->
-      Logger.warning("MCP tool discovery for #{client_name} failed: #{inspect(kind)} #{inspect(reason)}")
+      Logger.warning(
+        "MCP tool discovery for #{client_name} failed: #{inspect(kind)} #{inspect(reason)}"
+      )
+
       []
   end
 
@@ -112,7 +121,11 @@ defmodule Opal.MCP.Bridge do
 
           @impl true
           def execute(args, _context) do
-            case Opal.MCP.Client.server_call_tool(unquote(client_name), unquote(original_name), args) do
+            case Opal.MCP.Client.server_call_tool(
+                   unquote(client_name),
+                   unquote(original_name),
+                   args
+                 ) do
               {:ok, %{result: %{"content" => content}}} ->
                 text = extract_text_content(content)
                 {:ok, text}
@@ -181,11 +194,15 @@ defmodule Opal.MCP.Bridge do
           do: "#{tool.server}_#{tool.original_name}",
           else: tool.original_name
 
-      create_tool_module(tool.server, %{
-        "name" => tool.original_name,
-        "description" => tool.description,
-        "inputSchema" => tool.parameters
-      }, resolved_name)
+      create_tool_module(
+        tool.server,
+        %{
+          "name" => tool.original_name,
+          "description" => tool.description,
+          "inputSchema" => tool.parameters
+        },
+        resolved_name
+      )
     end)
   end
 

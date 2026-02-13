@@ -24,7 +24,10 @@ defmodule Opal.MCP.Resources do
         result
 
       {:error, reason} ->
-        Logger.warning("Failed to list resources from MCP server #{client_name}: #{inspect(reason)}")
+        Logger.warning(
+          "Failed to list resources from MCP server #{client_name}: #{inspect(reason)}"
+        )
+
         []
     end
   end

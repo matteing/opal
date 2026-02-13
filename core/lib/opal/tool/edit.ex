@@ -124,7 +124,8 @@ defmodule Opal.Tool.Edit do
         {:ok, String.replace(content, old_string, new_string, global: false)}
 
       n ->
-        {:error, "old_string found #{n} times — must match exactly once. Add surrounding context to disambiguate."}
+        {:error,
+         "old_string found #{n} times — must match exactly once. Add surrounding context to disambiguate."}
     end
   end
 

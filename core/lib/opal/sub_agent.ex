@@ -82,7 +82,9 @@ defmodule Opal.SubAgent do
 
     session_id = generate_session_id()
 
-    Logger.debug("SubAgent spawn parent=#{parent_state.session_id} child=#{session_id} model=#{model.id}")
+    Logger.debug(
+      "SubAgent spawn parent=#{parent_state.session_id} child=#{session_id} model=#{model.id}"
+    )
 
     # Filter out tools that shouldn't be available to sub-agents;
     # inject AskParent so sub-agents can ask questions back to the parent.

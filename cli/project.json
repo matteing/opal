@@ -22,10 +22,20 @@
       "dependsOn": ["build"],
       "cache": false
     },
-    "typecheck": {
-      "command": "tsc --noEmit",
+    "lint": {
+      "command": "pnpm lint && pnpm format:check",
       "options": { "cwd": "cli" },
-      "inputs": ["source"]
+      "inputs": ["source", "{workspaceRoot}/eslint.config.js", "{workspaceRoot}/.prettierrc"]
+    },
+    "format": {
+      "command": "pnpm lint:fix && pnpm format",
+      "options": { "cwd": "cli" },
+      "cache": false
+    },
+    "deps": {
+      "command": "pnpm install --frozen-lockfile",
+      "options": { "cwd": "." },
+      "cache": false
     },
     "codegen": {
       "command": "mix run ../scripts/codegen_ts.exs",
@@ -46,6 +56,11 @@
         "{projectRoot}/src/sdk/protocol.ts"
       ],
       "dependsOn": ["core:build"]
+    },
+    "nx-release-publish": {
+      "command": "npm publish --access public",
+      "options": { "cwd": "cli" },
+      "dependsOn": ["build"]
     }
   }
 }

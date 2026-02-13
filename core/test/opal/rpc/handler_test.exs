@@ -89,9 +89,10 @@ defmodule Opal.RPC.HandlerTest do
 
       for model <- models do
         assert Map.has_key?(model, :supports_thinking),
-          "model #{model.id} missing supports_thinking"
+               "model #{model.id} missing supports_thinking"
+
         assert Map.has_key?(model, :thinking_levels),
-          "model #{model.id} missing thinking_levels"
+               "model #{model.id} missing thinking_levels"
       end
     end
 
@@ -102,7 +103,7 @@ defmodule Opal.RPC.HandlerTest do
 
       for model <- reasoning do
         assert model.thinking_levels != [],
-          "reasoning model #{model.id} should have thinking_levels"
+               "reasoning model #{model.id} should have thinking_levels"
       end
     end
 
@@ -112,7 +113,7 @@ defmodule Opal.RPC.HandlerTest do
 
       for model <- non_reasoning do
         assert model.thinking_levels == [],
-          "non-reasoning model #{model.id} should have empty thinking_levels"
+               "non-reasoning model #{model.id} should have empty thinking_levels"
       end
     end
 

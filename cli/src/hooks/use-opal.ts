@@ -1,13 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import type {
-  AgentEvent,
-  AgentStateResult,
-  TokenUsage,
-  ConfirmRequest,
-} from "../sdk/protocol.js";
+import type { AgentEvent, TokenUsage, ConfirmRequest } from "../sdk/protocol.js";
 import { Session, type SessionOptions } from "../sdk/session.js";
 
 // --- State types ---
+
+interface ModelEntry {
+  id: string;
+  name: string;
+  provider?: string;
+  supportsThinking?: boolean;
+  thinkingLevels?: string[];
+}
+
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
 
 export interface Message {
   role: "user" | "assistant";
@@ -69,7 +76,17 @@ export interface OpalState {
   // Session-level state
   confirmation: ConfirmRequest | null;
   askUser: { question: string; choices: string[] } | null;
-  modelPicker: { models: { id: string; name: string; provider?: string; supportsThinking?: boolean; thinkingLevels?: string[] }[]; current: string; currentThinkingLevel?: string } | null;
+  modelPicker: {
+    models: {
+      id: string;
+      name: string;
+      provider?: string;
+      supportsThinking?: boolean;
+      thinkingLevels?: string[];
+    }[];
+    current: string;
+    currentThinkingLevel?: string;
+  } | null;
   currentModel: string | null;
   tokenUsage: TokenUsage | null;
   sessionReady: boolean;
@@ -96,7 +113,12 @@ export interface OpalActions {
 
 // --- Hook ---
 
-const EMPTY_VIEW: AgentView = { timeline: [], thinking: null, statusMessage: null, isRunning: false };
+const EMPTY_VIEW: AgentView = {
+  timeline: [],
+  thinking: null,
+  statusMessage: null,
+  isRunning: false,
+};
 
 export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
   const [state, setState] = useState<OpalState>({
@@ -140,7 +162,10 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
         if (!mounted) return "";
         return new Promise<string>((resolve) => {
           askUserResolverRef.current = resolve;
-          setState((s) => ({ ...s, askUser: { question: req.question, choices: req.choices ?? [] } }));
+          setState((s) => ({
+            ...s,
+            askUser: { question: req.question, choices: req.choices ?? [] },
+          }));
         });
       },
     })
@@ -153,10 +178,19 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
 
         // Inject context discovery into timeline from session start response
         const initialTimeline: TimelineEntry[] = [];
-        if (session.contextFiles.length > 0 || session.availableSkills.length > 0 || session.mcpServers.length > 0) {
+        if (
+          session.contextFiles.length > 0 ||
+          session.availableSkills.length > 0 ||
+          session.mcpServers.length > 0
+        ) {
           initialTimeline.push({
             kind: "context",
-            context: { files: session.contextFiles, skills: session.availableSkills, mcpServers: session.mcpServers, status: "discovered" },
+            context: {
+              files: session.contextFiles,
+              skills: session.availableSkills,
+              mcpServers: session.mcpServers,
+              status: "discovered",
+            },
           });
         }
 
@@ -168,12 +202,16 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
           availableSkills: session.availableSkills,
           main: { ...s.main, timeline: [...s.main.timeline, ...initialTimeline] },
         }));
-        session.getState().then((res) => {
-          const displaySpec = res.model.provider !== "copilot"
-            ? `${res.model.provider}:${res.model.id}`
-            : res.model.id;
-          setState((s) => ({ ...s, currentModel: displaySpec }));
-        }).catch(() => {});
+        session
+          .getState()
+          .then((res) => {
+            const displaySpec =
+              res.model.provider !== "copilot"
+                ? `${res.model.provider}:${res.model.id}`
+                : res.model.id;
+            setState((s) => ({ ...s, currentModel: displaySpec }));
+          })
+          .catch(() => {});
       })
       .catch((err) => {
         if (mounted) {
@@ -204,26 +242,30 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     });
   }, []);
 
-  const processEvents = useCallback(async (iter: AsyncIterable<AgentEvent>) => {
-    for await (const event of iter) {
-      if (event.type === "agentEnd" || event.type === "agentAbort") {
-        process.stderr.write("\x07");
-      }
-      pendingEventsRef.current.push(event);
-
-      const isTerminal = event.type === "agentEnd" || event.type === "agentAbort" || event.type === "error";
-      if (isTerminal) {
-        // Flush immediately for terminal events
-        if (flushTimerRef.current !== null) {
-          clearTimeout(flushTimerRef.current);
+  const processEvents = useCallback(
+    async (iter: AsyncIterable<AgentEvent>) => {
+      for await (const event of iter) {
+        if (event.type === "agentEnd" || event.type === "agentAbort") {
+          process.stderr.write("\x07");
         }
-        flushEvents();
-      } else if (flushTimerRef.current === null) {
-        // Schedule a batched flush
-        flushTimerRef.current = setTimeout(flushEvents, 32);
+        pendingEventsRef.current.push(event);
+
+        const isTerminal =
+          event.type === "agentEnd" || event.type === "agentAbort" || event.type === "error";
+        if (isTerminal) {
+          // Flush immediately for terminal events
+          if (flushTimerRef.current !== null) {
+            clearTimeout(flushTimerRef.current);
+          }
+          flushEvents();
+        } else if (flushTimerRef.current === null) {
+          // Schedule a batched flush
+          flushTimerRef.current = setTimeout(flushEvents, 32);
+        }
       }
-    }
-  }, [flushEvents]);
+    },
+    [flushEvents],
+  );
 
   const submitPrompt = useCallback(
     (text: string) => {
@@ -235,39 +277,42 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
         main: {
           ...s.main,
           isRunning: true,
-          timeline: [...s.main.timeline, { kind: "message", message: { role: "user", content: text } }],
+          timeline: [
+            ...s.main.timeline,
+            { kind: "message", message: { role: "user", content: text } },
+          ],
         },
       }));
 
-      processEvents(session.prompt(text));
+      void processEvents(session.prompt(text));
     },
     [processEvents],
   );
 
-  const submitSteer = useCallback(
-    (text: string) => {
-      const session = sessionRef.current;
-      if (!session) return;
+  const submitSteer = useCallback((text: string) => {
+    const session = sessionRef.current;
+    if (!session) return;
 
-      setState((s) => ({
-        ...s,
-        main: {
-          ...s.main,
-          timeline: [...s.main.timeline, { kind: "message", message: { role: "user", content: `[steer] ${text}` } }],
-        },
-      }));
+    setState((s) => ({
+      ...s,
+      main: {
+        ...s.main,
+        timeline: [
+          ...s.main.timeline,
+          { kind: "message", message: { role: "user", content: `[steer] ${text}` } },
+        ],
+      },
+    }));
 
-      session.steer(text);
-    },
-    [],
-  );
+    void session.steer(text);
+  }, []);
 
   const abort = useCallback(() => {
-    sessionRef.current?.abort();
+    void sessionRef.current?.abort();
   }, []);
 
   const compact = useCallback(() => {
-    sessionRef.current?.compact();
+    void sessionRef.current?.compact();
   }, []);
 
   const resolveConfirmation = useCallback((action: string) => {
@@ -287,7 +332,10 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       ...s,
       main: {
         ...s.main,
-        timeline: [...s.main.timeline, { kind: "message", message: { role: "assistant", content } }],
+        timeline: [
+          ...s.main.timeline,
+          { kind: "message", message: { role: "assistant", content } },
+        ],
       },
     }));
   }, []);
@@ -304,45 +352,62 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       switch (cmd) {
         case "models": {
           // Open interactive model picker
-          Promise.all([session.listModels(), session.getState()]).then(([modelsRes, stateRes]) => {
-            const models = modelsRes.models.map((m: any) => ({
-              id: m.id as string,
-              name: m.name as string,
-              provider: m.provider as string | undefined,
-              supportsThinking: m.supportsThinking as boolean | undefined,
-              thinkingLevels: m.thinkingLevels as string[] | undefined,
-            }));
-            setState((s) => ({
-              ...s,
-              modelPicker: {
-                models,
-                current: stateRes.model.id,
-                currentThinkingLevel: stateRes.model.thinkingLevel,
-              },
-            }));
-          }).catch((e) => addSystemMessage(`Error: ${e.message}`));
+          Promise.all([session.listModels(), session.getState()])
+            .then(([modelsRes, stateRes]) => {
+              const models = modelsRes.models.map((m) => {
+                const entry = m as unknown as ModelEntry;
+                return {
+                  id: entry.id,
+                  name: entry.name,
+                  provider: entry.provider,
+                  supportsThinking: entry.supportsThinking,
+                  thinkingLevels: entry.thinkingLevels,
+                };
+              });
+              setState((s) => ({
+                ...s,
+                modelPicker: {
+                  models,
+                  current: stateRes.model.id,
+                  currentThinkingLevel: stateRes.model.thinkingLevel,
+                },
+              }));
+            })
+            .catch((e: unknown) => addSystemMessage(`Error: ${errorMessage(e)}`));
           break;
         }
         case "model": {
           if (!arg) {
-            session.getState().then((res) => {
-              const thinking = res.model.thinkingLevel && res.model.thinkingLevel !== "off"
-                ? ` thinking=${res.model.thinkingLevel}`
-                : "";
-              addSystemMessage(`Current model: **${res.model.id}** (${res.model.provider})${thinking}`);
-            }).catch((e) => addSystemMessage(`Error: ${e.message}`));
+            session
+              .getState()
+              .then((res) => {
+                const thinking =
+                  res.model.thinkingLevel && res.model.thinkingLevel !== "off"
+                    ? ` thinking=${res.model.thinkingLevel}`
+                    : "";
+                addSystemMessage(
+                  `Current model: **${res.model.id}** (${res.model.provider})${thinking}`,
+                );
+              })
+              .catch((e: unknown) => addSystemMessage(`Error: ${errorMessage(e)}`));
           } else {
             // Normalize provider/model to provider:model for the backend
             const modelSpec = arg.includes("/") ? arg.replace("/", ":") : arg;
-            session.setModel(modelSpec).then((res) => {
-              const displaySpec = res.model.provider !== "copilot"
-                ? `${res.model.provider}:${res.model.id}`
-                : res.model.id;
-              addSystemMessage(`Model changed to **${displaySpec}** (${res.model.provider})`);
-              setState((s) => ({ ...s, currentModel: displaySpec }));
-              // Persist choice
-              session.saveSettings({ default_model: `${res.model.provider}:${res.model.id}` }).catch(() => {});
-            }).catch((e) => addSystemMessage(`Error: ${e.message}`));
+            session
+              .setModel(modelSpec)
+              .then((res) => {
+                const displaySpec =
+                  res.model.provider !== "copilot"
+                    ? `${res.model.provider}:${res.model.id}`
+                    : res.model.id;
+                addSystemMessage(`Model changed to **${displaySpec}** (${res.model.provider})`);
+                setState((s) => ({ ...s, currentModel: displaySpec }));
+                // Persist choice
+                session
+                  .saveSettings({ default_model: `${res.model.provider}:${res.model.id}` })
+                  .catch(() => {});
+              })
+              .catch((e: unknown) => addSystemMessage(`Error: ${errorMessage(e)}`));
           }
           break;
         }
@@ -360,22 +425,28 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
             }
             if (!arg) {
               // List active sub-agents
-              const lines = subs.map((sub, i) =>
-                `  ${i + 1}. **${sub.label || sub.sessionId.slice(0, 8)}** — ${sub.model} · ${sub.toolCount} tools · ${sub.isRunning ? "running" : "done"}`
+              const lines = subs.map(
+                (sub, i) =>
+                  `  ${i + 1}. **${sub.label || sub.sessionId.slice(0, 8)}** — ${sub.model} · ${sub.toolCount} tools · ${sub.isRunning ? "running" : "done"}`,
               );
-              const viewing = s.activeTab !== "main"
-                ? `\nCurrently viewing: **${s.subAgents[s.activeTab]?.label || s.activeTab}**. Use \`/agents main\` to return.`
-                : "";
-              addSystemMessage(`**Active sub-agents:**\n${lines.join("\n")}${viewing}\n\nUse \`/agents <number>\` to view, \`/agents main\` to return.`);
+              const viewing =
+                s.activeTab !== "main"
+                  ? `\nCurrently viewing: **${s.subAgents[s.activeTab]?.label || s.activeTab}**. Use \`/agents main\` to return.`
+                  : "";
+              addSystemMessage(
+                `**Active sub-agents:**\n${lines.join("\n")}${viewing}\n\nUse \`/agents <number>\` to view, \`/agents main\` to return.`,
+              );
               return s;
             }
             // Switch to a specific agent
             if (arg === "main") return { ...s, activeTab: "main" };
             const idx = parseInt(arg, 10);
             if (!isNaN(idx) && idx >= 1 && idx <= subs.length) {
-              return { ...s, activeTab: subs[idx - 1]!.sessionId };
+              return { ...s, activeTab: subs[idx - 1].sessionId };
             }
-            addSystemMessage(`Invalid agent: \`${arg}\`. Use a number (1-${subs.length}) or \`main\`.`);
+            addSystemMessage(
+              `Invalid agent: \`${arg}\`. Use a number (1-${subs.length}) or \`main\`.`,
+            );
             return s;
           });
           break;
@@ -383,13 +454,13 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
         case "help": {
           addSystemMessage(
             "**Commands:**\n" +
-            "  `/model`                  — show current model\n" +
-            "  `/model <provider:id>`    — switch model (e.g. `anthropic:claude-sonnet-4`)\n" +
-            "  `/models`                 — select model interactively\n" +
-            "  `/agents`                 — list active sub-agents\n" +
-            "  `/agents <n|main>`        — switch view to sub-agent or main\n" +
-            "  `/compact`                — compact conversation history\n" +
-            "  `/help`                   — show this help"
+              "  `/model`                  — show current model\n" +
+              "  `/model <provider:id>`    — switch model (e.g. `anthropic:claude-sonnet-4`)\n" +
+              "  `/models`                 — select model interactively\n" +
+              "  `/agents`                 — list active sub-agents\n" +
+              "  `/agents <n|main>`        — switch view to sub-agent or main\n" +
+              "  `/compact`                — compact conversation history\n" +
+              "  `/help`                   — show this help",
           );
           break;
         }
@@ -405,18 +476,25 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       const session = sessionRef.current;
       if (!session) return;
       setState((s) => ({ ...s, modelPicker: null }));
-      session.setModel(modelId, thinkingLevel).then((res) => {
-        const displaySpec = res.model.provider !== "copilot"
-          ? `${res.model.provider}:${res.model.id}`
-          : res.model.id;
-        const thinking = res.model.thinkingLevel && res.model.thinkingLevel !== "off"
-          ? ` (thinking: ${res.model.thinkingLevel})`
-          : "";
-        addSystemMessage(`Model changed to **${displaySpec}**${thinking}`);
-        setState((s) => ({ ...s, currentModel: displaySpec }));
-        // Persist choice
-        session.saveSettings({ default_model: `${res.model.provider}:${res.model.id}` }).catch(() => {});
-      }).catch((e) => addSystemMessage(`Error: ${e.message}`));
+      session
+        .setModel(modelId, thinkingLevel)
+        .then((res) => {
+          const displaySpec =
+            res.model.provider !== "copilot"
+              ? `${res.model.provider}:${res.model.id}`
+              : res.model.id;
+          const thinking =
+            res.model.thinkingLevel && res.model.thinkingLevel !== "off"
+              ? ` (thinking: ${res.model.thinkingLevel})`
+              : "";
+          addSystemMessage(`Model changed to **${displaySpec}**${thinking}`);
+          setState((s) => ({ ...s, currentModel: displaySpec }));
+          // Persist choice
+          session
+            .saveSettings({ default_model: `${res.model.provider}:${res.model.id}` })
+            .catch(() => {});
+        })
+        .catch((e: unknown) => addSystemMessage(`Error: ${errorMessage(e)}`));
     },
     [addSystemMessage],
   );
@@ -431,7 +509,18 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
 
   return [
     state,
-    { submitPrompt, submitSteer, abort, compact, resolveConfirmation, resolveAskUser, runCommand, selectModel, dismissModelPicker, switchTab },
+    {
+      submitPrompt,
+      submitSteer,
+      abort,
+      compact,
+      resolveConfirmation,
+      resolveAskUser,
+      runCommand,
+      selectModel,
+      dismissModelPicker,
+      switchTab,
+    },
   ];
 }
 
@@ -455,11 +544,20 @@ function applyAgentEvent(view: AgentView, event: Record<string, unknown>): Agent
 
     case "messageStart":
     case "message_start":
-      return { ...view, timeline: [...view.timeline, { kind: "message", message: { role: "assistant", content: "" } }] };
+      return {
+        ...view,
+        timeline: [
+          ...view.timeline,
+          { kind: "message", message: { role: "assistant", content: "" } },
+        ],
+      };
 
     case "messageDelta":
     case "message_delta":
-      return { ...view, timeline: appendMessageDelta(view.timeline, (event.delta as string) ?? "") };
+      return {
+        ...view,
+        timeline: appendMessageDelta(view.timeline, (event.delta as string) ?? ""),
+      };
 
     case "thinkingStart":
     case "thinking_start":
@@ -494,7 +592,14 @@ function applyAgentEvent(view: AgentView, event: Record<string, unknown>): Agent
       const result = event.result as { ok: boolean; output?: string; error?: string };
       const timeline = view.timeline.map((entry) =>
         entry.kind === "tool" && entry.task.callId === callId
-          ? { ...entry, task: { ...entry.task, status: (result.ok ? "done" : "error") as Task["status"], result } }
+          ? {
+              ...entry,
+              task: {
+                ...entry.task,
+                status: (result.ok ? "done" : "error") as Task["status"],
+                result,
+              },
+            }
           : entry,
       );
       return { ...view, timeline };
@@ -542,13 +647,17 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
     case "thinkingDelta":
     case "toolExecutionStart":
     case "statusUpdate":
-      return { ...state, main: applyAgentEvent(state.main, e), lastDeltaAt: event.type === "messageDelta" ? Date.now() : state.lastDeltaAt };
+      return {
+        ...state,
+        main: applyAgentEvent(state.main, e),
+        lastDeltaAt: event.type === "messageDelta" ? Date.now() : state.lastDeltaAt,
+      };
 
     case "toolExecutionEnd":
       return { ...state, main: applyAgentEvent(state.main, e) };
 
     case "subAgentEvent": {
-      const inner = event.inner as Record<string, unknown>;
+      const inner = event.inner;
       const innerType = inner.type as string | undefined;
       const subSessionId = event.subSessionId;
       const parentCallId = event.parentCallId;
@@ -575,7 +684,10 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
       const existing = state.subAgents[subSessionId];
       if (!existing) return state;
 
-      const updatedView = applyAgentEvent(existing, inner as { type: string; [k: string]: unknown });
+      const updatedView = applyAgentEvent(
+        existing,
+        inner as { type: string; [k: string]: unknown },
+      );
 
       // Track tool count
       let toolCount = existing.toolCount;
@@ -612,7 +724,10 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
           ...state.main,
           timeline: [
             ...state.main.timeline,
-            { kind: "skill", skill: { name: event.name, description: event.description, status: "loaded" } },
+            {
+              kind: "skill",
+              skill: { name: event.name, description: event.description, status: "loaded" },
+            },
           ],
         },
       };
@@ -624,7 +739,10 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
           ...state.main,
           timeline: [
             ...state.main.timeline,
-            { kind: "context", context: { files: event.files, skills: [], mcpServers: [], status: "discovered" } },
+            {
+              kind: "context",
+              context: { files: event.files, skills: [], mcpServers: [], status: "discovered" },
+            },
           ],
         },
       };
@@ -650,12 +768,15 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
 
 function appendMessageDelta(timeline: TimelineEntry[], delta: string): TimelineEntry[] {
   if (timeline.length > 0) {
-    const last = timeline[timeline.length - 1]!;
+    const last = timeline[timeline.length - 1];
     if (last.kind === "message" && last.message.role === "assistant") {
       // Mutate the last entry in place — safe because applyEvent already
       // created a new state object and this timeline is the working copy
       // within the batch reducer.
-      const updated = { kind: "message" as const, message: { ...last.message, content: last.message.content + delta } };
+      const updated = {
+        kind: "message" as const,
+        message: { ...last.message, content: last.message.content + delta },
+      };
       timeline[timeline.length - 1] = updated;
       return timeline;
     }

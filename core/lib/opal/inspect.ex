@@ -20,11 +20,12 @@ defmodule Opal.Inspect do
   """
   @spec watch() :: {:ok, pid()}
   def watch do
-    pid = spawn_link(fn ->
-      Opal.Events.subscribe_all()
-      IO.puts(IO.ANSI.magenta() <> "✦ Watching all opal events..." <> IO.ANSI.reset())
-      loop()
-    end)
+    pid =
+      spawn_link(fn ->
+        Opal.Events.subscribe_all()
+        IO.puts(IO.ANSI.magenta() <> "✦ Watching all opal events..." <> IO.ANSI.reset())
+        loop()
+      end)
 
     {:ok, pid}
   end
@@ -37,10 +38,13 @@ defmodule Opal.Inspect do
         {type, data} = format_event(event)
 
         color = event_color(type)
-        IO.puts("#{IO.ANSI.faint()}#{ts}#{IO.ANSI.reset()} " <>
-          "#{IO.ANSI.faint()}[#{short_sid}]#{IO.ANSI.reset()} " <>
-          "#{color}#{type}#{IO.ANSI.reset()}" <>
-          if(data != "", do: " #{data}", else: ""))
+
+        IO.puts(
+          "#{IO.ANSI.faint()}#{ts}#{IO.ANSI.reset()} " <>
+            "#{IO.ANSI.faint()}[#{short_sid}]#{IO.ANSI.reset()} " <>
+            "#{color}#{type}#{IO.ANSI.reset()}" <>
+            if(data != "", do: " #{data}", else: "")
+        )
 
         loop()
 
@@ -53,23 +57,48 @@ defmodule Opal.Inspect do
   defp format_event({:agent_abort}), do: {"agent_abort", ""}
   defp format_event({:agent_end, _msgs}), do: {"agent_end", ""}
   defp format_event({:agent_end, _msgs, usage}), do: {"agent_end", "tokens=#{inspect(usage)}"}
-  defp format_event({:usage_update, usage}), do: {"usage_update", "prompt=#{usage.prompt_tokens} total=#{usage.total_tokens} ctx=#{usage.context_window}"}
+
+  defp format_event({:usage_update, usage}),
+    do:
+      {"usage_update",
+       "prompt=#{usage.prompt_tokens} total=#{usage.total_tokens} ctx=#{usage.context_window}"}
+
   defp format_event({:status_update, msg}), do: {"status_update", "\"#{msg}\""}
   defp format_event({:message_start}), do: {"message_start", ""}
-  defp format_event({:message_delta, %{delta: d}}), do: {"message_delta", "\"#{String.slice(d, 0, 60)}\""}
+
+  defp format_event({:message_delta, %{delta: d}}),
+    do: {"message_delta", "\"#{String.slice(d, 0, 60)}\""}
+
   defp format_event({:thinking_start}), do: {"thinking_start", ""}
-  defp format_event({:thinking_delta, %{delta: d}}), do: {"thinking_delta", "\"#{String.slice(d, 0, 60)}\""}
-  defp format_event({:tool_execution_start, tool, _call_id, _args, meta}), do: {"tool_start", "#{tool} #{meta}"}
-  defp format_event({:tool_execution_start, tool, _args, meta}), do: {"tool_start", "#{tool} #{meta}"}
+
+  defp format_event({:thinking_delta, %{delta: d}}),
+    do: {"thinking_delta", "\"#{String.slice(d, 0, 60)}\""}
+
+  defp format_event({:tool_execution_start, tool, _call_id, _args, meta}),
+    do: {"tool_start", "#{tool} #{meta}"}
+
+  defp format_event({:tool_execution_start, tool, _args, meta}),
+    do: {"tool_start", "#{tool} #{meta}"}
+
   defp format_event({:tool_execution_start, tool, _args}), do: {"tool_start", "#{tool}"}
-  defp format_event({:tool_execution_end, tool, _call_id, {:ok, out}}), do: {"tool_end", "#{tool} ok #{String.slice(out || "", 0, 60)}"}
-  defp format_event({:tool_execution_end, tool, _call_id, {:error, e}}), do: {"tool_end", "#{tool} error #{inspect(e) |> String.slice(0, 60)}"}
-  defp format_event({:tool_execution_end, tool, {:ok, out}}), do: {"tool_end", "#{tool} ok #{String.slice(out || "", 0, 60)}"}
-  defp format_event({:tool_execution_end, tool, {:error, e}}), do: {"tool_end", "#{tool} error #{inspect(e) |> String.slice(0, 60)}"}
+
+  defp format_event({:tool_execution_end, tool, _call_id, {:ok, out}}),
+    do: {"tool_end", "#{tool} ok #{String.slice(out || "", 0, 60)}"}
+
+  defp format_event({:tool_execution_end, tool, _call_id, {:error, e}}),
+    do: {"tool_end", "#{tool} error #{inspect(e) |> String.slice(0, 60)}"}
+
+  defp format_event({:tool_execution_end, tool, {:ok, out}}),
+    do: {"tool_end", "#{tool} ok #{String.slice(out || "", 0, 60)}"}
+
+  defp format_event({:tool_execution_end, tool, {:error, e}}),
+    do: {"tool_end", "#{tool} error #{inspect(e) |> String.slice(0, 60)}"}
+
   defp format_event({:sub_agent_event, _call_id, sub_sid, inner}) do
     {inner_type, inner_data} = format_event(inner)
     {"sub_agent", "[#{String.slice(sub_sid, 0, 12)}] #{inner_type} #{inner_data}"}
   end
+
   defp format_event({:skill_loaded, name, _desc}), do: {"skill_loaded", name}
   defp format_event({:turn_end, _msg, _results}), do: {"turn_end", ""}
   defp format_event({:error, reason}), do: {"error", inspect(reason)}

@@ -54,6 +54,23 @@ nx run-many -t test
 nx run cli:escript
 ```
 
+### Verifying Your Work
+
+After completing any task, always run these checks before considering the work done:
+
+```bash
+# Lint — checks formatting + code quality for all projects
+pnpm lint
+
+# Fix — auto-fix formatting and lint issues
+pnpm format
+
+# Build — compile everything (includes codegen for CLI)
+pnpm build
+```
+
+These checks are enforced by pre-commit hooks (via Lefthook) and in CI. If `lint` fails, run `format` to auto-fix.
+
 ### Remote Debugging
 
 ```bash

@@ -19,7 +19,9 @@ export const Header: FC<HeaderProps> = ({ workingDir, nodeName }) => {
 
   return (
     <Box marginBottom={1} paddingX={1}>
-      <Text bold color="magenta">{left}</Text>
+      <Text bold color="magenta">
+        {left}
+      </Text>
       <Text dimColor> · </Text>
       <Text>{middle}</Text>
       <Text>{" ".repeat(pad)}</Text>

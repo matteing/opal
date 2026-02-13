@@ -21,11 +21,28 @@
     "lint": {
       "cache": true
     },
-    "typecheck": {
-      "cache": true
-    },
     "codegen": {
       "cache": true
+    }
+  },
+  "release": {
+    "projects": ["cli"],
+    "version": {
+      "conventionalCommits": true
+    },
+    "releaseTag": {
+      "pattern": "v{version}"
+    },
+    "git": {
+      "commit": true,
+      "tag": true,
+      "commitMessage": "chore(release): {version}"
+    },
+    "changelog": {
+      "workspaceChangelog": {
+        "file": false,
+        "createRelease": "github"
+      }
     }
   }
 }

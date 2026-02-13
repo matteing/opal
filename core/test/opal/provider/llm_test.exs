@@ -68,8 +68,15 @@ defmodule Opal.Provider.LLMTest do
 
   describe "parse_stream_event/1 — tool call events" do
     test "tool_call_start event" do
-      data = Jason.encode!(%{"_opal" => "tool_call_start", "call_id" => "call_123", "name" => "read_file"})
-      assert [{:tool_call_start, %{call_id: "call_123", name: "read_file"}}] = LLM.parse_stream_event(data)
+      data =
+        Jason.encode!(%{
+          "_opal" => "tool_call_start",
+          "call_id" => "call_123",
+          "name" => "read_file"
+        })
+
+      assert [{:tool_call_start, %{call_id: "call_123", name: "read_file"}}] =
+               LLM.parse_stream_event(data)
     end
 
     test "tool_call_delta event" do
@@ -78,12 +85,13 @@ defmodule Opal.Provider.LLMTest do
     end
 
     test "tool_call_done event with parsed arguments" do
-      data = Jason.encode!(%{
-        "_opal" => "tool_call_done",
-        "call_id" => "call_456",
-        "name" => "write_file",
-        "arguments" => %{"path" => "/tmp/out.txt", "content" => "hello"}
-      })
+      data =
+        Jason.encode!(%{
+          "_opal" => "tool_call_done",
+          "call_id" => "call_456",
+          "name" => "write_file",
+          "arguments" => %{"path" => "/tmp/out.txt", "content" => "hello"}
+        })
 
       assert [{:tool_call_done, result}] = LLM.parse_stream_event(data)
       assert result.call_id == "call_456"
@@ -100,13 +108,24 @@ defmodule Opal.Provider.LLMTest do
     end
 
     test "response_done with tool_calls stop reason" do
-      data = Jason.encode!(%{"_opal" => "response_done", "stop_reason" => "tool_calls", "usage" => %{}})
+      data =
+        Jason.encode!(%{
+          "_opal" => "response_done",
+          "stop_reason" => "tool_calls",
+          "usage" => %{}
+        })
+
       assert [{:response_done, result}] = LLM.parse_stream_event(data)
       assert result.stop_reason == :tool_calls
     end
 
     test "usage event" do
-      data = Jason.encode!(%{"_opal" => "usage", "usage" => %{"prompt_tokens" => 100, "completion_tokens" => 50}})
+      data =
+        Jason.encode!(%{
+          "_opal" => "usage",
+          "usage" => %{"prompt_tokens" => 100, "completion_tokens" => 50}
+        })
+
       assert [{:usage, usage}] = LLM.parse_stream_event(data)
       assert usage["prompt_tokens"] == 100
     end

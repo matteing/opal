@@ -28,9 +28,7 @@ export interface ThinkingIndicatorProps {
   label?: string;
 }
 
-const ThinkingIndicatorBase: FC<ThinkingIndicatorProps> = ({
-  label = "thinking…",
-}) => {
+const ThinkingIndicatorBase: FC<ThinkingIndicatorProps> = ({ label = "thinking…" }) => {
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {

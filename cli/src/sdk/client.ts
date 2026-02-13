@@ -117,9 +117,7 @@ export class OpalClient extends EventEmitter {
       this.closed = true;
       const stderr = stderrChunks.join("").trim();
       const detail = stderr ? `\n\nServer stderr:\n${stderr.slice(-2000)}` : "";
-      this.rejectAll(
-        new Error(`opal-server exited (code=${code}, signal=${signal})${detail}`),
-      );
+      this.rejectAll(new Error(`opal-server exited (code=${code}, signal=${signal})${detail}`));
       this.emit("exit", code, signal);
     });
   }
@@ -163,9 +161,7 @@ export class OpalClient extends EventEmitter {
   /**
    * Register a handler for raw notifications.
    */
-  onNotification(
-    handler: (method: string, params: Record<string, unknown>) => void,
-  ): void {
+  onNotification(handler: (method: string, params: Record<string, unknown>) => void): void {
     this.on("notification", handler);
   }
 
@@ -200,7 +196,7 @@ export class OpalClient extends EventEmitter {
     if (isResponse(msg)) {
       this.handleResponse(msg);
     } else if (isServerRequest(msg)) {
-      this.handleServerRequest(msg);
+      void this.handleServerRequest(msg);
     } else if (isNotification(msg)) {
       this.handleNotification(msg);
     }
@@ -212,9 +208,7 @@ export class OpalClient extends EventEmitter {
     this.pending.delete(msg.id);
 
     if (msg.error) {
-      pending.reject(
-        new Error(`RPC error ${msg.error.code}: ${msg.error.message}`),
-      );
+      pending.reject(new Error(`RPC error ${msg.error.code}: ${msg.error.message}`));
     } else {
       pending.resolve(snakeToCamel(msg.result));
     }
@@ -226,10 +220,8 @@ export class OpalClient extends EventEmitter {
 
     if (msg.method === "agent/event") {
       // Transform snake_case type to camelCase
-      const wireType = (msg.params as Record<string, unknown>).type as string;
-      const camelType = wireType.replace(/_([a-z])/g, (_, c: string) =>
-        c.toUpperCase(),
-      );
+      const wireType = msg.params.type as string;
+      const camelType = wireType.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
       const event = { ...params, type: camelType } as unknown as AgentEvent;
       this.emit("agent/event", event);
     }

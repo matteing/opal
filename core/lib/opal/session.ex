@@ -137,7 +137,10 @@ defmodule Opal.Session do
       :ok when current != nil ->
         if Keyword.get(opts, :summarize, false) do
           case Opal.Session.BranchSummary.summarize_abandoned(
-                 session, current, target_id, opts
+                 session,
+                 current,
+                 target_id,
+                 opts
                ) do
             {:ok, nil} -> :ok
             {:ok, summary_msg} -> append(session, summary_msg)
@@ -454,10 +457,11 @@ defmodule Opal.Session do
           :ets.insert(table, {msg.id, msg})
         end)
 
-        {:ok, %{
-          current_id: header["current_id"],
-          metadata: atomize_metadata(Map.get(header, "metadata", %{}))
-        }}
+        {:ok,
+         %{
+           current_id: header["current_id"],
+           metadata: atomize_metadata(Map.get(header, "metadata", %{}))
+         }}
 
       {:error, reason} ->
         {:error, reason}
@@ -475,9 +479,13 @@ defmodule Opal.Session do
 
     map =
       if msg.tool_calls && msg.tool_calls != [] do
-        Map.put(map, :tool_calls, Enum.map(msg.tool_calls, fn tc ->
-          %{call_id: tc.call_id, name: tc.name, arguments: tc.arguments}
-        end))
+        Map.put(
+          map,
+          :tool_calls,
+          Enum.map(msg.tool_calls, fn tc ->
+            %{call_id: tc.call_id, name: tc.name, arguments: tc.arguments}
+          end)
+        )
       else
         map
       end
@@ -493,7 +501,9 @@ defmodule Opal.Session do
   defp json_to_message(data) do
     tool_calls =
       case data["tool_calls"] do
-        nil -> nil
+        nil ->
+          nil
+
         list ->
           Enum.map(list, fn tc ->
             %{call_id: tc["call_id"], name: tc["name"], arguments: tc["arguments"]}
@@ -524,6 +534,7 @@ defmodule Opal.Session do
   defp atomize_metadata(map) when is_map(map) do
     Map.new(map, fn {k, v} -> {safe_to_atom(k), v} end)
   end
+
   defp atomize_metadata(_), do: %{}
 
   defp safe_to_atom(key) when is_binary(key) do

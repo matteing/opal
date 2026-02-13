@@ -113,7 +113,8 @@ defmodule Opal.MCP.IntegrationTest do
           working_dir: dir,
           tools: [],
           provider: NoopProvider,
-          config: Opal.Config.new(%{features: %{mcp: %{servers: explicit_servers, config_files: []}}})
+          config:
+            Opal.Config.new(%{features: %{mcp: %{servers: explicit_servers, config_files: []}}})
         )
 
       agent = Opal.SessionServer.agent(session_server)
@@ -156,7 +157,8 @@ defmodule Opal.MCP.IntegrationTest do
           working_dir: dir,
           tools: [],
           provider: NoopProvider,
-          config: Opal.Config.new(%{features: %{mcp: %{servers: explicit_servers, config_files: []}}})
+          config:
+            Opal.Config.new(%{features: %{mcp: %{servers: explicit_servers, config_files: []}}})
         )
 
       agent = Opal.SessionServer.agent(session_server)

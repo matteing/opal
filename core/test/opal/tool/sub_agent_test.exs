@@ -52,8 +52,11 @@ defmodule Opal.Tool.SubAgentTest do
     @impl true
     def convert_tools(tools), do: tools
 
-    defp do_parse(%{"type" => "response.output_item.added", "item" => %{"type" => "message"} = item}),
-      do: [{:text_start, %{item_id: item["id"]}}]
+    defp do_parse(%{
+           "type" => "response.output_item.added",
+           "item" => %{"type" => "message"} = item
+         }),
+         do: [{:text_start, %{item_id: item["id"]}}]
 
     defp do_parse(%{"type" => "response.output_text.delta", "delta" => delta}),
       do: [{:text_delta, delta}]
@@ -229,9 +232,10 @@ defmodule Opal.Tool.SubAgentTest do
     test "sub-agent does not receive the sub_agent tool" do
       %{pid: parent} = start_parent(tools: [EchoTool, SubAgentTool])
 
-      {:ok, sub} = Opal.SubAgent.spawn(parent, %{
-        tools: parent |> Agent.get_state() |> Map.get(:tools) |> Kernel.--([SubAgentTool])
-      })
+      {:ok, sub} =
+        Opal.SubAgent.spawn(parent, %{
+          tools: parent |> Agent.get_state() |> Map.get(:tools) |> Kernel.--([SubAgentTool])
+        })
 
       sub_state = Agent.get_state(sub)
       tool_names = Enum.map(sub_state.tools, & &1.name())
@@ -281,7 +285,8 @@ defmodule Opal.Tool.SubAgentTest do
       task = Task.async(fn -> SubAgentTool.execute(%{"prompt" => "Do work"}, context) end)
 
       # Should receive forwarded events tagged with :sub_agent_event
-      assert_receive {:opal_event, ^parent_sid, {:sub_agent_event, _parent_call_id, sub_sid, {:message_start}}},
+      assert_receive {:opal_event, ^parent_sid,
+                      {:sub_agent_event, _parent_call_id, sub_sid, {:message_start}}},
                      2000
 
       assert String.starts_with?(sub_sid, "sub-")

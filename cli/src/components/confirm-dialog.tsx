@@ -7,10 +7,7 @@ export interface ConfirmDialogProps {
   onResolve: (action: string) => void;
 }
 
-export const ConfirmDialog: FC<ConfirmDialogProps> = ({
-  request,
-  onResolve,
-}) => {
+export const ConfirmDialog: FC<ConfirmDialogProps> = ({ request, onResolve }) => {
   const [selected, setSelected] = React.useState(0);
 
   useInput((input, key) => {
@@ -19,7 +16,7 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
     } else if (key.rightArrow || key.downArrow) {
       setSelected((s) => Math.min(request.actions.length - 1, s + 1));
     } else if (key.return) {
-      onResolve(request.actions[selected]!);
+      onResolve(request.actions[selected]);
     } else if (input === "y") {
       const allow = request.actions.find((a) => a.includes("allow"));
       if (allow) onResolve(allow);
@@ -30,13 +27,7 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
   });
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor="magenta"
-      paddingX={2}
-      paddingY={1}
-    >
+    <Box flexDirection="column" borderStyle="round" borderColor="magenta" paddingX={2} paddingY={1}>
       <Text bold color="magenta">
         {request.title}
       </Text>
@@ -54,9 +45,7 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
           </Text>
         ))}
       </Box>
-      <Text dimColor>
-        ↑↓ navigate · enter select · y/n shortcut
-      </Text>
+      <Text dimColor>↑↓ navigate · enter select · y/n shortcut</Text>
     </Box>
   );
 };

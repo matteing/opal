@@ -10,7 +10,8 @@ defmodule Opal.Agent.Collector do
   Expects the caller to have already subscribed to events for the given session_id.
   Blocks until `:agent_end` is received or timeout.
   """
-  @spec collect_response(String.t(), String.t(), timeout()) :: {:ok, String.t()} | {:error, term()}
+  @spec collect_response(String.t(), String.t(), timeout()) ::
+          {:ok, String.t()} | {:error, term()}
   def collect_response(session_id, acc \\ "", timeout \\ 120_000) do
     receive do
       {:opal_event, ^session_id, {:message_delta, %{delta: delta}}} ->

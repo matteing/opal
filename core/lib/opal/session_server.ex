@@ -88,7 +88,11 @@ defmodule Opal.SessionServer do
   defp maybe_session_child(opts) do
     if Keyword.get(opts, :session) == true do
       session_id = Keyword.fetch!(opts, :session_id)
-      [{Opal.Session, session_id: session_id, name: {:via, Registry, {Opal.Registry, {:session, session_id}}}}]
+
+      [
+        {Opal.Session,
+         session_id: session_id, name: {:via, Registry, {Opal.Registry, {:session, session_id}}}}
+      ]
     else
       []
     end

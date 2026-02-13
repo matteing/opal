@@ -35,14 +35,16 @@ defmodule Opal.RPC.Handler do
     case Opal.start_session(opts) do
       {:ok, agent} ->
         info = Opal.get_info(agent)
-        {:ok, %{
-          session_id: info.session_id,
-          session_dir: info.session_dir,
-          context_files: info.context_files,
-          available_skills: Enum.map(info.available_skills, & &1.name),
-          mcp_servers: Enum.map(info.mcp_servers, & &1.name),
-          node_name: Atom.to_string(Node.self())
-        }}
+
+        {:ok,
+         %{
+           session_id: info.session_id,
+           session_dir: info.session_dir,
+           context_files: info.context_files,
+           available_skills: Enum.map(info.available_skills, & &1.name),
+           mcp_servers: Enum.map(info.mcp_servers, & &1.name),
+           node_name: Atom.to_string(Node.self())
+         }}
 
       {:error, reason} ->
         {:error, Opal.RPC.internal_error(), "Failed to start session", inspect(reason)}
@@ -121,8 +123,11 @@ defmodule Opal.RPC.Handler do
     case lookup_session(sid) do
       {:ok, session} ->
         case Opal.Session.branch(session, eid) do
-          :ok -> {:ok, %{}}
-          {:error, reason} -> {:error, Opal.RPC.internal_error(), "Branch failed", inspect(reason)}
+          :ok ->
+            {:ok, %{}}
+
+          {:error, reason} ->
+            {:error, Opal.RPC.internal_error(), "Branch failed", inspect(reason)}
         end
 
       {:error, reason} ->
@@ -140,18 +145,21 @@ defmodule Opal.RPC.Handler do
 
       case info.session do
         nil ->
-          {:error, Opal.RPC.internal_error(), "Session persistence not enabled — cannot compact", nil}
+          {:error, Opal.RPC.internal_error(), "Session persistence not enabled — cannot compact",
+           nil}
 
         session when is_pid(session) ->
-          keep_tokens = case params do
-            %{"keep_recent" => n} when is_integer(n) and n > 0 -> n
-            _ -> nil
-          end
+          keep_tokens =
+            case params do
+              %{"keep_recent" => n} when is_integer(n) and n > 0 -> n
+              _ -> nil
+            end
 
-          compact_opts = [
-            provider: info.provider,
-            model: info.model
-          ] ++ if(keep_tokens, do: [keep_recent_tokens: keep_tokens], else: [])
+          compact_opts =
+            [
+              provider: info.provider,
+              model: info.model
+            ] ++ if(keep_tokens, do: [keep_recent_tokens: keep_tokens], else: [])
 
           case Opal.Session.Compaction.compact(session, compact_opts) do
             :ok ->
@@ -184,6 +192,7 @@ defmodule Opal.RPC.Handler do
         %{"providers" => providers} when is_list(providers) ->
           Enum.flat_map(providers, fn p ->
             provider = String.to_atom(p)
+
             Opal.Models.list_provider(provider)
             |> Enum.map(fn m -> Map.put(m, :provider, p) end)
           end)
@@ -201,7 +210,9 @@ defmodule Opal.RPC.Handler do
       model = Opal.Model.coerce(model_id, thinking_level: thinking_level)
 
       Opal.set_model(agent, model)
-      {:ok, %{model: %{provider: model.provider, id: model.id, thinking_level: model.thinking_level}}}
+
+      {:ok,
+       %{model: %{provider: model.provider, id: model.id, thinking_level: model.thinking_level}}}
     end
   end
 
@@ -234,12 +245,13 @@ defmodule Opal.RPC.Handler do
   def handle("auth/login", _params) do
     case Opal.Auth.Copilot.start_device_flow() do
       {:ok, flow} ->
-        {:ok, %{
-          user_code: flow["user_code"],
-          verification_uri: flow["verification_uri"],
-          device_code: flow["device_code"],
-          interval: flow["interval"]
-        }}
+        {:ok,
+         %{
+           user_code: flow["user_code"],
+           verification_uri: flow["verification_uri"],
+           device_code: flow["device_code"],
+           interval: flow["interval"]
+         }}
 
       {:error, reason} ->
         {:error, Opal.RPC.internal_error(), "Login flow failed", inspect(reason)}
@@ -271,8 +283,11 @@ defmodule Opal.RPC.Handler do
 
   def handle("settings/save", %{"settings" => settings}) when is_map(settings) do
     case Opal.Settings.save(settings) do
-      :ok -> {:ok, %{settings: Opal.Settings.get_all()}}
-      {:error, reason} -> {:error, Opal.RPC.internal_error(), "Failed to save settings", inspect(reason)}
+      :ok ->
+        {:ok, %{settings: Opal.Settings.get_all()}}
+
+      {:error, reason} ->
+        {:error, Opal.RPC.internal_error(), "Failed to save settings", inspect(reason)}
     end
   end
 

@@ -44,7 +44,9 @@ defmodule Opal.Models do
 
   Only returns models with chat capability. Returns a list of `%{id, name, supports_thinking}` maps.
   """
-  @spec list_provider(atom()) :: [%{id: String.t(), name: String.t(), supports_thinking: boolean()}]
+  @spec list_provider(atom()) :: [
+          %{id: String.t(), name: String.t(), supports_thinking: boolean()}
+        ]
   def list_provider(provider) when is_atom(provider) do
     LLMDB.models()
     |> Enum.filter(fn m ->

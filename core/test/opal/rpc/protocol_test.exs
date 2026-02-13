@@ -184,6 +184,7 @@ defmodule Opal.RPC.ProtocolTest do
         case result do
           {:error, -32601, _, _} ->
             flunk("Method #{name} is declared in Protocol but not handled")
+
           _ ->
             :ok
         end

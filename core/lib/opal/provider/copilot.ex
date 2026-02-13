@@ -60,7 +60,12 @@ defmodule Opal.Provider.Copilot do
 
     body = if converted_tools != [], do: Map.put(body, :tools, converted_tools), else: body
 
-    case Req.post(req, url: "/chat/completions", json: body, into: :self, receive_timeout: 120_000) do
+    case Req.post(req,
+           url: "/chat/completions",
+           json: body,
+           into: :self,
+           receive_timeout: 120_000
+         ) do
       {:ok, resp} -> {:ok, resp}
       {:error, reason} -> {:error, reason}
     end

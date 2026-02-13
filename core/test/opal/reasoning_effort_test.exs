@@ -78,8 +78,9 @@ defmodule Opal.ReasoningEffortTest do
         msg = %Message{id: "s1", role: :system, content: "Be helpful."}
 
         [result] = Copilot.convert_messages(model, [msg])
+
         assert result.role == "developer",
-          "expected 'developer' role for thinking_level=#{level}, got '#{result.role}'"
+               "expected 'developer' role for thinking_level=#{level}, got '#{result.role}'"
       end
     end
 
@@ -95,74 +96,96 @@ defmodule Opal.ReasoningEffortTest do
 
     test "reasoning SSE events are parsed as thinking events" do
       # Responses API reasoning item
-      data = Jason.encode!(%{
-        "type" => "response.output_item.added",
-        "item" => %{"type" => "reasoning", "id" => "rs_001"}
-      })
+      data =
+        Jason.encode!(%{
+          "type" => "response.output_item.added",
+          "item" => %{"type" => "reasoning", "id" => "rs_001"}
+        })
+
       assert [{:thinking_start, %{item_id: "rs_001"}}] = Copilot.parse_stream_event(data)
     end
 
     test "reasoning summary delta is parsed as thinking_delta" do
-      data = Jason.encode!(%{
-        "type" => "response.reasoning_summary_text.delta",
-        "delta" => "Let me analyze this..."
-      })
+      data =
+        Jason.encode!(%{
+          "type" => "response.reasoning_summary_text.delta",
+          "delta" => "Let me analyze this..."
+        })
+
       assert [{:thinking_delta, "Let me analyze this..."}] = Copilot.parse_stream_event(data)
     end
 
     test "chat completions reasoning_content is parsed as thinking_delta" do
-      data = Jason.encode!(%{
-        "choices" => [%{
-          "delta" => %{"reasoning_content" => "Thinking step 1..."},
-          "finish_reason" => nil
-        }]
-      })
+      data =
+        Jason.encode!(%{
+          "choices" => [
+            %{
+              "delta" => %{"reasoning_content" => "Thinking step 1..."},
+              "finish_reason" => nil
+            }
+          ]
+        })
+
       events = Copilot.parse_stream_event(data)
       assert {:thinking_delta, "Thinking step 1..."} in events
     end
 
     test "empty reasoning_content is ignored" do
-      data = Jason.encode!(%{
-        "choices" => [%{
-          "delta" => %{"reasoning_content" => ""},
-          "finish_reason" => nil
-        }]
-      })
+      data =
+        Jason.encode!(%{
+          "choices" => [
+            %{
+              "delta" => %{"reasoning_content" => ""},
+              "finish_reason" => nil
+            }
+          ]
+        })
+
       events = Copilot.parse_stream_event(data)
       refute Enum.any?(events, fn {type, _} -> type == :thinking_delta end)
     end
 
     test "nil reasoning_content is ignored" do
-      data = Jason.encode!(%{
-        "choices" => [%{
-          "delta" => %{"content" => "Hello"},
-          "finish_reason" => nil
-        }]
-      })
+      data =
+        Jason.encode!(%{
+          "choices" => [
+            %{
+              "delta" => %{"content" => "Hello"},
+              "finish_reason" => nil
+            }
+          ]
+        })
+
       events = Copilot.parse_stream_event(data)
       refute Enum.any?(events, fn {type, _} -> type == :thinking_delta end)
     end
 
     test "text and reasoning can coexist in same delta" do
-      data = Jason.encode!(%{
-        "choices" => [%{
-          "delta" => %{
-            "content" => "answer text",
-            "reasoning_content" => "internal thought"
-          },
-          "finish_reason" => nil
-        }]
-      })
+      data =
+        Jason.encode!(%{
+          "choices" => [
+            %{
+              "delta" => %{
+                "content" => "answer text",
+                "reasoning_content" => "internal thought"
+              },
+              "finish_reason" => nil
+            }
+          ]
+        })
+
       events = Copilot.parse_stream_event(data)
       assert {:text_delta, "answer text"} in events
       assert {:thinking_delta, "internal thought"} in events
     end
 
     test "responses API reasoning item done does not crash" do
-      data = Jason.encode!(%{
-        "type" => "response.output_item.done",
-        "item" => %{"type" => "reasoning", "id" => "rs_001"}
-      })
+      data =
+        Jason.encode!(%{
+          "type" => "response.output_item.done",
+          "item" => %{"type" => "reasoning", "id" => "rs_001"}
+        })
+
       # Should return empty — not a function_call done
       assert [] = Copilot.parse_stream_event(data)
     end
@@ -207,7 +230,8 @@ defmodule Opal.ReasoningEffortTest do
 
       for model <- models do
         assert Map.has_key?(model, :thinking_levels),
-          "model #{model.id} missing thinking_levels field"
+               "model #{model.id} missing thinking_levels field"
+
         assert is_list(model.thinking_levels)
       end
     end
@@ -230,9 +254,10 @@ defmodule Opal.ReasoningEffortTest do
 
     test "thinking_levels never includes xhigh" do
       models = Opal.Models.list_copilot()
+
       for model <- models do
         refute "xhigh" in model.thinking_levels,
-          "model #{model.id} should not support xhigh"
+               "model #{model.id} should not support xhigh"
       end
     end
 

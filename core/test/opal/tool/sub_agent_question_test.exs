@@ -31,7 +31,8 @@ defmodule Opal.Tool.SubAgent.QuestionHandlerTest do
         end)
 
       # Parent receives the question
-      assert_receive {:sub_agent_question, from, ref, %{question: "Which env?", choices: ["dev", "prod"]}}
+      assert_receive {:sub_agent_question, from, ref,
+                      %{question: "Which env?", choices: ["dev", "prod"]}}
 
       # Parent replies
       send(from, {:sub_agent_answer, ref, "prod"})

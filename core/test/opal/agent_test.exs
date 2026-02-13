@@ -846,7 +846,8 @@ defmodule Opal.AgentTest do
                       {:tool_execution_start, "echo_tool", _call_id, %{"input" => "test"}, _meta}},
                      2000
 
-      assert_receive {:opal_event, ^sid, {:tool_execution_end, "echo_tool", _call_id2, {:ok, "Echo: test"}}},
+      assert_receive {:opal_event, ^sid,
+                      {:tool_execution_end, "echo_tool", _call_id2, {:ok, "Echo: test"}}},
                      2000
 
       # Second turn: text response
@@ -886,8 +887,14 @@ defmodule Opal.AgentTest do
       Agent.prompt(pid, "Use the tool")
 
       assert_receive {:opal_event, ^sid, {:agent_start}}, 1000
-      assert_receive {:opal_event, ^sid, {:tool_execution_start, "echo_tool", _call_id, _args, _meta}}, 2000
-      assert_receive {:opal_event, ^sid, {:tool_execution_end, "echo_tool", _call_id2, {:ok, _result}}}, 2000
+
+      assert_receive {:opal_event, ^sid,
+                      {:tool_execution_start, "echo_tool", _call_id, _args, _meta}},
+                     2000
+
+      assert_receive {:opal_event, ^sid,
+                      {:tool_execution_end, "echo_tool", _call_id2, {:ok, _result}}},
+                     2000
     end
   end
 
@@ -986,7 +993,8 @@ defmodule Opal.AgentTest do
       assert_receive {:opal_event, ^sid, {:agent_start}}, 1000
 
       assert_receive {:opal_event, ^sid,
-                      {:tool_execution_end, "failing_tool", _call_id, {:error, "Tool failed intentionally"}}},
+                      {:tool_execution_end, "failing_tool", _call_id,
+                       {:error, "Tool failed intentionally"}}},
                      2000
 
       # Agent continues and eventually completes
@@ -1172,7 +1180,8 @@ defmodule Opal.AgentTest do
 
       # The failing tool returns an error tuple
       assert_receive {:opal_event, ^sid,
-                      {:tool_execution_end, "failing_tool", _call_id, {:error, "Tool failed intentionally"}}},
+                      {:tool_execution_end, "failing_tool", _call_id,
+                       {:error, "Tool failed intentionally"}}},
                      3000
 
       # Agent completes despite mixed results
@@ -1240,6 +1249,7 @@ defmodule Opal.AgentTest do
       Agent.prompt(pid, "Run slow tool")
 
       assert_receive {:opal_event, ^sid, {:agent_start}}, 1000
+
       assert_receive {:opal_event, ^sid,
                       {:tool_execution_end, "timeout_tool", _call_id, {:ok, "eventually done"}}},
                      5000
@@ -1348,20 +1358,23 @@ defmodule Opal.AgentTest do
     test "context is injected into system prompt messages", %{ctx_dir: dir} do
       File.write!(Path.join(dir, "AGENTS.md"), "Project-specific instructions.")
 
-      %{pid: pid} = start_agent(
-        working_dir: dir,
-        system_prompt: "You are a test bot."
-      )
+      %{pid: pid} =
+        start_agent(
+          working_dir: dir,
+          system_prompt: "You are a test bot."
+        )
 
       Agent.prompt(pid, "Hello")
       state = wait_for_idle(pid)
 
       # The system message should contain both the original prompt and the context
-      system_msg = hd(state.messages) |> then(fn _ ->
-        # build_messages is private, but we can verify via the state
-        # The context string is in state.context
-        state.context
-      end)
+      system_msg =
+        hd(state.messages)
+        |> then(fn _ ->
+          # build_messages is private, but we can verify via the state
+          # The context string is in state.context
+          state.context
+        end)
 
       assert system_msg =~ "Project-specific instructions."
     end

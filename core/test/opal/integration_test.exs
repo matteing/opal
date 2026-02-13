@@ -161,10 +161,13 @@ defmodule Opal.IntegrationTest do
       assert_receive {:opal_event, ^sid, {:agent_start}}, 1000
 
       assert_receive {:opal_event, ^sid,
-                      {:tool_execution_start, "read_file", _call_id, %{"path" => "/tmp/test.txt"}, _meta}},
+                      {:tool_execution_start, "read_file", _call_id, %{"path" => "/tmp/test.txt"},
+                       _meta}},
                      2000
 
-      assert_receive {:opal_event, ^sid, {:tool_execution_end, "read_file", _call_id2, {:ok, _}}}, 2000
+      assert_receive {:opal_event, ^sid, {:tool_execution_end, "read_file", _call_id2, {:ok, _}}},
+                     2000
+
       assert_receive {:opal_event, ^sid, {:agent_end, messages, _usage}}, 2000
 
       roles = Enum.map(messages, & &1.role)
@@ -210,10 +213,13 @@ defmodule Opal.IntegrationTest do
       assert_receive {:opal_event, ^sid, {:agent_start}}, 1000
 
       assert_receive {:opal_event, ^sid,
-                      {:tool_execution_start, "read_file", _call_id, %{"path" => "/tmp/test.txt"}, _meta}},
+                      {:tool_execution_start, "read_file", _call_id, %{"path" => "/tmp/test.txt"},
+                       _meta}},
                      2000
 
-      assert_receive {:opal_event, ^sid, {:tool_execution_end, "read_file", _call_id2, {:ok, _}}}, 2000
+      assert_receive {:opal_event, ^sid, {:tool_execution_end, "read_file", _call_id2, {:ok, _}}},
+                     2000
+
       assert_receive {:opal_event, ^sid, {:agent_end, messages, _usage}}, 2000
 
       roles = Enum.map(messages, & &1.role)
@@ -267,8 +273,17 @@ defmodule Opal.IntegrationTest do
     # We need total chars > 128k for the cut point to exist.
     defp populate_session(session, count, chars_per_msg) do
       for i <- 1..count do
-        :ok = Opal.Session.append(session, Opal.Message.user("msg #{i} " <> String.duplicate("x", chars_per_msg)))
-        :ok = Opal.Session.append(session, Opal.Message.assistant("reply #{i} " <> String.duplicate("y", chars_per_msg)))
+        :ok =
+          Opal.Session.append(
+            session,
+            Opal.Message.user("msg #{i} " <> String.duplicate("x", chars_per_msg))
+          )
+
+        :ok =
+          Opal.Session.append(
+            session,
+            Opal.Message.assistant("reply #{i} " <> String.duplicate("y", chars_per_msg))
+          )
       end
     end
 
@@ -452,15 +467,16 @@ defmodule Opal.IntegrationTest do
       session_id = "no-session-#{System.unique_integer([:positive])}"
       {:ok, tool_sup} = Task.Supervisor.start_link()
 
-      {:ok, pid} = Agent.start_link(
-        session_id: session_id,
-        model: Model.new(:test, "test-model"),
-        working_dir: System.tmp_dir!(),
-        system_prompt: "",
-        tools: [],
-        provider: FixtureProvider,
-        tool_supervisor: tool_sup
-      )
+      {:ok, pid} =
+        Agent.start_link(
+          session_id: session_id,
+          model: Model.new(:test, "test-model"),
+          working_dir: System.tmp_dir!(),
+          system_prompt: "",
+          tools: [],
+          provider: FixtureProvider,
+          tool_supervisor: tool_sup
+        )
 
       Events.subscribe(session_id)
 

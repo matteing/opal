@@ -2,7 +2,13 @@ import React, { useState, type FC } from "react";
 import { Box, Text, useInput } from "ink";
 
 export interface ModelPickerProps {
-  models: { id: string; name: string; provider?: string; supportsThinking?: boolean; thinkingLevels?: string[] }[];
+  models: {
+    id: string;
+    name: string;
+    provider?: string;
+    supportsThinking?: boolean;
+    thinkingLevels?: string[];
+  }[];
   current: string;
   currentThinkingLevel?: string;
   onSelect: (modelId: string, thinkingLevel?: string) => void;
@@ -36,7 +42,7 @@ export const ModelPicker: FC<ModelPickerProps> = ({
       } else if (key.downArrow) {
         setSelected((s) => Math.min(models.length - 1, s + 1));
       } else if (key.return) {
-        const m = models[selected]!;
+        const m = models[selected];
         const spec = m.provider && m.provider !== "copilot" ? `${m.provider}:${m.id}` : m.id;
         const levels = m.thinkingLevels ?? [];
         if (m.supportsThinking && levels.length > 0) {
@@ -58,7 +64,7 @@ export const ModelPicker: FC<ModelPickerProps> = ({
       } else if (key.downArrow) {
         setThinkingSelected((s) => Math.min(thinkingLevels.length - 1, s + 1));
       } else if (key.return) {
-        onSelect(pendingModel!, thinkingLevels[thinkingSelected]!);
+        onSelect(pendingModel!, thinkingLevels[thinkingSelected]);
       } else if (key.escape || (input === "c" && key.ctrl)) {
         setPhase("model");
         setPendingModel(null);
@@ -68,13 +74,7 @@ export const ModelPicker: FC<ModelPickerProps> = ({
 
   if (phase === "thinking") {
     return (
-      <Box
-        flexDirection="column"
-        borderStyle="round"
-        borderColor="cyan"
-        paddingX={2}
-        paddingY={1}
-      >
+      <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1}>
         <Text bold color="cyan">
           Thinking level
         </Text>
@@ -85,10 +85,7 @@ export const ModelPicker: FC<ModelPickerProps> = ({
             const isSelected = i === thinkingSelected;
             return (
               <Text key={level}>
-                <Text color={isSelected ? "cyan" : undefined}>
-                  {isSelected ? "❯" : " "}
-                </Text>
-                {" "}
+                <Text color={isSelected ? "cyan" : undefined}>{isSelected ? "❯" : " "}</Text>{" "}
                 <Text bold={isSelected} color={isSelected ? "cyan" : undefined}>
                   {capitalize(level)}
                 </Text>
@@ -102,13 +99,7 @@ export const ModelPicker: FC<ModelPickerProps> = ({
   }
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor="magenta"
-      paddingX={2}
-      paddingY={1}
-    >
+    <Box flexDirection="column" borderStyle="round" borderColor="magenta" paddingX={2} paddingY={1}>
       <Text bold color="magenta">
         Select a model
       </Text>
@@ -117,18 +108,15 @@ export const ModelPicker: FC<ModelPickerProps> = ({
         {models.map((model, i) => {
           const isCurrent = model.id === current;
           const isSelected = i === selected;
-          const providerLabel = model.provider && model.provider !== "copilot" ? `${model.provider}/` : "";
+          const providerLabel =
+            model.provider && model.provider !== "copilot" ? `${model.provider}/` : "";
           return (
             <Text key={`${model.provider ?? ""}:${model.id}`}>
-              <Text color={isSelected ? "magenta" : undefined}>
-                {isSelected ? "❯" : " "}
-              </Text>
-              {" "}
+              <Text color={isSelected ? "magenta" : undefined}>{isSelected ? "❯" : " "}</Text>{" "}
               {providerLabel && <Text dimColor>{providerLabel}</Text>}
               <Text bold={isSelected} color={isSelected ? "magenta" : undefined}>
                 {model.id}
-              </Text>
-              {" "}
+              </Text>{" "}
               <Text dimColor>{model.name}</Text>
               {isCurrent && <Text color="green"> ●</Text>}
             </Text>

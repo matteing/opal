@@ -52,11 +52,13 @@ defmodule Opal.MCP.Client do
   Returns the registered process name for an MCP server's transport process.
   """
   @spec transport_name(atom() | String.t()) :: {:via, module(), {module(), term()}}
-  def transport_name(server_name), do: {:via, Registry, {Opal.Registry, {:mcp_transport, server_name}}}
+  def transport_name(server_name),
+    do: {:via, Registry, {Opal.Registry, {:mcp_transport, server_name}}}
 
   @doc false
   @spec supervisor_name(atom() | String.t()) :: {:via, module(), {module(), term()}}
-  def supervisor_name(server_name), do: {:via, Registry, {Opal.Registry, {:mcp_supervisor, server_name}}}
+  def supervisor_name(server_name),
+    do: {:via, Registry, {Opal.Registry, {:mcp_supervisor, server_name}}}
 
   @doc """
   Builds a child spec for a named MCP server connection.
@@ -139,7 +141,8 @@ defmodule Opal.MCP.Client do
   end
 
   @doc "Reads a resource from the named MCP server."
-  @spec server_read_resource(atom() | String.t(), String.t(), keyword()) :: {:ok, term()} | {:error, term()}
+  @spec server_read_resource(atom() | String.t(), String.t(), keyword()) ::
+          {:ok, term()} | {:error, term()}
   def server_read_resource(server_name, uri, opts \\ []) do
     Base.read_resource(client_name(server_name), uri, opts)
   end

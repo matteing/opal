@@ -34,9 +34,12 @@ defmodule Opal.Tool.SubAgent do
 
   @impl true
   def meta(%{"prompt" => prompt}) do
-    truncated = if String.length(prompt) > 60, do: String.slice(prompt, 0, 57) <> "...", else: prompt
+    truncated =
+      if String.length(prompt) > 60, do: String.slice(prompt, 0, 57) <> "...", else: prompt
+
     "Sub-agent: #{truncated}"
   end
+
   def meta(_), do: "Sub-agent"
 
   @impl true
@@ -99,14 +102,19 @@ defmodule Opal.Tool.SubAgent do
 
     question_handler = fn %{question: question, choices: choices} ->
       ref = make_ref()
-      send(parent_task, {:sub_agent_question, self(), ref, %{question: question, choices: choices}})
+
+      send(
+        parent_task,
+        {:sub_agent_question, self(), ref, %{question: question, choices: choices}}
+      )
 
       receive do
         {:sub_agent_answer, ^ref, answer} -> {:ok, answer}
       end
     end
 
-    overrides = build_overrides(args, parent_state) |> Map.put(:question_handler, question_handler)
+    overrides =
+      build_overrides(args, parent_state) |> Map.put(:question_handler, question_handler)
 
     case Opal.SubAgent.spawn_from_state(parent_state, overrides) do
       {:ok, sub_pid} ->
@@ -121,14 +129,19 @@ defmodule Opal.Tool.SubAgent do
         tool_names = Enum.map(sub_state.tools, & &1.name())
         label = truncate(args["prompt"] || "", 80)
 
-        forward_event(parent_session_id, sub_session_id, parent_call_id,
-          {:sub_agent_start, %{model: sub_state.model.id, label: label, tools: tool_names}})
+        forward_event(
+          parent_session_id,
+          sub_session_id,
+          parent_call_id,
+          {:sub_agent_start, %{model: sub_state.model.id, label: label, tools: tool_names}}
+        )
 
         # Send the prompt
         Opal.Agent.prompt(sub_pid, args["prompt"])
 
         # Collect response while forwarding events
-        result = collect_and_forward(sub_session_id, parent_session_id, parent_call_id, "", [], 120_000)
+        result =
+          collect_and_forward(sub_session_id, parent_session_id, parent_call_id, "", [], 120_000)
 
         # Clean up
         Opal.Events.unsubscribe(sub_session_id)
@@ -182,7 +195,14 @@ defmodule Opal.Tool.SubAgent do
   # Also handles :sub_agent_question messages from the sub-agent's AskParent
   # tool — escalates the question to the user via RPC and replies with the
   # answer, all within the same receive loop (no extra process needed).
-  defp collect_and_forward(sub_session_id, parent_session_id, parent_call_id, text, tool_log, timeout) do
+  defp collect_and_forward(
+         sub_session_id,
+         parent_session_id,
+         parent_call_id,
+         text,
+         tool_log,
+         timeout
+       ) do
     receive do
       # --- Sub-agent question escalation ---
       # The sub-agent's AskParent tool sends this when the LLM needs user input.
@@ -190,6 +210,7 @@ defmodule Opal.Tool.SubAgent do
       # sub-agent task → parent task → RPC → CLI → user → back the same way.
       {:sub_agent_question, from, ref, %{question: question, choices: choices}} ->
         args = %{"question" => question, "choices" => choices}
+
         answer =
           case Opal.Tool.Ask.ask_via_rpc(args, %{session_id: parent_session_id}) do
             {:ok, a} -> a
@@ -197,22 +218,54 @@ defmodule Opal.Tool.SubAgent do
           end
 
         send(from, {:sub_agent_answer, ref, answer})
-        collect_and_forward(sub_session_id, parent_session_id, parent_call_id, text, tool_log, timeout)
+
+        collect_and_forward(
+          sub_session_id,
+          parent_session_id,
+          parent_call_id,
+          text,
+          tool_log,
+          timeout
+        )
 
       # --- Event forwarding ---
       {:opal_event, ^sub_session_id, {:message_delta, %{delta: delta}} = event} ->
         forward_event(parent_session_id, sub_session_id, parent_call_id, event)
-        collect_and_forward(sub_session_id, parent_session_id, parent_call_id, text <> delta, tool_log, timeout)
+
+        collect_and_forward(
+          sub_session_id,
+          parent_session_id,
+          parent_call_id,
+          text <> delta,
+          tool_log,
+          timeout
+        )
 
       {:opal_event, ^sub_session_id, {:tool_execution_start, name, args, _meta} = event} ->
         forward_event(parent_session_id, sub_session_id, parent_call_id, event)
         entry = %{tool: name, arguments: args, result: nil}
-        collect_and_forward(sub_session_id, parent_session_id, parent_call_id, text, tool_log ++ [entry], timeout)
+
+        collect_and_forward(
+          sub_session_id,
+          parent_session_id,
+          parent_call_id,
+          text,
+          tool_log ++ [entry],
+          timeout
+        )
 
       {:opal_event, ^sub_session_id, {:tool_execution_end, name, result} = event} ->
         forward_event(parent_session_id, sub_session_id, parent_call_id, event)
         tool_log = update_last_tool_result(tool_log, name, result)
-        collect_and_forward(sub_session_id, parent_session_id, parent_call_id, text, tool_log, timeout)
+
+        collect_and_forward(
+          sub_session_id,
+          parent_session_id,
+          parent_call_id,
+          text,
+          tool_log,
+          timeout
+        )
 
       {:opal_event, ^sub_session_id, {:agent_end, _messages} = event} ->
         forward_event(parent_session_id, sub_session_id, parent_call_id, event)
@@ -227,7 +280,15 @@ defmodule Opal.Tool.SubAgent do
 
       {:opal_event, ^sub_session_id, event} ->
         forward_event(parent_session_id, sub_session_id, parent_call_id, event)
-        collect_and_forward(sub_session_id, parent_session_id, parent_call_id, text, tool_log, timeout)
+
+        collect_and_forward(
+          sub_session_id,
+          parent_session_id,
+          parent_call_id,
+          text,
+          tool_log,
+          timeout
+        )
     after
       timeout ->
         {:error, :timeout}
@@ -236,7 +297,10 @@ defmodule Opal.Tool.SubAgent do
 
   # Forwards a sub-agent event to the parent session, tagged with parent call_id and sub-agent ID.
   defp forward_event(parent_session_id, sub_session_id, parent_call_id, event) do
-    Opal.Events.broadcast(parent_session_id, {:sub_agent_event, parent_call_id, sub_session_id, event})
+    Opal.Events.broadcast(
+      parent_session_id,
+      {:sub_agent_event, parent_call_id, sub_session_id, event}
+    )
   end
 
   # Updates the result field of the last tool log entry matching the given name.

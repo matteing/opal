@@ -75,13 +75,13 @@ defmodule Opal.MixProject do
           Opal.RPC.Protocol,
           Opal.RPC.Stdio
         ],
-        "Providers": [
+        Providers: [
           Opal.Provider,
           Opal.Provider.Copilot,
           Opal.Provider.LLM,
           Opal.Auth.Copilot
         ],
-        "Tools": [
+        Tools: [
           Opal.Tool,
           Opal.Tool.Read,
           Opal.Tool.Write,
@@ -90,14 +90,14 @@ defmodule Opal.MixProject do
           Opal.Tool.SubAgent,
           Opal.Skill
         ],
-        "MCP": [
+        MCP: [
           Opal.MCP.Bridge,
           Opal.MCP.Client,
           Opal.MCP.Config,
           Opal.MCP.Resources,
           Opal.MCP.Supervisor
         ],
-        "Internals": [
+        Internals: [
           Opal.Application,
           Opal.Context,
           Opal.Message,

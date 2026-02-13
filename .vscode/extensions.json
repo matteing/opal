@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "JakeBecker.elixir-ls",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint"
+  ]
+}

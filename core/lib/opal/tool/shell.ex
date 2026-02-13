@@ -75,9 +75,12 @@ defmodule Opal.Tool.Shell do
 
   @impl true
   def meta(%{"command" => command}) do
-    truncated = if String.length(command) > 60, do: String.slice(command, 0, 57) <> "...", else: command
+    truncated =
+      if String.length(command) > 60, do: String.slice(command, 0, 57) <> "...", else: command
+
     "Run `#{truncated}`"
   end
+
   def meta(_), do: "Run command"
 
   @impl true

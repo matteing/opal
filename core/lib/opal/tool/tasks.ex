@@ -84,12 +84,19 @@ defmodule Opal.Tool.Tasks do
         },
         "group_name" => %{"type" => "string", "description" => "Group/category name."},
         "tags" => %{"type" => "string", "description" => "Comma-separated tags."},
-        "due" => %{"type" => "string", "description" => "Due date in ISO 8601 format (YYYY-MM-DD)."},
+        "due" => %{
+          "type" => "string",
+          "description" => "Due date in ISO 8601 format (YYYY-MM-DD)."
+        },
         "notes" => %{"type" => "string", "description" => "Additional notes."},
-        "blocked_by" => %{"type" => "string", "description" => "IDs of blocking tasks (comma-separated)."},
+        "blocked_by" => %{
+          "type" => "string",
+          "description" => "IDs of blocking tasks (comma-separated)."
+        },
         "ops" => %{
           "type" => "array",
-          "description" => "Array of operations for batch action. Each element is an object with the same fields as a single action.",
+          "description" =>
+            "Array of operations for batch action. Each element is an object with the same fields as a single action.",
           "items" => %{"type" => "object"}
         }
       },
@@ -102,9 +109,15 @@ defmodule Opal.Tool.Tasks do
   def execute(%{"action" => "list"} = params, %{working_dir: wd}), do: run_list(wd, params)
   def execute(%{"action" => "update"} = params, %{working_dir: wd}), do: run_update(wd, params)
   def execute(%{"action" => "delete"} = params, %{working_dir: wd}), do: run_delete(wd, params)
-  def execute(%{"action" => "batch", "ops" => ops}, %{working_dir: wd}) when is_list(ops), do: run_batch(wd, ops)
+
+  def execute(%{"action" => "batch", "ops" => ops}, %{working_dir: wd}) when is_list(ops),
+    do: run_batch(wd, ops)
+
   def execute(%{"action" => "batch"}, _), do: {:error, "Batch requires an 'ops' array."}
-  def execute(%{"action" => _}, _), do: {:error, "Unknown action. Use: insert, list, update, delete, batch."}
+
+  def execute(%{"action" => _}, _),
+    do: {:error, "Unknown action. Use: insert, list, update, delete, batch."}
+
   def execute(_, _), do: {:error, "Missing required parameter: action"}
 
   @doc """
@@ -170,12 +183,21 @@ defmodule Opal.Tool.Tasks do
     cfg = Opal.Config.new()
     dir = Path.join(Opal.Config.data_dir(cfg), "tasks")
     File.mkdir_p!(dir)
-    hash = :crypto.hash(:sha256, working_dir) |> Base.url_encode64(padding: false) |> binary_part(0, 12)
+
+    hash =
+      :crypto.hash(:sha256, working_dir)
+      |> Base.url_encode64(padding: false)
+      |> binary_part(0, 12)
+
     Path.join(dir, "#{hash}.dets") |> String.to_charlist()
   end
 
   defp table_name(working_dir) do
-    hash = :crypto.hash(:sha256, working_dir) |> Base.url_encode64(padding: false) |> binary_part(0, 12)
+    hash =
+      :crypto.hash(:sha256, working_dir)
+      |> Base.url_encode64(padding: false)
+      |> binary_part(0, 12)
+
     String.to_atom("opal_tasks_#{hash}")
   end
 
@@ -271,14 +293,22 @@ defmodule Opal.Tool.Tasks do
 
   defp apply_view(tasks, view) do
     case Map.get(@views, view) do
-      nil -> tasks
+      nil ->
+        tasks
+
       :high_priority ->
-        Enum.filter(tasks, &(&1.priority in ["high", "critical"] and &1.status in ["open", "in_progress"]))
+        Enum.filter(
+          tasks,
+          &(&1.priority in ["high", "critical"] and &1.status in ["open", "in_progress"])
+        )
+
       :overdue ->
         today = Date.utc_today() |> Date.to_iso8601()
+
         Enum.filter(tasks, fn t ->
           t.due != nil and t.due != "" and t.due < today and t.status in ["open", "in_progress"]
         end)
+
       filters when is_map(filters) ->
         apply_filters(tasks, filters)
     end
@@ -288,6 +318,7 @@ defmodule Opal.Tool.Tasks do
     Enum.filter(tasks, fn task ->
       Enum.all?(@settable_fields, fn field ->
         key = to_string(field)
+
         case Map.get(params, key) do
           nil -> true
           val -> to_string(Map.get(task, field, "")) == val
@@ -304,7 +335,9 @@ defmodule Opal.Tool.Tasks do
 
   defp do_update(table, params) do
     case params["id"] do
-      nil -> {:error, "Update requires an 'id' field."}
+      nil ->
+        {:error, "Update requires an 'id' field."}
+
       id ->
         id = if is_binary(id), do: String.to_integer(id), else: id
 
@@ -313,6 +346,7 @@ defmodule Opal.Tool.Tasks do
             updated =
               Enum.reduce(@settable_fields, task, fn field, acc ->
                 key = to_string(field)
+
                 case Map.get(params, key) do
                   nil -> acc
                   val -> Map.put(acc, field, val)
@@ -337,7 +371,9 @@ defmodule Opal.Tool.Tasks do
 
   defp do_delete(table, params) do
     case params["id"] do
-      nil -> {:error, "Delete requires an 'id' field."}
+      nil ->
+        {:error, "Delete requires an 'id' field."}
+
       id ->
         id = if is_binary(id), do: String.to_integer(id), else: id
 

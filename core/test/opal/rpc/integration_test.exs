@@ -24,10 +24,11 @@ defmodule Opal.RPC.IntegrationTest do
     def stream(_model, messages, _tools, _opts \\ []) do
       fixture_name = :persistent_term.get({__MODULE__, :fixture}, "responses_api_text.json")
 
-      has_tool_result = Enum.any?(messages, fn
-        %Opal.Message{role: :tool_result} -> true
-        _ -> false
-      end)
+      has_tool_result =
+        Enum.any?(messages, fn
+          %Opal.Message{role: :tool_result} -> true
+          _ -> false
+        end)
 
       actual_fixture =
         if has_tool_result do
@@ -56,11 +57,13 @@ defmodule Opal.RPC.IntegrationTest do
     @impl true
     def description, do: "Read a file"
     @impl true
-    def parameters, do: %{
-      "type" => "object",
-      "properties" => %{"path" => %{"type" => "string"}},
-      "required" => ["path"]
-    }
+    def parameters,
+      do: %{
+        "type" => "object",
+        "properties" => %{"path" => %{"type" => "string"}},
+        "required" => ["path"]
+      }
+
     @impl true
     def execute(%{"path" => path}, _ctx), do: {:ok, "Contents of #{path}"}
   end
@@ -72,7 +75,13 @@ defmodule Opal.RPC.IntegrationTest do
   defmodule TestTransport do
     use GenServer
 
-    defstruct [:test_pid, :buffer, pending_requests: %{}, next_server_id: 1, subscriptions: MapSet.new()]
+    defstruct [
+      :test_pid,
+      :buffer,
+      pending_requests: %{},
+      next_server_id: 1,
+      subscriptions: MapSet.new()
+    ]
 
     def start_link(test_pid) do
       GenServer.start_link(__MODULE__, test_pid)
@@ -107,7 +116,12 @@ defmodule Opal.RPC.IntegrationTest do
     def handle_info({:opal_event, session_id, event}, state) do
       {type, data} = serialize_event(event)
       params = Map.merge(%{session_id: session_id, type: type}, data)
-      write_to_client(state.test_pid, RPC.encode_notification(Protocol.notification_method(), params))
+
+      write_to_client(
+        state.test_pid,
+        RPC.encode_notification(Protocol.notification_method(), params)
+      )
+
       {:noreply, state}
     end
 
@@ -140,7 +154,11 @@ defmodule Opal.RPC.IntegrationTest do
           state
 
         {:error, :invalid_request} ->
-          write_to_client(state.test_pid, RPC.encode_error(nil, RPC.invalid_request(), "Invalid request"))
+          write_to_client(
+            state.test_pid,
+            RPC.encode_error(nil, RPC.invalid_request(), "Invalid request")
+          )
+
           state
       end
     end
@@ -149,6 +167,7 @@ defmodule Opal.RPC.IntegrationTest do
       case Opal.RPC.Handler.handle(method, params) do
         {:ok, result} ->
           write_to_client(state.test_pid, RPC.encode_response(id, result))
+
           if method == "session/start" do
             subscribe_to_session(result.session_id, state)
           else
@@ -166,6 +185,7 @@ defmodule Opal.RPC.IntegrationTest do
         {from, pending} when from != nil ->
           GenServer.reply(from, {:ok, result})
           %{state | pending_requests: pending}
+
         {nil, _} ->
           state
       end
@@ -187,11 +207,25 @@ defmodule Opal.RPC.IntegrationTest do
     defp serialize_event({:message_delta, %{delta: d}}), do: {"message_delta", %{delta: d}}
     defp serialize_event({:thinking_start}), do: {"thinking_start", %{}}
     defp serialize_event({:thinking_delta, %{delta: d}}), do: {"thinking_delta", %{delta: d}}
-    defp serialize_event({:tool_execution_start, tool, call_id, args, meta}), do: {"tool_execution_start", %{tool: tool, call_id: call_id, args: args, meta: meta}}
-    defp serialize_event({:tool_execution_start, tool, args, meta}), do: {"tool_execution_start", %{tool: tool, call_id: "", args: args, meta: meta}}
-    defp serialize_event({:tool_execution_start, tool, args}), do: {"tool_execution_start", %{tool: tool, call_id: "", args: args, meta: tool}}
-    defp serialize_event({:tool_execution_end, tool, call_id, result}), do: {"tool_execution_end", %{tool: tool, call_id: call_id, result: serialize_tool_result(result)}}
-    defp serialize_event({:tool_execution_end, tool, result}), do: {"tool_execution_end", %{tool: tool, call_id: "", result: serialize_tool_result(result)}}
+
+    defp serialize_event({:tool_execution_start, tool, call_id, args, meta}),
+      do: {"tool_execution_start", %{tool: tool, call_id: call_id, args: args, meta: meta}}
+
+    defp serialize_event({:tool_execution_start, tool, args, meta}),
+      do: {"tool_execution_start", %{tool: tool, call_id: "", args: args, meta: meta}}
+
+    defp serialize_event({:tool_execution_start, tool, args}),
+      do: {"tool_execution_start", %{tool: tool, call_id: "", args: args, meta: tool}}
+
+    defp serialize_event({:tool_execution_end, tool, call_id, result}),
+      do:
+        {"tool_execution_end",
+         %{tool: tool, call_id: call_id, result: serialize_tool_result(result)}}
+
+    defp serialize_event({:tool_execution_end, tool, result}),
+      do:
+        {"tool_execution_end", %{tool: tool, call_id: "", result: serialize_tool_result(result)}}
+
     defp serialize_event({:turn_end, msg, _}), do: {"turn_end", %{message: serialize_msg(msg)}}
     defp serialize_event({:agent_end, _msgs}), do: {"agent_end", %{}}
     defp serialize_event({:agent_end, _msgs, _usage}), do: {"agent_end", %{}}
@@ -246,6 +280,7 @@ defmodule Opal.RPC.IntegrationTest do
     receive do
       {:rpc_out, json} ->
         msg = Jason.decode!(json)
+
         if Map.has_key?(msg, "id") do
           msg
         else
@@ -264,7 +299,8 @@ defmodule Opal.RPC.IntegrationTest do
         acc = acc ++ [decoded]
         if condition.(decoded), do: acc, else: collect_until(condition, acc, timeout)
     after
-      timeout -> flunk("Timeout collecting messages. Got #{length(acc)} so far: #{inspect(acc, limit: 3)}")
+      timeout ->
+        flunk("Timeout collecting messages. Got #{length(acc)} so far: #{inspect(acc, limit: 3)}")
     end
   end
 
@@ -370,6 +406,7 @@ defmodule Opal.RPC.IntegrationTest do
   describe "session/start" do
     test "starts a session and returns session_id" do
       server = start_server()
+
       send_request(server, 1, "session/start", %{
         "system_prompt" => "Test",
         "working_dir" => System.tmp_dir!()
@@ -490,6 +527,7 @@ defmodule Opal.RPC.IntegrationTest do
         "system_prompt" => "Test assistant",
         "working_dir" => System.tmp_dir!()
       })
+
       start_resp = recv_raw()
       session_id = start_resp["result"]["session_id"]
       assert is_binary(session_id)
@@ -499,14 +537,16 @@ defmodule Opal.RPC.IntegrationTest do
         "session_id" => session_id,
         "text" => "Hello"
       })
+
       prompt_resp = recv_raw()
       assert prompt_resp["id"] == 2
       assert prompt_resp["result"] == %{}
 
       # 3. Collect streaming notifications until agent_end
-      events = collect_until(fn msg ->
-        msg["method"] == "agent/event" and msg["params"]["type"] == "agent_end"
-      end)
+      events =
+        collect_until(fn msg ->
+          msg["method"] == "agent/event" and msg["params"]["type"] == "agent_end"
+        end)
 
       # Verify we got the expected event sequence
       event_types = Enum.map(events, fn msg -> msg["params"]["type"] end)
@@ -520,9 +560,11 @@ defmodule Opal.RPC.IntegrationTest do
       end
 
       # Verify deltas contain text
-      deltas = events
+      deltas =
+        events
         |> Enum.filter(fn e -> e["params"]["type"] == "message_delta" end)
         |> Enum.map(fn e -> e["params"]["delta"] end)
+
       assert length(deltas) > 0
       full_text = Enum.join(deltas)
       assert full_text =~ "Hello"
@@ -563,6 +605,7 @@ defmodule Opal.RPC.IntegrationTest do
         "system_prompt" => "You have a read_file tool.",
         "working_dir" => System.tmp_dir!()
       })
+
       start_resp = recv_raw()
       session_id = start_resp["result"]["session_id"]
 
@@ -571,13 +614,15 @@ defmodule Opal.RPC.IntegrationTest do
         "session_id" => session_id,
         "text" => "Read a file"
       })
+
       prompt_resp = recv_raw()
       assert prompt_resp["result"] == %{}
 
       # 3. Collect all events until agent_end
-      events = collect_until(fn msg ->
-        msg["method"] == "agent/event" and msg["params"]["type"] == "agent_end"
-      end)
+      events =
+        collect_until(fn msg ->
+          msg["method"] == "agent/event" and msg["params"]["type"] == "agent_end"
+        end)
 
       event_types = Enum.map(events, fn msg -> msg["params"]["type"] end)
 
@@ -611,6 +656,7 @@ defmodule Opal.RPC.IntegrationTest do
       send_request(server, 1, "session/start", %{
         "working_dir" => System.tmp_dir!()
       })
+
       start_resp = recv_raw()
       session_id = start_resp["result"]["session_id"]
 
@@ -619,6 +665,7 @@ defmodule Opal.RPC.IntegrationTest do
         "session_id" => session_id,
         "text" => "Hello"
       })
+
       _prompt_resp = recv_raw()
 
       # Send abort — agent may have already finished (fixture is very fast)
@@ -650,14 +697,15 @@ defmodule Opal.RPC.IntegrationTest do
       server = start_server()
 
       # Spawn a task that calls request_client (it will block waiting for response)
-      task = Task.async(fn ->
-        TestTransport.request_client(server, "client/confirm", %{
-          session_id: "test-123",
-          title: "Delete file?",
-          message: "Are you sure?",
-          actions: ["allow", "deny"]
-        })
-      end)
+      task =
+        Task.async(fn ->
+          TestTransport.request_client(server, "client/confirm", %{
+            session_id: "test-123",
+            title: "Delete file?",
+            message: "Are you sure?",
+            actions: ["allow", "deny"]
+          })
+        end)
 
       # Receive the server→client request
       msg = recv_raw()
@@ -715,6 +763,7 @@ defmodule Opal.RPC.IntegrationTest do
       send_request(server, 1, "session/start", %{
         "working_dir" => System.tmp_dir!()
       })
+
       session_id = recv_raw()["result"]["session_id"]
 
       # First prompt
@@ -722,7 +771,9 @@ defmodule Opal.RPC.IntegrationTest do
         "session_id" => session_id,
         "text" => "First"
       })
-      recv_raw() # prompt response
+
+      # prompt response
+      recv_raw()
 
       collect_until(fn msg ->
         msg["method"] == "agent/event" and msg["params"]["type"] == "agent_end"
@@ -739,7 +790,9 @@ defmodule Opal.RPC.IntegrationTest do
         "session_id" => session_id,
         "text" => "Second"
       })
-      recv_raw() # prompt response
+
+      # prompt response
+      recv_raw()
 
       collect_until(fn msg ->
         msg["method"] == "agent/event" and msg["params"]["type"] == "agent_end"
@@ -773,8 +826,10 @@ defmodule Opal.RPC.IntegrationTest do
         # Must have either result or error — never both, never neither
         has_result = Map.has_key?(msg, "result")
         has_error = Map.has_key?(msg, "error")
+
         assert has_result or has_error,
                "Method #{method} response has neither result nor error: #{inspect(msg)}"
+
         refute has_result and has_error,
                "Method #{method} response has both result and error"
 
@@ -796,11 +851,14 @@ defmodule Opal.RPC.IntegrationTest do
         "session_id" => session_id,
         "text" => "Hello"
       })
-      recv_raw() # prompt response
 
-      events = collect_until(fn msg ->
-        msg["method"] == "agent/event" and msg["params"]["type"] == "agent_end"
-      end)
+      # prompt response
+      recv_raw()
+
+      events =
+        collect_until(fn msg ->
+          msg["method"] == "agent/event" and msg["params"]["type"] == "agent_end"
+        end)
 
       for event <- events do
         assert event["method"] == Protocol.notification_method()
@@ -819,6 +877,7 @@ defmodule Opal.RPC.IntegrationTest do
   describe "session/branch" do
     test "returns error without session process" do
       server = start_server()
+
       send_request(server, 1, "session/branch", %{
         "session_id" => "nonexistent",
         "entry_id" => "msg-1"
@@ -857,8 +916,10 @@ defmodule Opal.RPC.IntegrationTest do
       {_, pid, :supervisor, _} when is_pid(pid) ->
         try do
           agent = Opal.SessionServer.agent(pid)
+
           if agent && Process.alive?(agent) do
             state = Opal.Agent.get_state(agent)
+
             if state.session_id == session_id do
               DynamicSupervisor.terminate_child(Opal.SessionSupervisor, pid)
             end
@@ -866,7 +927,9 @@ defmodule Opal.RPC.IntegrationTest do
         catch
           _, _ -> :ok
         end
-      _ -> :ok
+
+      _ ->
+        :ok
     end)
   end
 end

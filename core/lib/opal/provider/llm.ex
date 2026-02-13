@@ -44,7 +44,9 @@ defmodule Opal.Provider.LLM do
       [tools: req_tools]
       |> maybe_add_thinking(model)
 
-    Logger.debug("ReqLLM stream start model=#{model_spec} messages=#{length(messages)} tools=#{length(tools)}")
+    Logger.debug(
+      "ReqLLM stream start model=#{model_spec} messages=#{length(messages)} tools=#{length(tools)}"
+    )
 
     case ReqLLM.stream_text(model_spec, context, stream_opts) do
       {:ok, stream_response} ->
@@ -134,7 +136,11 @@ defmodule Opal.Provider.LLM do
     {events, started, Map.put(tc_state, :thinking_started, true)}
   end
 
-  defp chunk_to_events(%{type: :tool_call, name: name, arguments: args, metadata: meta}, started, tc_state) do
+  defp chunk_to_events(
+         %{type: :tool_call, name: name, arguments: args, metadata: meta},
+         started,
+         tc_state
+       ) do
     call_id = Map.get(meta, :id) || Map.get(meta, :call_id) || generate_call_id()
 
     events = [
@@ -215,10 +221,19 @@ defmodule Opal.Provider.LLM do
           %{"_opal" => "tool_call_delta", "text" => text}
 
         {:tool_call_done, info} ->
-          %{"_opal" => "tool_call_done", "call_id" => info.call_id, "name" => info.name, "arguments" => info.arguments}
+          %{
+            "_opal" => "tool_call_done",
+            "call_id" => info.call_id,
+            "name" => info.name,
+            "arguments" => info.arguments
+          }
 
         {:response_done, info} ->
-          %{"_opal" => "response_done", "stop_reason" => to_string(info.stop_reason), "usage" => info.usage}
+          %{
+            "_opal" => "response_done",
+            "stop_reason" => to_string(info.stop_reason),
+            "usage" => info.usage
+          }
 
         {:usage, usage} ->
           %{"_opal" => "usage", "usage" => usage}
@@ -265,8 +280,12 @@ defmodule Opal.Provider.LLM do
   defp decode_opal_event("tool_call_delta", %{"text" => text}),
     do: [{:tool_call_delta, text}]
 
-  defp decode_opal_event("tool_call_done", %{"call_id" => call_id, "name" => name, "arguments" => args}),
-    do: [{:tool_call_done, %{call_id: call_id, name: name, arguments: args}}]
+  defp decode_opal_event("tool_call_done", %{
+         "call_id" => call_id,
+         "name" => name,
+         "arguments" => args
+       }),
+       do: [{:tool_call_done, %{call_id: call_id, name: name, arguments: args}}]
 
   defp decode_opal_event("response_done", %{"stop_reason" => reason, "usage" => usage}) do
     stop_reason = if reason == "tool_calls", do: :tool_calls, else: :stop
@@ -304,11 +323,20 @@ defmodule Opal.Provider.LLM do
     # need the wire format. Return a passthrough representation.
     Enum.map(messages, fn msg ->
       case msg do
-        %Opal.Message{role: :system, content: c} -> %{role: "system", content: c}
-        %Opal.Message{role: :user, content: c} -> %{role: "user", content: c}
-        %Opal.Message{role: :assistant, content: c} -> %{role: "assistant", content: c || ""}
-        %Opal.Message{role: :tool_result, call_id: id, content: c} -> %{role: "tool", tool_call_id: id, content: c || ""}
-        _ -> %{}
+        %Opal.Message{role: :system, content: c} ->
+          %{role: "system", content: c}
+
+        %Opal.Message{role: :user, content: c} ->
+          %{role: "user", content: c}
+
+        %Opal.Message{role: :assistant, content: c} ->
+          %{role: "assistant", content: c || ""}
+
+        %Opal.Message{role: :tool_result, call_id: id, content: c} ->
+          %{role: "tool", tool_call_id: id, content: c || ""}
+
+        _ ->
+          %{}
       end
     end)
   end
@@ -379,6 +407,7 @@ defmodule Opal.Provider.LLM do
   end
 
   defp maybe_add_thinking(opts, %{thinking_level: :off}), do: opts
+
   defp maybe_add_thinking(opts, %{thinking_level: level}) do
     Keyword.put(opts, :reasoning_effort, level)
   end

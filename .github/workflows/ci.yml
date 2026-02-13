@@ -81,8 +81,8 @@ jobs:
       - name: Codegen check
         run: pnpm nx run cli:codegen:check
 
-      - name: Typecheck
-        run: pnpm nx run cli:typecheck
+      - name: Lint
+        run: pnpm nx run cli:lint
 
       - name: Build
         run: pnpm nx run cli:build

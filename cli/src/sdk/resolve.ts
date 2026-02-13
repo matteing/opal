@@ -61,18 +61,38 @@ export function resolveServer(): ServerResolution {
   if (existsSync(coreMix)) {
     return {
       command: "elixir",
-      args: ["--sname", "opal", "--cookie", "opal", "--erl", "-noinput", "-S", "mix", "run", "--no-halt"],
+      args: [
+        "--sname",
+        "opal",
+        "--cookie",
+        "opal",
+        "--erl",
+        "-noinput",
+        "-S",
+        "mix",
+        "run",
+        "--no-halt",
+      ],
       cwd: coreDir,
     };
   }
 
   const tried = [
     `  1. opal-server in PATH`,
-    name ? `  2. ${join(resolve(fileURLToPath(import.meta.url), "../../releases"), name)}` : `  2. (unsupported platform: ${key})`,
+    name
+      ? `  2. ${join(resolve(fileURLToPath(import.meta.url), "../../releases"), name)}`
+      : `  2. (unsupported platform: ${key})`,
     `  3. ${coreMix} (monorepo dev mode)`,
   ];
 
   throw new Error(
-    [`opal-server not found.`, ``, `Tried:`, ...tried, ``, `Install opal-server or place a binary in the releases/ directory.`].join("\n"),
+    [
+      `opal-server not found.`,
+      ``,
+      `Tried:`,
+      ...tried,
+      ``,
+      `Install opal-server or place a binary in the releases/ directory.`,
+    ].join("\n"),
   );
 }

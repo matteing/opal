@@ -89,7 +89,9 @@ defmodule Opal.RPCTest do
 
     test "decodes an error response" do
       json = ~s({"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Not found"}})
-      assert {:error_response, 1, %{"code" => -32601, "message" => "Not found"}} = RPC.decode(json)
+
+      assert {:error_response, 1, %{"code" => -32601, "message" => "Not found"}} =
+               RPC.decode(json)
     end
 
     test "decodes a notification" do
@@ -123,12 +125,16 @@ defmodule Opal.RPCTest do
 
     test "notification roundtrips" do
       json = RPC.encode_notification("agent/event", %{type: "delta", delta: "hi"})
-      assert {:notification, "agent/event", %{"type" => "delta", "delta" => "hi"}} = RPC.decode(json)
+
+      assert {:notification, "agent/event", %{"type" => "delta", "delta" => "hi"}} =
+               RPC.decode(json)
     end
 
     test "error response roundtrips" do
       json = RPC.encode_error(7, -32600, "Bad request")
-      assert {:error_response, 7, %{"code" => -32600, "message" => "Bad request"}} = RPC.decode(json)
+
+      assert {:error_response, 7, %{"code" => -32600, "message" => "Bad request"}} =
+               RPC.decode(json)
     end
   end
 

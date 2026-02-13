@@ -274,7 +274,9 @@ defmodule Opal.Skill do
   # --- Validation helpers ---
 
   defp validate_name(errors, nil), do: ["name is required" | errors]
-  defp validate_name(errors, name) when not is_binary(name), do: ["name must be a string" | errors]
+
+  defp validate_name(errors, name) when not is_binary(name),
+    do: ["name must be a string" | errors]
 
   defp validate_name(errors, name) do
     cond do
@@ -288,7 +290,10 @@ defmodule Opal.Skill do
         ["name must not contain consecutive hyphens" | errors]
 
       not Regex.match?(@name_pattern, name) ->
-        ["name must contain only lowercase alphanumeric characters and hyphens, and must not start or end with a hyphen" | errors]
+        [
+          "name must contain only lowercase alphanumeric characters and hyphens, and must not start or end with a hyphen"
+          | errors
+        ]
 
       true ->
         errors

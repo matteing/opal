@@ -15,7 +15,8 @@ defmodule Opal.Session.CompactionTest do
       prompt_msg = List.last(messages)
       # Match the updated prompt format (anti-continuation rules + conversation tags)
       summary =
-        if prompt_msg && (prompt_msg.content =~ "<conversation>" or prompt_msg.content =~ "TRANSCRIPT") do
+        if prompt_msg &&
+             (prompt_msg.content =~ "<conversation>" or prompt_msg.content =~ "TRANSCRIPT") do
           "## Goal\nTest summary"
         else
           "Mock summary"
@@ -41,8 +42,13 @@ defmodule Opal.Session.CompactionTest do
       # Build SSE events matching Copilot Responses API format
       # Use simple single-line deltas to avoid newline splitting issues
       events = [
-        "data: " <> Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}}) <> "\n",
-        "data: " <> Jason.encode!(%{"type" => "response.output_text.delta", "delta" => summary}) <> "\n",
+        "data: " <>
+          Jason.encode!(%{
+            "type" => "response.output_item.added",
+            "item" => %{"type" => "message"}
+          }) <> "\n",
+        "data: " <>
+          Jason.encode!(%{"type" => "response.output_text.delta", "delta" => summary}) <> "\n",
         "data: " <> Jason.encode!(%{"type" => "response.completed"}) <> "\n"
       ]
 
@@ -51,6 +57,7 @@ defmodule Opal.Session.CompactionTest do
           send(caller, {ref, {:data, event}})
           Process.sleep(1)
         end
+
         send(caller, {ref, :done})
       end)
 
@@ -62,8 +69,10 @@ defmodule Opal.Session.CompactionTest do
       case Jason.decode(data) do
         {:ok, %{"type" => "response.output_text.delta", "delta" => delta}} ->
           [{:text_delta, delta}]
+
         {:ok, %{"type" => "response.completed"}} ->
           [:done]
+
         _ ->
           []
       end
@@ -104,9 +113,19 @@ defmodule Opal.Session.CompactionTest do
   # Helper: populate a session with n user/assistant turn pairs of ~chars_each size
   defp populate_turns(session, n, chars_each \\ 200) do
     for i <- 1..n do
-      :ok = Session.append(session, Message.user("user msg #{i} " <> String.duplicate("x", chars_each)))
-      :ok = Session.append(session, Message.assistant("reply #{i} " <> String.duplicate("y", chars_each)))
+      :ok =
+        Session.append(
+          session,
+          Message.user("user msg #{i} " <> String.duplicate("x", chars_each))
+        )
+
+      :ok =
+        Session.append(
+          session,
+          Message.assistant("reply #{i} " <> String.duplicate("y", chars_each))
+        )
     end
+
     :ok
   end
 
@@ -183,12 +202,13 @@ defmodule Opal.Session.CompactionTest do
     test "uses LLM provider to generate summary", %{session: session} do
       populate_turns(session, 6)
 
-      :ok = Compaction.compact(session,
-        strategy: :summarize,
-        provider: MockProvider,
-        model: @model,
-        keep_recent_tokens: 200
-      )
+      :ok =
+        Compaction.compact(session,
+          strategy: :summarize,
+          provider: MockProvider,
+          model: @model,
+          keep_recent_tokens: 200
+        )
 
       path = Session.get_path(session)
       assert length(path) < 12
@@ -200,12 +220,13 @@ defmodule Opal.Session.CompactionTest do
     test "falls back to truncation when provider fails", %{session: session} do
       populate_turns(session, 6)
 
-      :ok = Compaction.compact(session,
-        strategy: :summarize,
-        provider: FailingProvider,
-        model: @model,
-        keep_recent_tokens: 200
-      )
+      :ok =
+        Compaction.compact(session,
+          strategy: :summarize,
+          provider: FailingProvider,
+          model: @model,
+          keep_recent_tokens: 200
+        )
 
       path = Session.get_path(session)
       summary = hd(path)
@@ -217,11 +238,12 @@ defmodule Opal.Session.CompactionTest do
       populate_turns(session, 6)
 
       # No explicit strategy — should default to :summarize because provider is given
-      :ok = Compaction.compact(session,
-        provider: MockProvider,
-        model: @model,
-        keep_recent_tokens: 200
-      )
+      :ok =
+        Compaction.compact(session,
+          provider: MockProvider,
+          model: @model,
+          keep_recent_tokens: 200
+        )
 
       path = Session.get_path(session)
       summary = hd(path)
@@ -254,11 +276,12 @@ defmodule Opal.Session.CompactionTest do
       original_count = length(Session.get_path(session))
       assert original_count == 5
 
-      :ok = Compaction.compact(session,
-        strategy: :truncate,
-        keep_recent_tokens: 100_000,
-        force: true
-      )
+      :ok =
+        Compaction.compact(session,
+          strategy: :truncate,
+          keep_recent_tokens: 100_000,
+          force: true
+        )
 
       path = Session.get_path(session)
       # Force mode: compact all but last 2, so 1 summary + 2 kept = 3 < 5
@@ -271,11 +294,12 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, Message.user("third"))
       :ok = Session.append(session, Message.assistant("fourth"))
 
-      :ok = Compaction.compact(session,
-        strategy: :truncate,
-        keep_recent_tokens: 100_000,
-        force: true
-      )
+      :ok =
+        Compaction.compact(session,
+          strategy: :truncate,
+          keep_recent_tokens: 100_000,
+          force: true
+        )
 
       path = Session.get_path(session)
       # Summary + last 2 messages
@@ -286,11 +310,12 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, Message.user("only"))
       :ok = Session.append(session, Message.assistant("two"))
 
-      :ok = Compaction.compact(session,
-        strategy: :truncate,
-        keep_recent_tokens: 100_000,
-        force: true
-      )
+      :ok =
+        Compaction.compact(session,
+          strategy: :truncate,
+          keep_recent_tokens: 100_000,
+          force: true
+        )
 
       path = Session.get_path(session)
       assert length(path) == 2
@@ -331,7 +356,13 @@ defmodule Opal.Session.CompactionTest do
 
     test "serializes tool result messages" do
       messages = [
-        %Message{id: "1", role: :tool_result, call_id: "call_1", name: "read_file", content: "file contents here"}
+        %Message{
+          id: "1",
+          role: :tool_result,
+          call_id: "call_1",
+          name: "read_file",
+          content: "file contents here"
+        }
       ]
 
       transcript = Compaction.serialize_conversation(messages)
@@ -361,8 +392,15 @@ defmodule Opal.Session.CompactionTest do
 
     test "truncates long tool result output" do
       long_content = String.duplicate("x", 1000)
+
       messages = [
-        %Message{id: "1", role: :tool_result, call_id: "c1", name: "read_file", content: long_content}
+        %Message{
+          id: "1",
+          role: :tool_result,
+          call_id: "c1",
+          name: "read_file",
+          content: long_content
+        }
       ]
 
       transcript = Compaction.serialize_conversation(messages)
@@ -397,11 +435,15 @@ defmodule Opal.Session.CompactionTest do
     test "deduplicates file paths" do
       messages = [
         %Message{
-          id: "1", role: :assistant, content: "first",
+          id: "1",
+          role: :assistant,
+          content: "first",
           tool_calls: [%{name: "read_file", arguments: %{"path" => "lib/foo.ex"}}]
         },
         %Message{
-          id: "2", role: :assistant, content: "second",
+          id: "2",
+          role: :assistant,
+          content: "second",
           tool_calls: [%{name: "read_file", arguments: %{"path" => "lib/foo.ex"}}]
         }
       ]
@@ -413,7 +455,9 @@ defmodule Opal.Session.CompactionTest do
     test "ignores non-file tool calls" do
       messages = [
         %Message{
-          id: "1", role: :assistant, content: "running",
+          id: "1",
+          role: :assistant,
+          content: "running",
           tool_calls: [%{name: "shell", arguments: %{"command" => "ls"}}]
         }
       ]
@@ -426,7 +470,9 @@ defmodule Opal.Session.CompactionTest do
     test "ignores tool calls without path argument" do
       messages = [
         %Message{
-          id: "1", role: :assistant, content: "hmm",
+          id: "1",
+          role: :assistant,
+          content: "hmm",
           tool_calls: [%{name: "read_file", arguments: %{}}]
         }
       ]
@@ -458,14 +504,18 @@ defmodule Opal.Session.CompactionTest do
   describe "cut point and turn boundaries" do
     test "cuts at user message boundary", %{session: session} do
       for i <- 1..6 do
-        :ok = Session.append(session, Message.user("user msg #{i} " <> String.duplicate("z", 300)))
-        :ok = Session.append(session, Message.assistant("reply #{i} " <> String.duplicate("z", 300)))
+        :ok =
+          Session.append(session, Message.user("user msg #{i} " <> String.duplicate("z", 300)))
+
+        :ok =
+          Session.append(session, Message.assistant("reply #{i} " <> String.duplicate("z", 300)))
       end
 
       :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 300)
 
       path = Session.get_path(session)
       non_summary = Enum.drop(path, 1)
+
       if non_summary != [] do
         assert hd(non_summary).role == :user
       end
@@ -484,19 +534,25 @@ defmodule Opal.Session.CompactionTest do
 
     test "includes file ops in truncation summary", %{session: session} do
       :ok = Session.append(session, Message.user("read a file"))
-      :ok = Session.append(session, %Message{
-        id: "tc1",
-        role: :assistant,
-        content: "reading" <> String.duplicate("x", 500),
-        tool_calls: [%{name: "read_file", arguments: %{"path" => "lib/app.ex"}}]
-      })
+
+      :ok =
+        Session.append(session, %Message{
+          id: "tc1",
+          role: :assistant,
+          content: "reading" <> String.duplicate("x", 500),
+          tool_calls: [%{name: "read_file", arguments: %{"path" => "lib/app.ex"}}]
+        })
+
       :ok = Session.append(session, Message.user("edit it"))
-      :ok = Session.append(session, %Message{
-        id: "tc2",
-        role: :assistant,
-        content: "editing" <> String.duplicate("x", 500),
-        tool_calls: [%{name: "edit_file", arguments: %{"path" => "lib/app.ex"}}]
-      })
+
+      :ok =
+        Session.append(session, %Message{
+          id: "tc2",
+          role: :assistant,
+          content: "editing" <> String.duplicate("x", 500),
+          tool_calls: [%{name: "edit_file", arguments: %{"path" => "lib/app.ex"}}]
+        })
+
       :ok = Session.append(session, Message.user("done"))
       :ok = Session.append(session, Message.assistant("ok" <> String.duplicate("x", 500)))
 
@@ -504,7 +560,9 @@ defmodule Opal.Session.CompactionTest do
 
       path = Session.get_path(session)
       summary = hd(path)
-      assert summary.content =~ "read-files" or summary.content =~ "modified-files" or summary.content =~ "Compacted"
+
+      assert summary.content =~ "read-files" or summary.content =~ "modified-files" or
+               summary.content =~ "Compacted"
     end
 
     test "preserves tool result messages in kept portion", %{session: session} do
@@ -512,19 +570,24 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, Message.user("old question " <> String.duplicate("a", 500)))
       :ok = Session.append(session, Message.assistant("old reply " <> String.duplicate("b", 500)))
       :ok = Session.append(session, Message.user("recent question"))
-      :ok = Session.append(session, %Message{
-        id: "tc_kept",
-        role: :assistant,
-        content: "let me check",
-        tool_calls: [%{name: "read_file", arguments: %{"path" => "recent.ex"}}]
-      })
-      :ok = Session.append(session, %Message{
-        id: "tr_kept",
-        role: :tool_result,
-        call_id: "call_1",
-        name: "read",
-        content: "recent contents"
-      })
+
+      :ok =
+        Session.append(session, %Message{
+          id: "tc_kept",
+          role: :assistant,
+          content: "let me check",
+          tool_calls: [%{name: "read_file", arguments: %{"path" => "recent.ex"}}]
+        })
+
+      :ok =
+        Session.append(session, %Message{
+          id: "tr_kept",
+          role: :tool_result,
+          call_id: "call_1",
+          name: "read",
+          content: "recent contents"
+        })
+
       :ok = Session.append(session, Message.assistant("here's what I found"))
 
       :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 300)
@@ -552,7 +615,12 @@ defmodule Opal.Session.CompactionTest do
       # Add more messages
       for i <- 1..4 do
         :ok = Session.append(session, Message.user("new msg #{i} " <> String.duplicate("z", 300)))
-        :ok = Session.append(session, Message.assistant("new reply #{i} " <> String.duplicate("w", 300)))
+
+        :ok =
+          Session.append(
+            session,
+            Message.assistant("new reply #{i} " <> String.duplicate("w", 300))
+          )
       end
 
       # Second compaction
@@ -564,6 +632,7 @@ defmodule Opal.Session.CompactionTest do
       # Tree integrity still holds
       [first | rest] = path_after_second
       assert first.parent_id == nil
+
       Enum.reduce(rest, first, fn msg, prev ->
         assert msg.parent_id == prev.id
         msg
@@ -598,12 +667,14 @@ defmodule Opal.Session.CompactionTest do
     test "detects previous summary and uses update prompt", %{session: session} do
       # First compaction cycle
       populate_turns(session, 6)
-      :ok = Compaction.compact(session,
-        strategy: :summarize,
-        provider: MockProvider,
-        model: @model,
-        keep_recent_tokens: 200
-      )
+
+      :ok =
+        Compaction.compact(session,
+          strategy: :summarize,
+          provider: MockProvider,
+          model: @model,
+          keep_recent_tokens: 200
+        )
 
       path_after_first = Session.get_path(session)
       summary_1 = hd(path_after_first)
@@ -612,16 +683,22 @@ defmodule Opal.Session.CompactionTest do
       # Add more messages for second cycle
       for i <- 1..4 do
         :ok = Session.append(session, Message.user("new msg #{i} " <> String.duplicate("z", 300)))
-        :ok = Session.append(session, Message.assistant("new reply #{i} " <> String.duplicate("w", 300)))
+
+        :ok =
+          Session.append(
+            session,
+            Message.assistant("new reply #{i} " <> String.duplicate("w", 300))
+          )
       end
 
       # Second compaction — should build on the previous summary
-      :ok = Compaction.compact(session,
-        strategy: :summarize,
-        provider: MockProvider,
-        model: @model,
-        keep_recent_tokens: 200
-      )
+      :ok =
+        Compaction.compact(session,
+          strategy: :summarize,
+          provider: MockProvider,
+          model: @model,
+          keep_recent_tokens: 200
+        )
 
       path_after_second = Session.get_path(session)
       summary_2 = hd(path_after_second)
@@ -636,10 +713,15 @@ defmodule Opal.Session.CompactionTest do
   describe "cumulative file-op tracking" do
     test "summary message carries metadata with file ops", %{session: session} do
       :ok = Session.append(session, Message.user("read a file"))
-      :ok = Session.append(session, %Message{
-        id: "tc1", role: :assistant, content: "reading" <> String.duplicate("x", 500),
-        tool_calls: [%{name: "read_file", arguments: %{"path" => "lib/app.ex"}}]
-      })
+
+      :ok =
+        Session.append(session, %Message{
+          id: "tc1",
+          role: :assistant,
+          content: "reading" <> String.duplicate("x", 500),
+          tool_calls: [%{name: "read_file", arguments: %{"path" => "lib/app.ex"}}]
+        })
+
       :ok = Session.append(session, Message.user("done"))
       :ok = Session.append(session, Message.assistant("ok" <> String.duplicate("x", 500)))
 
@@ -654,13 +736,18 @@ defmodule Opal.Session.CompactionTest do
     test "file ops accumulate across compaction cycles", %{session: session} do
       # Cycle 1: read file_a.ex, write file_b.ex
       :ok = Session.append(session, Message.user("read and write"))
-      :ok = Session.append(session, %Message{
-        id: "tc1", role: :assistant, content: String.duplicate("x", 500),
-        tool_calls: [
-          %{name: "read_file", arguments: %{"path" => "file_a.ex"}},
-          %{name: "write_file", arguments: %{"path" => "file_b.ex"}}
-        ]
-      })
+
+      :ok =
+        Session.append(session, %Message{
+          id: "tc1",
+          role: :assistant,
+          content: String.duplicate("x", 500),
+          tool_calls: [
+            %{name: "read_file", arguments: %{"path" => "file_a.ex"}},
+            %{name: "write_file", arguments: %{"path" => "file_b.ex"}}
+          ]
+        })
+
       :ok = Session.append(session, Message.user("next"))
       :ok = Session.append(session, Message.assistant("ok" <> String.duplicate("x", 500)))
 
@@ -673,13 +760,18 @@ defmodule Opal.Session.CompactionTest do
 
       # Cycle 2: read file_c.ex, edit file_a.ex (should move to modified)
       :ok = Session.append(session, Message.user("more work"))
-      :ok = Session.append(session, %Message{
-        id: "tc2", role: :assistant, content: String.duplicate("y", 500),
-        tool_calls: [
-          %{name: "read_file", arguments: %{"path" => "file_c.ex"}},
-          %{name: "edit_file", arguments: %{"path" => "file_a.ex"}}
-        ]
-      })
+
+      :ok =
+        Session.append(session, %Message{
+          id: "tc2",
+          role: :assistant,
+          content: String.duplicate("y", 500),
+          tool_calls: [
+            %{name: "read_file", arguments: %{"path" => "file_c.ex"}},
+            %{name: "edit_file", arguments: %{"path" => "file_a.ex"}}
+          ]
+        })
+
       :ok = Session.append(session, Message.user("done"))
       :ok = Session.append(session, Message.assistant("done" <> String.duplicate("z", 500)))
 
@@ -697,13 +789,18 @@ defmodule Opal.Session.CompactionTest do
     end
 
     test "merge_file_ops deduplicates paths" do
-      ops = Compaction.extract_file_ops([
-        %Message{id: "1", role: :assistant, content: "",
-          tool_calls: [
-            %{name: "read_file", arguments: %{"path" => "a.ex"}},
-            %{name: "read_file", arguments: %{"path" => "a.ex"}}
-          ]}
-      ])
+      ops =
+        Compaction.extract_file_ops([
+          %Message{
+            id: "1",
+            role: :assistant,
+            content: "",
+            tool_calls: [
+              %{name: "read_file", arguments: %{"path" => "a.ex"}},
+              %{name: "read_file", arguments: %{"path" => "a.ex"}}
+            ]
+          }
+        ])
 
       assert ops.read == ["a.ex"]
     end
@@ -716,10 +813,11 @@ defmodule Opal.Session.CompactionTest do
       # Build clean turn boundaries: user/assistant pairs
       populate_turns(session, 6)
 
-      :ok = Compaction.compact(session,
-        strategy: :truncate,
-        keep_recent_tokens: 300
-      )
+      :ok =
+        Compaction.compact(session,
+          strategy: :truncate,
+          keep_recent_tokens: 300
+        )
 
       path = Session.get_path(session)
       summary = hd(path)
@@ -735,24 +833,34 @@ defmodule Opal.Session.CompactionTest do
 
       # Big turn: one user message, then many assistant+tool messages
       :ok = Session.append(session, Message.user("Refactor everything"))
+
       for i <- 1..20 do
-        :ok = Session.append(session, %Message{
-          id: "tc_#{i}", role: :assistant, content: "step #{i}" <> String.duplicate("x", 200),
-          tool_calls: [%{name: "edit_file", arguments: %{"path" => "file_#{i}.ex"}}]
-        })
-        :ok = Session.append(session, %Message{
-          id: "tr_#{i}", role: :tool_result, call_id: "call_#{i}", name: "edit_file",
-          content: "edited" <> String.duplicate("y", 200)
-        })
+        :ok =
+          Session.append(session, %Message{
+            id: "tc_#{i}",
+            role: :assistant,
+            content: "step #{i}" <> String.duplicate("x", 200),
+            tool_calls: [%{name: "edit_file", arguments: %{"path" => "file_#{i}.ex"}}]
+          })
+
+        :ok =
+          Session.append(session, %Message{
+            id: "tr_#{i}",
+            role: :tool_result,
+            call_id: "call_#{i}",
+            name: "edit_file",
+            content: "edited" <> String.duplicate("y", 200)
+          })
       end
 
       # Keep only a small budget so the cut lands mid-turn
-      :ok = Compaction.compact(session,
-        strategy: :summarize,
-        provider: MockProvider,
-        model: @model,
-        keep_recent_tokens: 500
-      )
+      :ok =
+        Compaction.compact(session,
+          strategy: :summarize,
+          provider: MockProvider,
+          model: @model,
+          keep_recent_tokens: 500
+        )
 
       path = Session.get_path(session)
       summary = hd(path)
@@ -761,7 +869,8 @@ defmodule Opal.Session.CompactionTest do
       # both a history section and a turn context section
       # (Either way it should have compacted successfully)
       assert summary.content =~ "[Conversation summary"
-      assert length(path) < 42 # started with 2 + 1 + 40 = 43
+      # started with 2 + 1 + 40 = 43
+      assert length(path) < 42
     end
   end
 
@@ -770,7 +879,9 @@ defmodule Opal.Session.CompactionTest do
   describe "metadata persistence" do
     test "metadata field survives struct creation" do
       msg = %Message{
-        id: "test", role: :user, content: "hello",
+        id: "test",
+        role: :user,
+        content: "hello",
         metadata: %{type: :compaction_summary, read_files: ["a.ex"]}
       }
 
@@ -809,7 +920,10 @@ defmodule Opal.Session.CompactionTest do
 
     test "handles very large keep_recent_tokens gracefully", %{session: session} do
       populate_turns(session, 3)
-      assert :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 10_000_000)
+
+      assert :ok =
+               Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 10_000_000)
+
       assert length(Session.get_path(session)) == 6
     end
 

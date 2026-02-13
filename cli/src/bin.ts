@@ -9,7 +9,7 @@ const args = process.argv.slice(2);
 const opts: SessionOptions = {};
 
 for (let i = 0; i < args.length; i++) {
-  const arg = args[i]!;
+  const arg = args[i];
   switch (arg) {
     case "--model": {
       const val = args[++i];
@@ -57,4 +57,3 @@ if (!opts.workingDir) {
 process.stdout.write("\x1b[2J\x1b[H");
 
 render(React.createElement(App, { sessionOpts: opts }));
-

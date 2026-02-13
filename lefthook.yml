@@ -1,0 +1,9 @@
+pre-commit:
+  parallel: true
+  commands:
+    elixir-format:
+      glob: "*.{ex,exs}"
+      run: pnpm nx run core:lint
+    cli-lint:
+      glob: "*.{ts,tsx,json,js}"
+      run: pnpm nx run cli:lint

@@ -54,7 +54,11 @@ defmodule Opal.SettingsTest do
 
     test "merges with existing settings", %{tmp_dir: tmp_dir} do
       path = Path.join(tmp_dir, "settings.json")
-      File.write!(path, Jason.encode!(%{"default_model" => "anthropic:claude-sonnet-4", "other" => true}))
+
+      File.write!(
+        path,
+        Jason.encode!(%{"default_model" => "anthropic:claude-sonnet-4", "other" => true})
+      )
 
       assert :ok = Opal.Settings.save(%{"default_model" => "openai:gpt-5"})
 

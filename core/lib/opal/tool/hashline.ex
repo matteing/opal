@@ -90,7 +90,8 @@ defmodule Opal.Tool.Hashline do
         if actual == expected_hash do
           :ok
         else
-          {:error, "Hash mismatch on line #{line_num}: expected #{expected_hash}, got #{actual}. File may have changed since last read."}
+          {:error,
+           "Hash mismatch on line #{line_num}: expected #{expected_hash}, got #{actual}. File may have changed since last read."}
         end
     end
   end

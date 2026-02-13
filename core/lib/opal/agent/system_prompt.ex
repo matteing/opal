@@ -111,7 +111,19 @@ defmodule Opal.Agent.SystemPrompt do
   end
 
   # Instructs the model to emit short status tags during complex tasks.
-  @known_tools MapSet.new(["read_file", "edit_file", "write_file", "shell", "bash", "zsh", "cmd", "powershell", "sub_agent", "tasks", "use_skill"])
+  @known_tools MapSet.new([
+                 "read_file",
+                 "edit_file",
+                 "write_file",
+                 "shell",
+                 "bash",
+                 "zsh",
+                 "cmd",
+                 "powershell",
+                 "sub_agent",
+                 "tasks",
+                 "use_skill"
+               ])
 
   defp status_tags(names) do
     if MapSet.size(MapSet.intersection(names, @known_tools)) > 0 do

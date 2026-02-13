@@ -22,7 +22,7 @@ defmodule Opal.Agent.UsageTracker do
   """
   @spec maybe_auto_compact(State.t()) :: State.t()
   def maybe_auto_compact(%State{session: session, model: model} = state)
-       when is_pid(session) do
+      when is_pid(session) do
     context_window = model_context_window(model)
 
     # Build hybrid estimate: actual usage base + heuristic for trailing messages
@@ -30,17 +30,27 @@ defmodule Opal.Agent.UsageTracker do
     ratio = estimated_tokens / context_window
 
     if ratio >= @auto_compact_threshold do
-      Logger.info("Auto-compacting: ~#{estimated_tokens} estimated tokens / #{context_window} context (#{Float.round(ratio * 100, 1)}%)")
+      Logger.info(
+        "Auto-compacting: ~#{estimated_tokens} estimated tokens / #{context_window} context (#{Float.round(ratio * 100, 1)}%)"
+      )
+
       broadcast(state, {:compaction_start, length(state.messages)})
 
       case Opal.Session.Compaction.compact(session,
              provider: state.provider,
              model: state.model,
-             keep_recent_tokens: div(context_window, 4)) do
+             keep_recent_tokens: div(context_window, 4)
+           ) do
         :ok ->
           new_path = Opal.Session.get_path(session)
           broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
-          %{state | messages: Enum.reverse(new_path), last_prompt_tokens: 0, last_usage_msg_index: 0}
+
+          %{
+            state
+            | messages: Enum.reverse(new_path),
+              last_prompt_tokens: 0,
+              last_usage_msg_index: 0
+          }
 
         {:error, reason} ->
           Logger.warning("Auto-compaction failed: #{inspect(reason)}")
@@ -55,7 +65,7 @@ defmodule Opal.Agent.UsageTracker do
 
   @doc """
   Builds a token estimate using the hybrid approach.
-  
+
   - If we have a recent usage report, use it as a calibrated base and add
     heuristic estimates for messages added since.
   - If no usage data yet, fall back to full heuristic estimation.
@@ -64,7 +74,9 @@ defmodule Opal.Agent.UsageTracker do
   def estimate_current_tokens(%State{} = state, _context_window) do
     if state.last_prompt_tokens > 0 do
       # Messages added after the last usage report
-      messages_since = Enum.take(state.messages, length(state.messages) - state.last_usage_msg_index)
+      messages_since =
+        Enum.take(state.messages, length(state.messages) - state.last_usage_msg_index)
+
       Opal.Token.hybrid_estimate(state.last_prompt_tokens, messages_since)
     else
       # No usage data yet — estimate the full context heuristically
@@ -76,7 +88,7 @@ defmodule Opal.Agent.UsageTracker do
 
   @doc """
   Handles overflow compaction without a session process.
-  
+
   Without a session process we can't compact — surface the raw error.
   """
   @spec handle_overflow_compaction(State.t(), term()) :: {:noreply, State.t()}
@@ -100,11 +112,19 @@ defmodule Opal.Agent.UsageTracker do
            provider: state.provider,
            model: state.model,
            keep_recent_tokens: keep_tokens,
-           force: true) do
+           force: true
+         ) do
       :ok ->
         new_path = Opal.Session.get_path(session)
         broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
-        state = %{state | messages: Enum.reverse(new_path), last_prompt_tokens: 0, overflow_detected: false, last_usage_msg_index: 0}
+
+        state = %{
+          state
+          | messages: Enum.reverse(new_path),
+            last_prompt_tokens: 0,
+            overflow_detected: false,
+            last_usage_msg_index: 0
+        }
 
         # Auto-retry the turn immediately after compaction
         Opal.Agent.run_turn(state)
@@ -118,28 +138,53 @@ defmodule Opal.Agent.UsageTracker do
 
   @doc """
   Updates token usage from a stream event and checks for overflow.
-  
+
   Handles both Chat Completions keys (prompt_tokens) and Responses API keys (input_tokens).
   Flags usage-based overflow so finalize_response/1 can trigger compaction.
   """
   @spec update_usage(map(), State.t()) :: State.t()
   def update_usage(usage, state) do
     # Handle both Chat Completions keys (prompt_tokens) and Responses API keys (input_tokens)
-    prompt = Map.get(usage, "prompt_tokens", Map.get(usage, :prompt_tokens,
-               Map.get(usage, "input_tokens", Map.get(usage, :input_tokens, 0)))) || 0
-    completion = Map.get(usage, "completion_tokens", Map.get(usage, :completion_tokens,
-                   Map.get(usage, "output_tokens", Map.get(usage, :output_tokens, 0)))) || 0
-    total = Map.get(usage, "total_tokens", Map.get(usage, :total_tokens, prompt + completion)) || 0
+    prompt =
+      Map.get(
+        usage,
+        "prompt_tokens",
+        Map.get(
+          usage,
+          :prompt_tokens,
+          Map.get(usage, "input_tokens", Map.get(usage, :input_tokens, 0))
+        )
+      ) || 0
+
+    completion =
+      Map.get(
+        usage,
+        "completion_tokens",
+        Map.get(
+          usage,
+          :completion_tokens,
+          Map.get(usage, "output_tokens", Map.get(usage, :output_tokens, 0))
+        )
+      ) || 0
+
+    total =
+      Map.get(usage, "total_tokens", Map.get(usage, :total_tokens, prompt + completion)) || 0
 
     token_usage = %{
-      state.token_usage |
-      prompt_tokens: state.token_usage.prompt_tokens + prompt,
-      completion_tokens: state.token_usage.completion_tokens + completion,
-      total_tokens: state.token_usage.total_tokens + total,
-      current_context_tokens: prompt
+      state.token_usage
+      | prompt_tokens: state.token_usage.prompt_tokens + prompt,
+        completion_tokens: state.token_usage.completion_tokens + completion,
+        total_tokens: state.token_usage.total_tokens + total,
+        current_context_tokens: prompt
     }
 
-    state = %{state | token_usage: token_usage, last_prompt_tokens: prompt, last_usage_msg_index: length(state.messages)}
+    state = %{
+      state
+      | token_usage: token_usage,
+        last_prompt_tokens: prompt,
+        last_usage_msg_index: length(state.messages)
+    }
+
     context_window = model_context_window(state.model)
 
     broadcast(state, {:usage_update, %{state.token_usage | context_window: context_window}})
@@ -161,6 +206,4 @@ defmodule Opal.Agent.UsageTracker do
   defp broadcast(%State{session_id: session_id}, event) do
     Opal.Events.broadcast(session_id, event)
   end
-
-
 end
