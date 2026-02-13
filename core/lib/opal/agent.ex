@@ -65,7 +65,9 @@ defmodule Opal.Agent do
             retry_base_delay_ms: pos_integer(),
             retry_max_delay_ms: pos_integer(),
             # Overflow detection — set when usage reports exceed context window
-            overflow_detected: boolean()
+            overflow_detected: boolean(),
+            # Optional callback for sub-agents to ask the parent/user questions
+            question_handler: (map() -> {:ok, String.t()} | {:error, term()}) | nil
           }
 
     @enforce_keys [:session_id, :model, :working_dir, :config]
@@ -107,7 +109,8 @@ defmodule Opal.Agent do
       overflow_detected: false,
       # Hybrid estimation: snapshot of message count when usage was last reported.
       # Messages added after this index are estimated heuristically.
-      last_usage_msg_index: 0
+      last_usage_msg_index: 0,
+      question_handler: nil
     ]
   end
 
@@ -283,6 +286,7 @@ defmodule Opal.Agent do
       context_files: context_files,
       available_skills: available_skills,
       active_skills: [],
+      question_handler: Keyword.get(opts, :question_handler),
       token_usage: %{
         prompt_tokens: 0,
         completion_tokens: 0,
@@ -643,8 +647,11 @@ defmodule Opal.Agent do
     # (prevents the LLM from using shell for read/edit/write operations)
     tool_guidelines = Opal.Agent.SystemPrompt.build_guidelines(active_tools(state))
 
+    # Planning instructions — tell the agent where to write plan.md
+    planning = planning_instructions(state)
+
     full_prompt =
-      [prompt || "", context || "", skill_menu, tool_guidelines]
+      [prompt || "", context || "", skill_menu, tool_guidelines, planning]
       |> Enum.reject(&(&1 == ""))
       |> Enum.join("\n")
 
@@ -658,6 +665,26 @@ defmodule Opal.Agent do
   end
 
   defp build_messages(%State{messages: messages}), do: messages
+
+  # Returns planning instructions for the system prompt, or "" for sub-agents.
+  defp planning_instructions(%State{config: config, session_id: session_id, session: session}) do
+    if session != nil do
+      session_dir = Path.join(Opal.Config.sessions_dir(config), session_id)
+
+      """
+
+      ## Planning
+
+      For complex multi-step tasks, create a plan document at:
+        #{session_dir}/plan.md
+
+      Write your plan before starting implementation. Update it as you
+      complete steps. The user can review the plan at any time with Ctrl+Y.
+      """
+    else
+      ""
+    end
+  end
 
   # Parses raw SSE data, dispatching events for each line.
   defp parse_sse_data(data, state) do
@@ -959,6 +986,9 @@ defmodule Opal.Agent do
 
     state = append_messages(state, tool_result_messages)
 
+    # Auto-load skills whose globs match files touched by this batch
+    state = maybe_auto_load_skills(results, state)
+
     # Process any steers that arrived during the last tool execution
     state = check_for_steering(state)
 
@@ -968,13 +998,19 @@ defmodule Opal.Agent do
 
   # Builds the shared context map passed to every tool execution.
   defp build_tool_context(%State{} = state) do
-    %{
+    ctx = %{
       working_dir: state.working_dir,
       session_id: state.session_id,
       config: state.config,
       agent_pid: self(),
       agent_state: state
     }
+
+    if state.question_handler do
+      Map.put(ctx, :question_handler, state.question_handler)
+    else
+      ctx
+    end
   end
 
   # Runs a single tool call under the session's Task.Supervisor.
@@ -1041,6 +1077,66 @@ defmodule Opal.Agent do
     e ->
       Logger.error("Tool #{inspect(tool_mod)} raised: #{Exception.message(e)}")
       {:error, "Tool raised an exception: #{Exception.message(e)}"}
+  end
+
+  # File-modifying tools whose "path" argument should trigger skill globs.
+  @file_tools ~w(write_file edit_file)
+
+  # After a batch of tool calls, checks whether any file-modifying tool
+  # touched a path that matches an inactive skill's globs. If so, the
+  # skill is auto-loaded into the conversation context so the LLM has
+  # its instructions on the very next turn.
+  defp maybe_auto_load_skills(_results, %State{available_skills: []} = state), do: state
+
+  defp maybe_auto_load_skills(results, %State{} = state) do
+    # Collect relative paths from successful file-modifying tool calls
+    touched_paths =
+      results
+      |> Enum.flat_map(fn
+        {%{name: name, arguments: %{"path" => path}}, {:ok, _}} when name in @file_tools ->
+          [make_relative(path, state.working_dir)]
+
+        _ ->
+          []
+      end)
+
+    if touched_paths == [] do
+      state
+    else
+      # Find skills with matching globs that aren't already active
+      matching =
+        state.available_skills
+        |> Enum.reject(&(&1.name in state.active_skills))
+        |> Enum.filter(fn skill ->
+          Enum.any?(touched_paths, &Opal.Skill.matches_path?(skill, &1))
+        end)
+
+      Enum.reduce(matching, state, fn skill, acc ->
+        Logger.debug("Auto-loading skill '#{skill.name}' (glob matched)")
+
+        skill_msg = %Opal.Message{
+          id: "skill:#{skill.name}",
+          role: :user,
+          content: "[System] Skill '#{skill.name}' auto-activated (file matched glob). Instructions:\n\n#{skill.instructions}"
+        }
+
+        new_active = [skill.name | acc.active_skills]
+        acc = append_message(%{acc | active_skills: new_active}, skill_msg)
+        broadcast(acc, {:skill_loaded, skill.name, skill.description})
+        acc
+      end)
+    end
+  end
+
+  # Returns a path relative to working_dir, or the path unchanged if
+  # it's already relative or outside the working dir.
+  defp make_relative(path, working_dir) do
+    expanded = Path.expand(path, working_dir)
+
+    case Path.relative_to(expanded, Path.expand(working_dir)) do
+      ^expanded -> path
+      relative -> relative
+    end
   end
 
   # Finds the tool module whose name/0 matches the given name string.

@@ -252,7 +252,7 @@ defmodule Opal.Config do
   defstruct data_dir: nil,
             shell: nil,
             default_model: {"copilot", "claude-sonnet-4"},
-            default_tools: [Opal.Tool.Read, Opal.Tool.Write, Opal.Tool.EditLines, Opal.Tool.Shell, Opal.Tool.SubAgent, Opal.Tool.Tasks, Opal.Tool.UseSkill],
+            default_tools: [Opal.Tool.Read, Opal.Tool.Write, Opal.Tool.EditLines, Opal.Tool.Shell, Opal.Tool.SubAgent, Opal.Tool.Tasks, Opal.Tool.UseSkill, Opal.Tool.AskUser],
             provider: Opal.Provider.Copilot,
             auto_save: false,
             auto_title: true,

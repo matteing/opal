@@ -4,7 +4,8 @@ import { Marked } from "marked";
 import { markedTerminal } from "marked-terminal";
 import { TaskList, Task as InkTask } from "ink-task-list";
 import type {
-  OpalState,
+  AgentView,
+  SubAgent,
   Message,
   Task,
   Skill,
@@ -31,26 +32,30 @@ function renderMarkdown(text: string, width: number): string {
 }
 
 export interface MessageListProps {
-  state: OpalState;
+  view: AgentView;
+  subAgents: Record<string, SubAgent>;
   showToolOutput?: boolean;
+  sessionReady?: boolean;
 }
 
 export const MessageList: FC<MessageListProps> = ({
-  state,
+  view,
+  subAgents,
   showToolOutput = false,
+  sessionReady = true,
 }) => {
   const { stdout } = useStdout();
   const width = stdout?.columns ?? 80;
 
-  const hasMessages = state.timeline.some((e) => e.kind === "message");
+  const hasMessages = view.timeline.some((e: TimelineEntry) => e.kind === "message");
 
   return (
     <Box flexDirection="column">
       <Welcome dimmed={hasMessages} />
 
-      {!hasMessages && state.timeline.length > 0 && (
+      {!hasMessages && view.timeline.length > 0 && (
         <Box flexDirection="column" paddingX={1}>
-          {state.timeline.map((entry, i) => {
+          {view.timeline.map((entry: TimelineEntry, i: number) => {
             if (entry.kind === "context") {
               return <ContextLines key={i} context={entry.context} />;
             }
@@ -61,25 +66,23 @@ export const MessageList: FC<MessageListProps> = ({
 
       {hasMessages && (
         <Box flexDirection="column" paddingX={1}>
-          {state.timeline.map((entry, i) => {
+          {view.timeline.map((entry: TimelineEntry, i: number) => {
             if (entry.kind === "message") {
               let showBadge = true;
               if (entry.message.role === "assistant") {
                 for (let j = i - 1; j >= 0; j--) {
-                  const prev = state.timeline[j]!;
+                  const prev = view.timeline[j]!;
                   if (prev.kind === "message") {
                     if (prev.message.role === "assistant") showBadge = false;
                     break;
                   }
                 }
               }
-              // Determine if this is the actively-streaming message:
-              // it's the last assistant message in the timeline while the agent is running
               let isStreaming = false;
-              if (state.isRunning && entry.message.role === "assistant") {
+              if (view.isRunning && entry.message.role === "assistant") {
                 let isLast = true;
-                for (let j = i + 1; j < state.timeline.length; j++) {
-                  if (state.timeline[j]!.kind === "message" && (state.timeline[j] as any).message.role === "assistant") {
+                for (let j = i + 1; j < view.timeline.length; j++) {
+                  if (view.timeline[j]!.kind === "message" && (view.timeline[j] as any).message.role === "assistant") {
                     isLast = false;
                     break;
                   }
@@ -91,6 +94,13 @@ export const MessageList: FC<MessageListProps> = ({
               );
             }
             if (entry.kind === "tool") {
+              // Sub-agent tool: show collapsed summary
+              const subAgent = entry.task.tool === "sub_agent"
+                ? findSubAgentByCallId(subAgents, entry.task.callId)
+                : null;
+              if (subAgent) {
+                return <SubAgentSummary key={entry.task.callId} task={entry.task} subAgent={subAgent} />;
+              }
               return (
                 <ToolBlock
                   key={entry.task.callId}
@@ -209,18 +219,6 @@ const ToolBlock: FC<{ task: Task; width: number; showOutput?: boolean }> = ({
         </Box>
       ) : (
         <>
-          {task.subTasks && task.subTasks.length > 0 && (
-            <Box flexDirection="column">
-              {task.subTasks.map((sub) => (
-                <ToolBlock
-                  key={sub.callId}
-                  task={sub}
-                  width={width - 2}
-                  showOutput={showOutput}
-                />
-              ))}
-            </Box>
-          )}
           {task.result && !task.result.ok && task.result.error && (
             <Box marginLeft={2}>
               <Text color="red" wrap="truncate-end">
@@ -324,5 +322,38 @@ const TasksDisplay: FC<{ tasks: ParsedTask[] }> = ({ tasks }) => {
         );
       })}
     </TaskList>
+  );
+};
+
+// --- Sub-agent collapsed summary ---
+
+function findSubAgentByCallId(subAgents: Record<string, SubAgent>, callId: string): SubAgent | null {
+  for (const sub of Object.values(subAgents)) {
+    if (sub.parentCallId === callId) return sub;
+  }
+  return null;
+}
+
+const SubAgentSummary: FC<{ task: Task; subAgent: SubAgent }> = ({ task, subAgent }) => {
+  const icon = subAgent.isRunning ? "◐" : TOOL_ICONS[task.status];
+  const color = subAgent.isRunning ? "yellow" : TOOL_COLORS[task.status];
+  const elapsed = Math.round(((subAgent.isRunning ? Date.now() : Date.now()) - subAgent.startedAt) / 1000);
+
+  const details = [
+    `${subAgent.toolCount} tool${subAgent.toolCount !== 1 ? "s" : ""}`,
+    subAgent.model,
+    subAgent.isRunning ? `${elapsed}s` : `done in ${elapsed}s`,
+  ].join(" · ");
+
+  return (
+    <Box flexDirection="column" marginBottom={1}>
+      <Text>
+        <Text color={color}>{icon}</Text> <Text bold>sub-agent</Text>{" "}
+        <Text dimColor>"{subAgent.label}"</Text>
+      </Text>
+      <Box marginLeft={2}>
+        <Text dimColor>↳ {details}</Text>
+      </Box>
+    </Box>
   );
 };

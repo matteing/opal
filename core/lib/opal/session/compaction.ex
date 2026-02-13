@@ -432,11 +432,11 @@ defmodule Opal.Session.Compaction do
         %{role: :assistant, tool_calls: calls} when is_list(calls) ->
           Enum.reduce(calls, acc, fn tc, inner ->
             case tc.name do
-              "read" ->
+              "read_file" ->
                 path = tc.arguments["path"]
                 if path, do: %{inner | read: [path | inner.read]}, else: inner
 
-              name when name in ["write", "edit"] ->
+              name when name in ["write_file", "edit_file", "edit_file_lines"] ->
                 path = tc.arguments["path"]
                 if path, do: %{inner | modified: [path | inner.modified]}, else: inner
 

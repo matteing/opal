@@ -112,6 +112,7 @@ defmodule Opal.RPC.Protocol do
       ],
       result: [
         %{name: "session_id", type: :string, description: "The new session's unique ID."},
+        %{name: "session_dir", type: :string, description: "Filesystem path to the session's data directory."},
         %{name: "context_files", type: {:array, :string}, description: "Paths of loaded context files."},
         %{name: "available_skills", type: {:array, :string}, description: "Names of discovered skills (not yet loaded)."},
         %{name: "mcp_servers", type: {:array, :string}, description: "Names of connected MCP servers."},
@@ -332,6 +333,22 @@ defmodule Opal.RPC.Protocol do
       ],
       result: [
         %{name: "text", type: :string, description: "The user's input."}
+      ]
+    },
+    %{
+      method: "client/ask_user",
+      direction: :server_to_client,
+      description: "Ask the user a question with optional multiple-choice answers.",
+      params: [
+        %{name: "session_id", type: :string, required: true,
+          description: "Session this question belongs to."},
+        %{name: "question", type: :string, required: true,
+          description: "The question to display."},
+        %{name: "choices", type: {:array, :string}, required: false,
+          description: "Optional multiple-choice options."}
+      ],
+      result: [
+        %{name: "answer", type: :string, description: "The user's response text."}
       ]
     }
   ]

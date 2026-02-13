@@ -14,6 +14,26 @@ Skills are discovered during context discovery (AGENTS.md, SKILL.md files in `.c
 
 When the LLM decides a skill is relevant, it calls `use_skill` to load the full instructions into the agent's context. The skill's content is injected as additional system context for all subsequent turns.
 
+### Glob Auto-Activation
+
+Skills can declare `globs` patterns in their SKILL.md frontmatter. When a file-modifying tool (`write_file`, `edit_file`) writes to a path matching a skill's glob, the skill is automatically loaded without requiring an explicit `use_skill` call.
+
+```yaml
+---
+name: docs
+description: Maintains project documentation.
+globs: docs/**
+---
+```
+
+Multiple patterns are supported as a YAML list:
+
+```yaml
+globs:
+  - docs/**
+  - "*.md"
+```
+
 ## Responses
 
 | Result | Meaning |

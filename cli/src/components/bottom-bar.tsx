@@ -1,4 +1,4 @@
-import React, { useState, type FC } from "react";
+import React, { useState, useCallback, memo, type FC } from "react";
 import { Box, Text, useStdout } from "ink";
 import TextInput from "ink-text-input";
 import type { OpalActions, OpalState } from "../hooks/use-opal.js";
@@ -8,16 +8,25 @@ export interface BottomBarProps {
   actions: OpalActions;
 }
 
-export const BottomBar: FC<BottomBarProps> = ({ state, actions }) => {
+/**
+ * Memoised so that high-frequency streaming events (messageDelta, etc.) do NOT
+ * cascade into TextInput re-renders.  ink-text-input creates an inline
+ * useInput callback every render, and Ink's useInput tears down / re-adds the
+ * stdin listener whenever that reference changes – causing dropped keystrokes
+ * and input lag during streaming.
+ */
+export const BottomBar: FC<BottomBarProps> = memo(({ state, actions }) => {
   const { stdout } = useStdout();
   const width = stdout?.columns ?? 80;
   const [value, setValue] = useState("");
 
-  const placeholder = state.isRunning
+  const isRunning = state.main.isRunning;
+
+  const placeholder = isRunning
     ? "Steer the response…"
     : "Send a message…";
 
-  const handleSubmit = (text: string) => {
+  const handleSubmit = useCallback((text: string) => {
     if (!text.trim()) return;
     setValue("");
 
@@ -26,12 +35,12 @@ export const BottomBar: FC<BottomBarProps> = ({ state, actions }) => {
       return;
     }
 
-    if (state.isRunning) {
+    if (isRunning) {
       actions.submitSteer(text.trim());
     } else {
       actions.submitPrompt(text.trim());
     }
-  };
+  }, [isRunning, actions.runCommand, actions.submitSteer, actions.submitPrompt]);
 
   const formatTokens = (tokens: number | undefined): string => {
     if (tokens == null) return '0';
@@ -81,6 +90,10 @@ export const BottomBar: FC<BottomBarProps> = ({ state, actions }) => {
           <Text dimColor>
             <Text bold>ctrl+o</Text> tool output
           </Text>
+          <Text dimColor>│</Text>
+          <Text dimColor>
+            <Text bold>ctrl+y</Text> plan
+          </Text>
         </Box>
         <Box gap={0}>
           {state.currentModel && (
@@ -96,4 +109,8 @@ export const BottomBar: FC<BottomBarProps> = ({ state, actions }) => {
       </Box>
     </Box>
   );
-};
+}, (prev, next) =>
+  prev.state.main.isRunning === next.state.main.isRunning &&
+  prev.state.currentModel === next.state.currentModel &&
+  prev.state.tokenUsage === next.state.tokenUsage,
+);

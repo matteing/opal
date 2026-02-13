@@ -29,6 +29,8 @@ defmodule Opal.Skill do
 
   ## Optional Fields
 
+    * `globs` — File-path glob patterns (e.g. `docs/**`). When a tool
+      writes to a path matching any pattern, the skill is auto-loaded.
     * `license` — License name or reference to a bundled file.
     * `compatibility` — 1–500 characters indicating environment requirements.
     * `metadata` — Arbitrary key-value map for additional properties.
@@ -49,6 +51,7 @@ defmodule Opal.Skill do
   @type t :: %__MODULE__{
           name: String.t(),
           description: String.t(),
+          globs: [String.t()] | nil,
           license: String.t() | nil,
           compatibility: String.t() | nil,
           metadata: map() | nil,
@@ -60,6 +63,7 @@ defmodule Opal.Skill do
   defstruct [
     :name,
     :description,
+    :globs,
     :license,
     :compatibility,
     :metadata,
@@ -162,6 +166,47 @@ defmodule Opal.Skill do
     "- **#{name}**: #{desc}"
   end
 
+  @doc """
+  Returns `true` if the given relative path matches any of the skill's
+  glob patterns.
+
+  Returns `false` when the skill has no globs defined (`nil`).
+
+  ## Examples
+
+      iex> skill = %Opal.Skill{name: "docs", globs: ["docs/**"], description: "", instructions: ""}
+      iex> Opal.Skill.matches_path?(skill, "docs/tools/edit.md")
+      true
+
+      iex> skill = %Opal.Skill{name: "docs", globs: nil, description: "", instructions: ""}
+      iex> Opal.Skill.matches_path?(skill, "docs/tools/edit.md")
+      false
+  """
+  @spec matches_path?(t(), String.t()) :: boolean()
+  def matches_path?(%__MODULE__{globs: nil}, _path), do: false
+  def matches_path?(%__MODULE__{globs: []}, _path), do: false
+
+  def matches_path?(%__MODULE__{globs: globs}, path) when is_list(globs) do
+    Enum.any?(globs, &glob_match?(&1, path))
+  end
+
+  # Converts a glob pattern to a regex and tests the path.
+  defp glob_match?(pattern, path) do
+    regex_str =
+      pattern
+      # Temporarily replace ** so single-* replacement doesn't eat it
+      |> String.replace("**", "\0GLOBSTAR\0")
+      |> Regex.escape()
+      |> String.replace("\\*", "[^/]*")
+      |> String.replace("\\?", "[^/]")
+      |> String.replace("\0GLOBSTAR\0", ".*")
+
+    case Regex.compile("^#{regex_str}$") do
+      {:ok, regex} -> Regex.match?(regex, path)
+      _ -> false
+    end
+  end
+
   # --- Private ---
 
   # Splits "---\nyaml\n---\nbody" into {yaml, body}.
@@ -204,9 +249,18 @@ defmodule Opal.Skill do
         _ -> nil
       end
 
+    globs =
+      case Map.get(frontmatter, "globs") do
+        nil -> nil
+        str when is_binary(str) -> [str]
+        list when is_list(list) -> Enum.filter(list, &is_binary/1)
+        _ -> nil
+      end
+
     skill = %__MODULE__{
       name: Map.get(frontmatter, "name"),
       description: Map.get(frontmatter, "description"),
+      globs: globs,
       license: Map.get(frontmatter, "license"),
       compatibility: Map.get(frontmatter, "compatibility"),
       metadata: Map.get(frontmatter, "metadata"),

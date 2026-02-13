@@ -14,7 +14,7 @@ defmodule Opal.Application do
       Opal.RPC.Stdio
     ]
 
-    opts = [strategy: :one_for_one, name: Opal.Supervisor]
+    opts = [strategy: :rest_for_one, name: Opal.Supervisor]
     Supervisor.start_link(children, opts)
   end
 

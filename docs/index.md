@@ -54,6 +54,7 @@ graph LR
 | Subsystem | What it does | Doc |
 |-----------|-------------|-----|
 | **Agent Loop** | GenServer implementing prompt → stream → tools → repeat | [agent-loop.md](agent-loop.md) |
+| **System Prompt** | Dynamic prompt assembly: context discovery, tool guidelines, skills | [system-prompt.md](system-prompt.md) |
 | **Session** | Conversation tree with branching and persistence | [session.md](session.md) |
 | **Compaction** | Summarizes old messages to stay within context window | [compaction.md](compaction.md) |
 | **OTP Patterns** | GenServer patterns, Registry, ETS/DETS, message passing | [otp.md](otp.md) |

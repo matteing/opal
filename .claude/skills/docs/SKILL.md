@@ -1,6 +1,7 @@
 ---
 name: docs
 description: Maintains evergreen documentation in docs/. Use this skill when a major feature is added, changed, or removed to keep the corresponding explainer up to date. Also use when the user asks to document something or references this skill.
+globs: docs/**
 ---
 
 # Documentation Skill

@@ -10,6 +10,7 @@ import type {
   SettingsSaveResult,
   ConfirmRequest,
   InputRequest,
+  ClientAsk_userParams,
 } from "./protocol.js";
 
 // --- Event callback types ---
@@ -42,6 +43,8 @@ export interface SessionOptions extends SessionStartParams {
   onConfirm?: (req: ConfirmRequest) => Promise<string>;
   /** Handler for input requests. */
   onInput?: (req: InputRequest) => Promise<string>;
+  /** Handler for ask_user tool requests. */
+  onAskUser?: (req: { question: string; choices?: string[] }) => Promise<string>;
   /** Auto-confirm all tool executions (for non-interactive SDK use). */
   autoConfirm?: boolean;
   /** Pipe server stderr to process.stderr for debugging. */
@@ -52,6 +55,7 @@ export interface SessionOptions extends SessionStartParams {
 
 export class Session {
   readonly sessionId: string;
+  readonly sessionDir: string;
   readonly contextFiles: string[];
   readonly availableSkills: string[];
   readonly mcpServers: string[];
@@ -65,6 +69,7 @@ export class Session {
   ) {
     this.client = client;
     this.sessionId = result.sessionId;
+    this.sessionDir = result.sessionDir;
     this.contextFiles = result.contextFiles;
     this.availableSkills = result.availableSkills;
     this.mcpServers = result.mcpServers;
@@ -80,7 +85,7 @@ export class Session {
     opts: SessionOptions = {},
     clientOpts?: OpalClientOptions,
   ): Promise<Session> {
-    const { onConfirm, onInput, autoConfirm, verbose, ...startParams } = opts;
+    const { onConfirm, onInput, onAskUser, autoConfirm, verbose, ...startParams } = opts;
 
     const client = new OpalClient({
       ...clientOpts,
@@ -103,6 +108,14 @@ export class Session {
             return { text };
           }
           throw new Error("No input handler registered");
+        }
+        if (method === "client/ask_user") {
+          const req = params as unknown as ClientAsk_userParams;
+          if (onAskUser) {
+            const answer = await onAskUser({ question: req.question, choices: req.choices });
+            return { answer };
+          }
+          throw new Error("No ask_user handler registered");
         }
         throw new Error(`Unknown server request: ${method}`);
       },

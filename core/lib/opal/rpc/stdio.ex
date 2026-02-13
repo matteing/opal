@@ -229,6 +229,9 @@ defmodule Opal.RPC.Stdio do
   defp serialize_event({:tool_execution_end, tool, result}),
     do: {"tool_execution_end", %{tool: tool, call_id: "", result: serialize_tool_result(result)}}
 
+  defp serialize_event({:sub_agent_start, %{model: model, label: label, tools: tools}}),
+    do: {"sub_agent_start", %{model: model, label: label, tools: tools}}
+
   defp serialize_event({:sub_agent_event, parent_call_id, sub_session_id, inner_event}) do
     {inner_type, inner_data} = serialize_event(inner_event)
     {"sub_agent_event", %{parent_call_id: parent_call_id, sub_session_id: sub_session_id, inner: Map.put(inner_data, :type, inner_type)}}

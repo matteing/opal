@@ -91,7 +91,22 @@ defmodule Opal.Tool.SubAgent do
     parent_state = context.agent_state
     parent_call_id = Map.get(context, :call_id, "")
 
-    overrides = build_overrides(args, parent_state)
+    # Build a question_handler that the sub-agent's AskParent tool can call.
+    # It sends a message to *this* process (the parent's tool task running
+    # collect_and_forward) and blocks until we reply with the answer.
+    # Classic Erlang request/reply with a make_ref for correlation.
+    parent_task = self()
+
+    question_handler = fn %{question: question, choices: choices} ->
+      ref = make_ref()
+      send(parent_task, {:sub_agent_question, self(), ref, %{question: question, choices: choices}})
+
+      receive do
+        {:sub_agent_answer, ^ref, answer} -> {:ok, answer}
+      end
+    end
+
+    overrides = build_overrides(args, parent_state) |> Map.put(:question_handler, question_handler)
 
     case Opal.SubAgent.spawn_from_state(parent_state, overrides) do
       {:ok, sub_pid} ->
@@ -101,6 +116,13 @@ defmodule Opal.Tool.SubAgent do
 
         # Subscribe to sub-agent events for forwarding
         Opal.Events.subscribe(sub_session_id)
+
+        # Emit sub_agent_start with metadata for the CLI tab UI
+        tool_names = Enum.map(sub_state.tools, & &1.name())
+        label = truncate(args["prompt"] || "", 80)
+
+        forward_event(parent_session_id, sub_session_id, parent_call_id,
+          {:sub_agent_start, %{model: sub_state.model.id, label: label, tools: tool_names}})
 
         # Send the prompt
         Opal.Agent.prompt(sub_pid, args["prompt"])
@@ -157,8 +179,27 @@ defmodule Opal.Tool.SubAgent do
   end
 
   # Collects sub-agent response while forwarding events to the parent session.
+  # Also handles :sub_agent_question messages from the sub-agent's AskParent
+  # tool — escalates the question to the user via RPC and replies with the
+  # answer, all within the same receive loop (no extra process needed).
   defp collect_and_forward(sub_session_id, parent_session_id, parent_call_id, text, tool_log, timeout) do
     receive do
+      # --- Sub-agent question escalation ---
+      # The sub-agent's AskParent tool sends this when the LLM needs user input.
+      # We handle it here so the parent's collect loop acts as a message relay:
+      # sub-agent task → parent task → RPC → CLI → user → back the same way.
+      {:sub_agent_question, from, ref, %{question: question, choices: choices}} ->
+        args = %{"question" => question, "choices" => choices}
+        answer =
+          case Opal.Tool.Ask.ask_via_rpc(args, %{session_id: parent_session_id}) do
+            {:ok, a} -> a
+            {:error, _} -> "(question could not be answered)"
+          end
+
+        send(from, {:sub_agent_answer, ref, answer})
+        collect_and_forward(sub_session_id, parent_session_id, parent_call_id, text, tool_log, timeout)
+
+      # --- Event forwarding ---
       {:opal_event, ^sub_session_id, {:message_delta, %{delta: delta}} = event} ->
         forward_event(parent_session_id, sub_session_id, parent_call_id, event)
         collect_and_forward(sub_session_id, parent_session_id, parent_call_id, text <> delta, tool_log, timeout)

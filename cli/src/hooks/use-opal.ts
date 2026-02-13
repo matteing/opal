@@ -21,7 +21,6 @@ export interface Task {
   meta: string;
   status: "running" | "done" | "error";
   result?: { ok: boolean; output?: string; error?: string };
-  subTasks?: Task[];
 }
 
 export interface Skill {
@@ -43,16 +42,38 @@ export type TimelineEntry =
   | { kind: "skill"; skill: Skill }
   | { kind: "context"; context: Context };
 
-export interface OpalState {
+/** Shared view shape used by both main agent and sub-agents. */
+export interface AgentView {
   timeline: TimelineEntry[];
   thinking: string | null;
+  statusMessage: string | null;
   isRunning: boolean;
+}
+
+export interface SubAgent extends AgentView {
+  sessionId: string;
+  parentCallId: string;
+  label: string;
+  model: string;
+  tools: string[];
+  startedAt: number;
+  toolCount: number;
+}
+
+export interface OpalState {
+  // Main agent view
+  main: AgentView;
+  // Sub-agents keyed by sub_session_id
+  subAgents: Record<string, SubAgent>;
+  activeTab: string; // "main" | sub_session_id
+  // Session-level state
   confirmation: ConfirmRequest | null;
+  askUser: { question: string; choices: string[] } | null;
   modelPicker: { models: { id: string; name: string; provider?: string; supportsThinking?: boolean; thinkingLevels?: string[] }[]; current: string; currentThinkingLevel?: string } | null;
   currentModel: string | null;
   tokenUsage: TokenUsage | null;
-  statusMessage: string | null;
   sessionReady: boolean;
+  sessionDir: string;
   availableSkills: string[];
   error: string | null;
   workingDir: string;
@@ -66,24 +87,29 @@ export interface OpalActions {
   abort: () => void;
   compact: () => void;
   resolveConfirmation: (action: string) => void;
+  resolveAskUser: (answer: string) => void;
   runCommand: (input: string) => void;
   selectModel: (modelId: string, thinkingLevel?: string) => void;
   dismissModelPicker: () => void;
+  switchTab: (tabId: string) => void;
 }
 
 // --- Hook ---
 
+const EMPTY_VIEW: AgentView = { timeline: [], thinking: null, statusMessage: null, isRunning: false };
+
 export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
   const [state, setState] = useState<OpalState>({
-    timeline: [],
-    thinking: null,
-    isRunning: false,
+    main: { ...EMPTY_VIEW },
+    subAgents: {},
+    activeTab: "main",
     confirmation: null,
+    askUser: null,
     modelPicker: null,
     currentModel: null,
     tokenUsage: null,
-    statusMessage: null,
     sessionReady: false,
+    sessionDir: "",
     availableSkills: [],
     error: null,
     workingDir: opts.workingDir ?? process.cwd(),
@@ -93,6 +119,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
 
   const sessionRef = useRef<Session | null>(null);
   const confirmResolverRef = useRef<((action: string) => void) | null>(null);
+  const askUserResolverRef = useRef<((answer: string) => void) | null>(null);
   const pendingEventsRef = useRef<AgentEvent[]>([]);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -107,6 +134,13 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
         return new Promise<string>((resolve) => {
           confirmResolverRef.current = resolve;
           setState((s) => ({ ...s, confirmation: req }));
+        });
+      },
+      onAskUser: async (req) => {
+        if (!mounted) return "";
+        return new Promise<string>((resolve) => {
+          askUserResolverRef.current = resolve;
+          setState((s) => ({ ...s, askUser: { question: req.question, choices: req.choices ?? [] } }));
         });
       },
     })
@@ -129,9 +163,10 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
         setState((s) => ({
           ...s,
           sessionReady: true,
+          sessionDir: session.sessionDir,
           nodeName: session.nodeName,
           availableSkills: session.availableSkills,
-          timeline: [...s.timeline, ...initialTimeline],
+          main: { ...s.main, timeline: [...s.main.timeline, ...initialTimeline] },
         }));
         session.getState().then((res) => {
           const displaySpec = res.model.provider !== "copilot"
@@ -161,9 +196,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     if (batch.length === 0) return;
     pendingEventsRef.current = [];
     setState((s) => {
-      // Clone timeline so in-place mutations in appendMessageDelta don't
-      // corrupt the previous React state.
-      let next: OpalState = { ...s, timeline: [...s.timeline] };
+      let next: OpalState = { ...s, main: { ...s.main, timeline: [...s.main.timeline] } };
       for (const event of batch) {
         next = applyEvent(next, event);
       }
@@ -199,8 +232,11 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
 
       setState((s) => ({
         ...s,
-        isRunning: true,
-        timeline: [...s.timeline, { kind: "message", message: { role: "user", content: text } }],
+        main: {
+          ...s.main,
+          isRunning: true,
+          timeline: [...s.main.timeline, { kind: "message", message: { role: "user", content: text } }],
+        },
       }));
 
       processEvents(session.prompt(text));
@@ -215,7 +251,10 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
 
       setState((s) => ({
         ...s,
-        timeline: [...s.timeline, { kind: "message", message: { role: "user", content: `[steer] ${text}` } }],
+        main: {
+          ...s.main,
+          timeline: [...s.main.timeline, { kind: "message", message: { role: "user", content: `[steer] ${text}` } }],
+        },
       }));
 
       session.steer(text);
@@ -237,10 +276,19 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     setState((s) => ({ ...s, confirmation: null }));
   }, []);
 
+  const resolveAskUser = useCallback((answer: string) => {
+    askUserResolverRef.current?.(answer);
+    askUserResolverRef.current = null;
+    setState((s) => ({ ...s, askUser: null }));
+  }, []);
+
   const addSystemMessage = useCallback((content: string) => {
     setState((s) => ({
       ...s,
-      timeline: [...s.timeline, { kind: "message", message: { role: "assistant", content } }],
+      main: {
+        ...s.main,
+        timeline: [...s.main.timeline, { kind: "message", message: { role: "assistant", content } }],
+      },
     }));
   }, []);
 
@@ -303,12 +351,43 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
           addSystemMessage("Compacting conversation…");
           break;
         }
+        case "agents": {
+          setState((s) => {
+            const subs = Object.values(s.subAgents);
+            if (subs.length === 0 && s.activeTab === "main") {
+              addSystemMessage("No active sub-agents.");
+              return s;
+            }
+            if (!arg) {
+              // List active sub-agents
+              const lines = subs.map((sub, i) =>
+                `  ${i + 1}. **${sub.label || sub.sessionId.slice(0, 8)}** — ${sub.model} · ${sub.toolCount} tools · ${sub.isRunning ? "running" : "done"}`
+              );
+              const viewing = s.activeTab !== "main"
+                ? `\nCurrently viewing: **${s.subAgents[s.activeTab]?.label || s.activeTab}**. Use \`/agents main\` to return.`
+                : "";
+              addSystemMessage(`**Active sub-agents:**\n${lines.join("\n")}${viewing}\n\nUse \`/agents <number>\` to view, \`/agents main\` to return.`);
+              return s;
+            }
+            // Switch to a specific agent
+            if (arg === "main") return { ...s, activeTab: "main" };
+            const idx = parseInt(arg, 10);
+            if (!isNaN(idx) && idx >= 1 && idx <= subs.length) {
+              return { ...s, activeTab: subs[idx - 1]!.sessionId };
+            }
+            addSystemMessage(`Invalid agent: \`${arg}\`. Use a number (1-${subs.length}) or \`main\`.`);
+            return s;
+          });
+          break;
+        }
         case "help": {
           addSystemMessage(
             "**Commands:**\n" +
             "  `/model`                  — show current model\n" +
             "  `/model <provider:id>`    — switch model (e.g. `anthropic:claude-sonnet-4`)\n" +
             "  `/models`                 — select model interactively\n" +
+            "  `/agents`                 — list active sub-agents\n" +
+            "  `/agents <n|main>`        — switch view to sub-agent or main\n" +
             "  `/compact`                — compact conversation history\n" +
             "  `/help`                   — show this help"
           );
@@ -346,25 +425,103 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     setState((s) => ({ ...s, modelPicker: null }));
   }, []);
 
+  const switchTab = useCallback((tabId: string) => {
+    setState((s) => ({ ...s, activeTab: tabId }));
+  }, []);
+
   return [
     state,
-    { submitPrompt, submitSteer, abort, compact, resolveConfirmation, runCommand, selectModel, dismissModelPicker },
+    { submitPrompt, submitSteer, abort, compact, resolveConfirmation, resolveAskUser, runCommand, selectModel, dismissModelPicker, switchTab },
   ];
 }
 
 // --- Event reducer ---
 
+/** Apply an agent-level event to an AgentView. Shared by main and sub-agents. */
+function applyAgentEvent(view: AgentView, event: Record<string, unknown>): AgentView {
+  const type = event.type as string;
+  switch (type) {
+    case "agentStart":
+    case "agent_start":
+      return { ...view, isRunning: true };
+
+    case "agentEnd":
+    case "agent_end":
+      return { ...view, isRunning: false, thinking: null, statusMessage: null };
+
+    case "agentAbort":
+    case "agent_abort":
+      return { ...view, isRunning: false, thinking: null, statusMessage: null };
+
+    case "messageStart":
+    case "message_start":
+      return { ...view, timeline: [...view.timeline, { kind: "message", message: { role: "assistant", content: "" } }] };
+
+    case "messageDelta":
+    case "message_delta":
+      return { ...view, timeline: appendMessageDelta(view.timeline, (event.delta as string) ?? "") };
+
+    case "thinkingStart":
+    case "thinking_start":
+      return { ...view, thinking: "" };
+
+    case "thinkingDelta":
+    case "thinking_delta":
+      return { ...view, thinking: (view.thinking ?? "") + ((event.delta as string) ?? "") };
+
+    case "toolExecutionStart":
+    case "tool_execution_start":
+      return {
+        ...view,
+        timeline: [
+          ...view.timeline,
+          {
+            kind: "tool",
+            task: {
+              tool: (event.tool as string) ?? "",
+              callId: ((event.callId ?? event.call_id) as string) ?? "",
+              args: (event.args as Record<string, unknown>) ?? {},
+              meta: (event.meta as string) ?? "",
+              status: "running",
+            },
+          },
+        ],
+      };
+
+    case "toolExecutionEnd":
+    case "tool_execution_end": {
+      const callId = ((event.callId ?? event.call_id) as string) ?? "";
+      const result = event.result as { ok: boolean; output?: string; error?: string };
+      const timeline = view.timeline.map((entry) =>
+        entry.kind === "tool" && entry.task.callId === callId
+          ? { ...entry, task: { ...entry.task, status: (result.ok ? "done" : "error") as Task["status"], result } }
+          : entry,
+      );
+      return { ...view, timeline };
+    }
+
+    case "statusUpdate":
+    case "status_update":
+      return { ...view, statusMessage: (event.message as string) ?? null };
+
+    default:
+      return view;
+  }
+}
+
 function applyEvent(state: OpalState, event: AgentEvent): OpalState {
+  const e = event as unknown as Record<string, unknown>;
   switch (event.type) {
     case "agentStart":
-      return { ...state, isRunning: true };
+      return { ...state, main: applyAgentEvent(state.main, e) };
 
     case "agentEnd":
       return {
         ...state,
-        isRunning: false,
-        thinking: null,
-        statusMessage: null,
+        main: applyAgentEvent(state.main, e),
+        // Clean up completed sub-agents
+        subAgents: {},
+        activeTab: "main",
         tokenUsage: event.usage
           ? {
               promptTokens: event.usage.promptTokens,
@@ -377,141 +534,99 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
       };
 
     case "agentAbort":
-      return { ...state, isRunning: false, thinking: null, statusMessage: null };
+      return { ...state, main: applyAgentEvent(state.main, e), subAgents: {}, activeTab: "main" };
 
     case "messageStart":
-      return {
-        ...state,
-        timeline: [...state.timeline, { kind: "message", message: { role: "assistant", content: "" } }],
-      };
-
     case "messageDelta":
-      return {
-        ...state,
-        timeline: appendMessageDelta(state.timeline, event.delta),
-        lastDeltaAt: Date.now(),
-      };
-
     case "thinkingStart":
-      return { ...state, thinking: "" };
-
     case "thinkingDelta":
-      return {
-        ...state,
-        thinking: (state.thinking ?? "") + event.delta,
-      };
-
     case "toolExecutionStart":
-      return {
-        ...state,
-        timeline: [
-          ...state.timeline,
-          {
-            kind: "tool",
-            task: {
-              tool: event.tool,
-              callId: event.callId,
-              args: event.args,
-              meta: event.meta,
-              status: "running",
-            },
-          },
-        ],
-      };
+    case "statusUpdate":
+      return { ...state, main: applyAgentEvent(state.main, e), lastDeltaAt: event.type === "messageDelta" ? Date.now() : state.lastDeltaAt };
 
-    case "toolExecutionEnd": {
-      const timeline = state.timeline.map((entry) =>
-        entry.kind === "tool" && entry.task.callId === event.callId
-          ? {
-              ...entry,
-              task: {
-                ...entry.task,
-                status: (event.result.ok ? "done" : "error") as Task["status"],
-                result: event.result,
-              },
-            }
-          : entry,
-      );
-      return { ...state, timeline };
-    }
+    case "toolExecutionEnd":
+      return { ...state, main: applyAgentEvent(state.main, e) };
 
     case "subAgentEvent": {
       const inner = event.inner as Record<string, unknown>;
       const innerType = inner.type as string | undefined;
+      const subSessionId = event.subSessionId;
       const parentCallId = event.parentCallId;
 
-      if (innerType === "tool_execution_start") {
-        const subTask: Task = {
-          tool: inner.tool as string,
-          callId: inner.callId as string,
-          args: (inner.args as Record<string, unknown>) ?? {},
-          meta: (inner.meta as string) ?? "",
-          status: "running",
+      // sub_agent_start: create a new SubAgent entry
+      if (innerType === "sub_agent_start") {
+        const sub: SubAgent = {
+          sessionId: subSessionId,
+          parentCallId,
+          label: (inner.label as string) ?? "",
+          model: (inner.model as string) ?? "",
+          tools: (inner.tools as string[]) ?? [],
+          timeline: [],
+          thinking: null,
+          statusMessage: null,
+          isRunning: true,
+          startedAt: Date.now(),
+          toolCount: 0,
         };
-        const timeline = state.timeline.map((entry) =>
-          entry.kind === "tool" && entry.task.callId === parentCallId
-            ? { ...entry, task: { ...entry.task, subTasks: [...(entry.task.subTasks ?? []), subTask] } }
-            : entry,
-        );
-        return { ...state, timeline };
+        return { ...state, subAgents: { ...state.subAgents, [subSessionId]: sub } };
       }
 
-      if (innerType === "tool_execution_end") {
-        const timeline = state.timeline.map((entry) => {
-          if (entry.kind === "tool" && entry.task.callId === parentCallId) {
-            const innerResult = inner.result as { ok: boolean; output?: string; error?: string };
-            const subTasks = (entry.task.subTasks ?? []).map((st) =>
-              st.callId === (inner.callId as string)
-                ? { ...st, status: (innerResult.ok ? "done" : "error") as Task["status"], result: innerResult }
-                : st,
-            );
-            return { ...entry, task: { ...entry.task, subTasks } };
-          }
-          return entry;
-        });
-        return { ...state, timeline };
+      // Route other inner events to the sub-agent's AgentView
+      const existing = state.subAgents[subSessionId];
+      if (!existing) return state;
+
+      const updatedView = applyAgentEvent(existing, inner as { type: string; [k: string]: unknown });
+
+      // Track tool count
+      let toolCount = existing.toolCount;
+      if (innerType === "tool_execution_start") toolCount++;
+
+      // If agent_end, mark done and auto-revert tab
+      const isDone = innerType === "agent_end";
+      const updatedSub: SubAgent = { ...existing, ...updatedView, toolCount, isRunning: !isDone };
+
+      let nextSubAgents: Record<string, SubAgent>;
+      let nextTab = state.activeTab;
+      if (isDone) {
+        // Remove the sub-agent and revert tab if needed
+        nextSubAgents = { ...state.subAgents };
+        delete nextSubAgents[subSessionId];
+        if (nextTab === subSessionId) nextTab = "main";
+      } else {
+        nextSubAgents = { ...state.subAgents, [subSessionId]: updatedSub };
       }
 
-      return state;
+      return { ...state, subAgents: nextSubAgents, activeTab: nextTab };
     }
 
     case "turnEnd":
       return state;
 
     case "error":
-      return { ...state, isRunning: false, error: event.reason };
+      return { ...state, main: { ...state.main, isRunning: false }, error: event.reason };
 
     case "skillLoaded":
       return {
         ...state,
-        timeline: [
-          ...state.timeline,
-          {
-            kind: "skill",
-            skill: {
-              name: event.name,
-              description: event.description,
-              status: "loaded",
-            },
-          },
-        ],
+        main: {
+          ...state.main,
+          timeline: [
+            ...state.main.timeline,
+            { kind: "skill", skill: { name: event.name, description: event.description, status: "loaded" } },
+          ],
+        },
       };
 
     case "contextDiscovered":
       return {
         ...state,
-        timeline: [
-          ...state.timeline,
-          {
-            kind: "context",
-            context: {
-              files: event.files,
-              skills: [],
-              mcpServers: [],
-              status: "discovered",
-            },
-          },
-        ],
+        main: {
+          ...state.main,
+          timeline: [
+            ...state.main.timeline,
+            { kind: "context", context: { files: event.files, skills: [], mcpServers: [], status: "discovered" } },
+          ],
+        },
       };
 
     case "usageUpdate":
@@ -527,9 +642,6 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
             }
           : state.tokenUsage,
       };
-
-    case "statusUpdate":
-      return { ...state, statusMessage: event.message };
 
     default:
       return state;

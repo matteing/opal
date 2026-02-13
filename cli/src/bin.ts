@@ -53,5 +53,8 @@ if (!opts.workingDir) {
   opts.workingDir = process.env["OPAL_CWD"] || process.env["INIT_CWD"] || process.cwd();
 }
 
+// Clear the screen so the app starts with a fresh viewport.
+process.stdout.write("\x1b[2J\x1b[H");
+
 render(React.createElement(App, { sessionOpts: opts }));
 

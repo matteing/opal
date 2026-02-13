@@ -28,8 +28,10 @@ defmodule Opal.Context do
   Standard search locations:
     * `<working_dir>/.agents/skills/*/SKILL.md`
     * `<working_dir>/.github/skills/*/SKILL.md`
+    * `<working_dir>/.claude/skills/*/SKILL.md`
     * `~/.agents/skills/*/SKILL.md`
     * `~/.opal/skills/*/SKILL.md`
+    * `~/.claude/skills/*/SKILL.md`
 
   Additional directories can be specified via `Opal.Config.Features` `:skills` subsystem.
 
@@ -95,8 +97,10 @@ defmodule Opal.Context do
       [
         Path.join([Path.expand(working_dir), ".agents", "skills"]),
         Path.join([Path.expand(working_dir), ".github", "skills"]),
+        Path.join([Path.expand(working_dir), ".claude", "skills"]),
         Path.join([home, ".agents", "skills"]),
-        Path.join([home, ".opal", "skills"])
+        Path.join([home, ".opal", "skills"]),
+        Path.join([home, ".claude", "skills"])
       ] ++ Enum.map(extra_dirs, &Path.expand/1)
 
     search_dirs

@@ -35,8 +35,10 @@ defmodule Opal.RPC.Handler do
     case Opal.start_session(opts) do
       {:ok, agent} ->
         state = Opal.Agent.get_state(agent)
+        session_dir = Path.join(Opal.Config.sessions_dir(state.config), state.session_id)
         {:ok, %{
           session_id: state.session_id,
+          session_dir: session_dir,
           context_files: state.context_files,
           available_skills: Enum.map(state.available_skills, & &1.name),
           mcp_servers: Enum.map(state.mcp_servers, & &1.name),

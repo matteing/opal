@@ -82,4 +82,81 @@ defmodule Opal.RPC.HandlerTest do
                Handler.handle("session/compact", %{"session_id" => "abc"})
     end
   end
+
+  describe "handle/2 models/list with reasoning metadata" do
+    test "models include supports_thinking and thinking_levels" do
+      assert {:ok, %{models: models}} = Handler.handle("models/list", %{})
+
+      for model <- models do
+        assert Map.has_key?(model, :supports_thinking),
+          "model #{model.id} missing supports_thinking"
+        assert Map.has_key?(model, :thinking_levels),
+          "model #{model.id} missing thinking_levels"
+      end
+    end
+
+    test "reasoning models have non-empty thinking_levels" do
+      assert {:ok, %{models: models}} = Handler.handle("models/list", %{})
+      reasoning = Enum.filter(models, & &1.supports_thinking)
+      assert length(reasoning) > 0
+
+      for model <- reasoning do
+        assert model.thinking_levels != [],
+          "reasoning model #{model.id} should have thinking_levels"
+      end
+    end
+
+    test "non-reasoning models have empty thinking_levels" do
+      assert {:ok, %{models: models}} = Handler.handle("models/list", %{})
+      non_reasoning = Enum.filter(models, &(not &1.supports_thinking))
+
+      for model <- non_reasoning do
+        assert model.thinking_levels == [],
+          "non-reasoning model #{model.id} should have empty thinking_levels"
+      end
+    end
+
+    test "models from direct providers include thinking metadata" do
+      assert {:ok, %{models: models}} =
+               Handler.handle("models/list", %{"providers" => ["anthropic"]})
+
+      anthropic = Enum.filter(models, &(&1.provider == "anthropic"))
+      assert length(anthropic) > 0
+
+      for model <- anthropic do
+        assert Map.has_key?(model, :supports_thinking)
+        assert Map.has_key?(model, :thinking_levels)
+      end
+    end
+  end
+
+  describe "handle/2 model/set missing params" do
+    test "returns invalid_params error" do
+      assert {:error, -32602, _, nil} = Handler.handle("model/set", %{})
+    end
+  end
+
+  describe "handle/2 thinking/set missing params" do
+    test "returns invalid_params error" do
+      assert {:error, -32602, _, nil} = Handler.handle("thinking/set", %{})
+    end
+  end
+
+  describe "handle/2 thinking/set with nonexistent session" do
+    test "returns session not found error" do
+      assert {:error, "No session with id: nonexistent"} =
+               Handler.handle("thinking/set", %{"session_id" => "nonexistent", "level" => "high"})
+    end
+  end
+
+  describe "handle/2 model/set with nonexistent session" do
+    test "returns session not found error" do
+      assert {:error, "No session with id: nonexistent"} =
+               Handler.handle("model/set", %{
+                 "session_id" => "nonexistent",
+                 "model_id" => "gpt-5",
+                 "thinking_level" => "high"
+               })
+    end
+  end
 end

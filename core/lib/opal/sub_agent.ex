@@ -84,15 +84,27 @@ defmodule Opal.SubAgent do
 
     Logger.debug("SubAgent spawn parent=#{parent_state.session_id} child=#{session_id} model=#{model.id}")
 
+    # Filter out tools that shouldn't be available to sub-agents;
+    # inject AskParent so sub-agents can ask questions back to the parent.
+    parent_tools = Map.get(overrides, :tools, parent_state.tools)
+
+    tools =
+      parent_tools
+      |> Enum.reject(&(&1 == Opal.Tool.AskUser))
+      |> then(fn ts ->
+        if Opal.Tool.AskParent in ts, do: ts, else: ts ++ [Opal.Tool.AskParent]
+      end)
+
     opts = [
       session_id: session_id,
       system_prompt: Map.get(overrides, :system_prompt, parent_state.system_prompt),
       model: model,
-      tools: Map.get(overrides, :tools, parent_state.tools),
+      tools: tools,
       working_dir: Map.get(overrides, :working_dir, parent_state.working_dir),
       config: parent_state.config,
       provider: provider,
-      tool_supervisor: parent_state.tool_supervisor
+      tool_supervisor: parent_state.tool_supervisor,
+      question_handler: Map.get(overrides, :question_handler)
     ]
 
     DynamicSupervisor.start_child(parent_state.sub_agent_supervisor, {Opal.Agent, opts})
@@ -111,13 +123,16 @@ defmodule Opal.SubAgent do
   @spec run(pid(), String.t(), timeout()) :: {:ok, String.t()} | {:error, term()}
   def run(sub_agent, prompt, timeout \\ 120_000) do
     state = Opal.Agent.get_state(sub_agent)
-    Logger.debug("SubAgent run session=#{state.session_id} prompt=\"#{String.slice(prompt, 0, 80)}\"")
-    Opal.Events.subscribe(state.session_id)
-    Opal.Agent.prompt(sub_agent, prompt)
-    collect_response(state.session_id, "", timeout)
-  after
-    state = Opal.Agent.get_state(sub_agent)
-    Opal.Events.unsubscribe(state.session_id)
+    session_id = state.session_id
+    Logger.debug("SubAgent run session=#{session_id} prompt=\"#{String.slice(prompt, 0, 80)}\"")
+    Opal.Events.subscribe(session_id)
+
+    try do
+      Opal.Agent.prompt(sub_agent, prompt)
+      collect_response(session_id, "", timeout)
+    after
+      Opal.Events.unsubscribe(session_id)
+    end
   end
 
   @doc """

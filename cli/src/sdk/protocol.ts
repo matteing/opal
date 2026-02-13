@@ -20,6 +20,8 @@ export interface SessionStartParams {
 export interface SessionStartResult {
   /** The new session's unique ID. */
   sessionId: string;
+  /** Filesystem path to the session's data directory. */
+  sessionDir: string;
   /** Paths of loaded context files. */
   contextFiles: string[];
   /** Names of discovered skills (not yet loaded). */
@@ -211,6 +213,20 @@ export interface ClientInputResult {
   text: string;
 }
 
+export interface ClientAsk_userParams {
+  /** Session this question belongs to. */
+  sessionId: string;
+  /** The question to display. */
+  question: string;
+  /** Optional multiple-choice options. */
+  choices?: string[];
+}
+
+export interface ClientAsk_userResult {
+  /** The user's response text. */
+  answer: string;
+}
+
 // --- Agent event types ---
 
 export interface AgentStartEvent {
@@ -357,6 +373,7 @@ export const Methods = {
   SETTINGS_SAVE: "settings/save" as const,
   CLIENT_CONFIRM: "client/confirm" as const,
   CLIENT_INPUT: "client/input" as const,
+  CLIENT_ASK_USER: "client/ask_user" as const,
 } as const;
 
 // --- Helper types ---
@@ -409,4 +426,5 @@ export interface MethodTypes {
   "settings/save": { params: SettingsSaveParams; result: SettingsSaveResult };
   "client/confirm": { params: ClientConfirmParams; result: ClientConfirmResult };
   "client/input": { params: ClientInputParams; result: ClientInputResult };
+  "client/ask_user": { params: ClientAsk_userParams; result: ClientAsk_userResult };
 }
