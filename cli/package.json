@@ -1,6 +1,6 @@
 {
   "name": "@unfinite/opal",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "AI coding agent — CLI & typed client library",
   "license": "MIT",
   "type": "module",
