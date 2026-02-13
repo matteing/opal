@@ -46,7 +46,7 @@ jobs:
           - runner: ubuntu-24.04-arm
             target: linux_arm64
             binary: opal_server_linux_arm64
-          - runner: windows-latest
+          - runner: windows-2022
             target: win32_x64
             binary: opal_server_win32_x64
 
