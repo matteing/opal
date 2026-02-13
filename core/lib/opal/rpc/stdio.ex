@@ -26,8 +26,7 @@ defmodule Opal.RPC.Stdio do
   require Logger
 
   defstruct [
-    :port,
-    :buffer,
+    :reader,
     pending_requests: %{},
     next_server_id: 1,
     subscriptions: MapSet.new()
@@ -73,21 +72,44 @@ defmodule Opal.RPC.Stdio do
 
   @impl true
   def init(_opts) do
-    port = Port.open({:fd, 0, 1}, [:binary, :stream, {:line, 1_048_576}])
-    {:ok, %__MODULE__{port: port, buffer: ""}}
+    # Use IO.read instead of Port.open({:fd, 0, 1}, ...) for stdin.
+    # Port.open with {:fd, 0, 1} has limited support on Windows: the BEAM's
+    # file-descriptor mapping via _open_osfhandle can fail with piped stdio
+    # (e.g. Burrito releases), and {:line, N} expects OS-dependent newline
+    # sequences (\r\n on Windows) while the Node.js client sends bare \n.
+    # IO.read(:stdio, :line) goes through Erlang's standard I/O system which
+    # handles both \n and \r\n on all platforms.
+    parent = self()
+
+    {:ok, reader} =
+      Task.start_link(fn -> stdin_read_loop(parent) end)
+
+    {:ok, %__MODULE__{reader: reader}}
+  end
+
+  defp stdin_read_loop(parent) do
+    case IO.read(:stdio, :line) do
+      :eof ->
+        :ok
+
+      {:error, _reason} ->
+        :ok
+
+      line when is_binary(line) ->
+        # Strip \r\n or \n — IO.read(:stdio, :line) includes the trailing
+        # newline, and on Windows it may be \r\n.
+        trimmed = line |> String.trim_trailing("\n") |> String.trim_trailing("\r")
+        send(parent, {:stdin_line, trimmed})
+        stdin_read_loop(parent)
+    end
   end
 
   # -- Incoming data from stdin --
 
   @impl true
-  def handle_info({port, {:data, {:eol, line}}}, %{port: port} = state) do
+  def handle_info({:stdin_line, line}, state) do
     state = process_line(line, state)
     {:noreply, state}
-  end
-
-  def handle_info({port, {:data, {:noeol, chunk}}}, %{port: port} = state) do
-    # Partial line — buffer it
-    {:noreply, %{state | buffer: state.buffer <> chunk}}
   end
 
   # -- Opal Events → JSON-RPC notifications --
@@ -124,11 +146,7 @@ defmodule Opal.RPC.Stdio do
   # -- Internal --
 
   defp process_line(line, state) do
-    # Prepend any buffered partial data
-    full_line = state.buffer <> line
-    state = %{state | buffer: ""}
-
-    case Opal.RPC.decode(full_line) do
+    case Opal.RPC.decode(line) do
       {:request, id, method, params} ->
         handle_request(id, method, params, state)
 
