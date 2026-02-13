@@ -25,15 +25,24 @@ defmodule Opal.Session.Builder do
   end
 
   defp resolve_model(config, cfg) do
+    model_opts = model_opts_from_config(config)
+
     case Map.get(config, :model) do
       nil ->
         case Opal.Settings.get("default_model") do
-          saved when is_binary(saved) and saved != "" -> Opal.Model.coerce(saved)
-          _ -> Opal.Model.coerce(cfg.default_model)
+          saved when is_binary(saved) and saved != "" -> Opal.Model.coerce(saved, model_opts)
+          _ -> Opal.Model.coerce(cfg.default_model, model_opts)
         end
 
       spec ->
-        Opal.Model.coerce(spec)
+        Opal.Model.coerce(spec, model_opts)
+    end
+  end
+
+  defp model_opts_from_config(config) do
+    case Map.get(config, :thinking_level) do
+      nil -> []
+      level -> [thinking_level: level]
     end
   end
 

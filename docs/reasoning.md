@@ -23,17 +23,17 @@ graph TD
     Router{"Provider<br/>router"}
     Copilot["Provider.Copilot"]
     LLM["Provider.LLM"]
-    ChatAPI["Chat Completions API<br/><small>reasoning_effort: high</small>"]
-    RespAPI["Responses API<br/><small>reasoning.effort: high<br/>reasoning.summary: auto</small>"]
+    ChatAPI["Chat Completions API<br/><small>reasoning_effort: high</small><br/>⚠️ No visible thinking returned"]
+    RespAPI["Responses API<br/><small>reasoning.effort: high<br/>reasoning.summary: auto</small><br/>✅ Reasoning content returned"]
     ReqLLM["ReqLLM<br/><small>reasoning_effort: :high</small>"]
-    Anthropic["Anthropic API<br/><small>thinking.type: adaptive<br/>output_config.effort: high</small>"]
-    OpenAI["OpenAI API<br/><small>reasoning.effort: high</small>"]
+    Anthropic["Anthropic API<br/><small>thinking.type: adaptive<br/>output_config.effort: high</small><br/>✅ Thinking blocks returned"]
+    OpenAI["OpenAI API<br/><small>reasoning.effort: high</small><br/>✅ Reasoning content returned"]
 
     User --> Model
     Model --> Router
     Router -->|":copilot"| Copilot
     Router -->|"other"| LLM
-    Copilot -->|"Claude, o3, o4"| ChatAPI
+    Copilot -->|"Claude (param sent,<br/>no thinking returned)"| ChatAPI
     Copilot -->|"GPT-5 family"| RespAPI
     LLM --> ReqLLM
     ReqLLM -->|Anthropic| Anthropic
@@ -42,9 +42,11 @@ graph TD
 
 ### Copilot Provider
 
-The Copilot API proxies multiple model families through two API variants. Reasoning effort is sent in the request body for all thinking-capable models.
+The Copilot API proxies multiple model families through two API variants. Reasoning effort is sent in the request body for thinking-capable models, though **not all models return visible reasoning content** through the proxy.
 
-**Chat Completions** (Claude, o3, o4): Adds `reasoning_effort` string to the request body.
+> **Known limitation (as of Feb 2025):** The Copilot proxy does **not** return `reasoning_content` for Claude models. The `reasoning_effort` parameter is silently accepted (200 OK) but no thinking tokens appear in the response stream. This affects all Claude models (Sonnet 4, Opus 4.5, etc.) regardless of parameter combinations tried — including Anthropic-native `thinking.type` formats. The o3/o4 model families are also not available through the proxy. Only **GPT-5 family** models produce visible reasoning output via the Responses API path. This is confirmed by reports from other tools (opencode#6864). The parameter may still influence response quality even without visible thinking.
+
+**Chat Completions** (Claude): Adds `reasoning_effort` string to the request body. No visible thinking is returned.
 
 ```elixir
 # In Provider.Copilot — delegates to shared OpenAI module
@@ -57,7 +59,7 @@ defp maybe_add_reasoning_effort(body, %{thinking_level: level, id: id}) do
 end
 ```
 
-**Responses API** (GPT-5 family): Adds `reasoning` object with effort level and `summary: "auto"` (required to get reasoning summary text in the stream). Also switches system role to `"developer"`.
+**Responses API** (GPT-5 family): Adds `reasoning` object with effort level and `summary: "auto"` (required to get reasoning summary text in the stream). Also switches system role to `"developer"`. **This is the only Copilot path that produces visible reasoning content.**
 
 ```elixir
 # In Provider.Copilot — Responses API reasoning
@@ -70,6 +72,15 @@ end
 **Level mapping** (via `Opal.Provider.OpenAI.reasoning_effort/1`): `:low` → `"low"`, `:medium` → `"medium"`, `:high` → `"high"`, `:max` → `"high"` (clamped — the Copilot proxy doesn't support `"max"` natively; use the direct LLM provider for Anthropic's adaptive `"max"`).
 
 **Thinking-capable models** are detected by model ID prefix: `gpt-5*`, `claude-sonnet-4*`, `claude-opus-4*`, `claude-haiku-4.5`, `o3*`, `o4*`. Other models (e.g. `gpt-4o`, `gpt-4.1`) don't receive reasoning params.
+
+**Copilot thinking support matrix:**
+
+| Model Family | API Path | Reasoning Sent? | Visible Thinking? |
+|-------------|----------|----------------|-------------------|
+| GPT-5, GPT-5.1, GPT-5.2, GPT-5.3 | Responses API | ✅ `reasoning.effort` | ✅ `reasoning_summary_text.delta` events |
+| Claude Sonnet 4, Opus 4.5+ | Chat Completions | ✅ `reasoning_effort` | ❌ Silently ignored by proxy |
+| o3, o4 | Chat Completions | N/A | N/A — not available on proxy |
+| GPT-4o, GPT-4.1 | Chat Completions | ❌ Not sent | ❌ Not supported |
 
 Thinking output is parsed from SSE into Opal's semantic events:
 
@@ -158,7 +169,7 @@ The `/models` command opens an interactive picker. After selecting a model that 
 ### Via Elixir API
 
 ```elixir
-# At session start
+# At session start (thinking_level flows through Session.Builder)
 Opal.start_session(%{
   model: {:copilot, "claude-opus-4.6"},
   thinking_level: :high
@@ -240,10 +251,13 @@ Provider EventStream → {ref, {:events, [{:thinking_delta, "..."}]}}
 - `cli/src/hooks/use-opal.ts` — Timeline thinking entries, `appendThinkingDelta`
 - `cli/src/components/message-list.tsx` — `ThinkingBlock` component
 - `cli/src/components/model-picker.tsx` — Two-step picker (model → thinking level)
-- `core/test/opal/reasoning_effort_test.exs` — Reasoning effort tests
+- `core/test/opal/reasoning_effort_test.exs` — Reasoning effort unit tests
+- `core/test/opal/thinking_integration_test.exs` — Full-stack thinking integration tests (fixture replay)
+- `core/test/opal/live_thinking_test.exs` — Live API tests that record thinking fixtures
 - `core/test/opal/provider/openai_test.exs` — Shared OpenAI module tests
 
 ## References
 
 - [OpenAI Reasoning Guide](https://developers.openai.com/api/docs/guides/reasoning) — Official docs for `reasoning.effort` and `reasoning.summary` parameters on the Responses API.
-- [Anthropic Extended Thinking](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) — Official docs for budget-based and adaptive thinking modes, including `output_config.effort` levels.
+- [Anthropic Extended Thinking](https://platform.claude.com/docs/en/build-with-claude/extended-thinking) — Official docs for budget-based and adaptive thinking modes, including `output_config.effort` levels.
+- [opencode#6864](https://github.com/anomalyco/opencode/issues/6864) — Confirms the Copilot proxy does not return `reasoning_content` for Claude models. Other tools experience the same limitation.

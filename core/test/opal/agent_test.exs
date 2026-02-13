@@ -248,6 +248,49 @@ defmodule Opal.AgentTest do
       end
     end
 
+    defp send_scenario(caller, ref, :side_effect_tool, _model, messages, _tools) do
+      has_tool_result =
+        Enum.any?(messages, fn
+          %Opal.Message{role: :tool_result} -> true
+          _ -> false
+        end)
+
+      if has_tool_result do
+        send_scenario(caller, ref, :simple_text, nil, messages, nil)
+      else
+        events = [
+          sse_line("response.output_item.added", %{
+            "item" => %{
+              "type" => "function_call",
+              "id" => "item_side",
+              "call_id" => "call_side",
+              "name" => "side_effect_tool"
+            }
+          }),
+          sse_line("response.function_call_arguments.done", %{"arguments" => ~s({})}),
+          sse_line("response.output_item.done", %{
+            "item" => %{
+              "type" => "function_call",
+              "id" => "item_side",
+              "call_id" => "call_side",
+              "name" => "side_effect_tool",
+              "arguments" => ~s({})
+            }
+          }),
+          sse_line("response.completed", %{
+            "response" => %{"id" => "resp_side", "status" => "completed", "usage" => %{}}
+          })
+        ]
+
+        for event <- events do
+          send(caller, {ref, {:data, event}})
+          Process.sleep(1)
+        end
+
+        send(caller, {ref, :done})
+      end
+    end
+
     defp send_scenario(caller, ref, :provider_error, _model, _messages, _tools) do
       events = [
         sse_line("error", %{
@@ -645,6 +688,26 @@ defmodule Opal.AgentTest do
     end
   end
 
+  defmodule SideEffectTool do
+    @behaviour Opal.Tool
+
+    @impl true
+    def name, do: "side_effect_tool"
+
+    @impl true
+    def description, do: "Sleeps and then writes a side-effect marker"
+
+    @impl true
+    def parameters, do: %{"type" => "object", "properties" => %{}}
+
+    @impl true
+    def execute(_args, _context) do
+      Process.sleep(300)
+      :persistent_term.put({__MODULE__, :ran}, true)
+      {:ok, "side effect done"}
+    end
+  end
+
   # --- Helpers ---
 
   defp set_scenario(scenario) do
@@ -699,6 +762,7 @@ defmodule Opal.AgentTest do
   setup do
     on_exit(fn ->
       :persistent_term.erase({TestProvider, :scenario})
+      :persistent_term.erase({SideEffectTool, :ran})
     end)
 
     :ok
@@ -929,6 +993,28 @@ defmodule Opal.AgentTest do
       state = Agent.get_state(pid)
       assert state.status == :idle
     end
+
+    test "abort/1 during tool execution terminates the running tool task" do
+      :persistent_term.erase({SideEffectTool, :ran})
+
+      %{pid: pid, session_id: sid} =
+        start_agent(scenario: :side_effect_tool, tools: [SideEffectTool])
+
+      Agent.prompt(pid, "Run the tool")
+      assert_receive {:opal_event, ^sid, {:agent_start}}, 1000
+
+      assert_receive {:opal_event, ^sid, {:tool_execution_start, "side_effect_tool", _, _, _}},
+                     2000
+
+      Agent.abort(pid)
+      assert_receive {:opal_event, ^sid, {:agent_abort}}, 1000
+
+      Process.sleep(400)
+
+      state = Agent.get_state(pid)
+      assert state.status == :idle
+      assert :persistent_term.get({SideEffectTool, :ran}, false) == false
+    end
   end
 
   # ============================================================
@@ -973,6 +1059,26 @@ defmodule Opal.AgentTest do
         end)
 
       assert length(steer_msgs) == 1
+    end
+
+    test "prompt/2 while running is queued instead of starting an overlapping turn" do
+      %{pid: pid, session_id: sid} = start_agent(scenario: :tool_call, tools: [SlowEchoTool])
+
+      Agent.prompt(pid, "Start")
+      assert_receive {:opal_event, ^sid, {:agent_start}}, 1000
+      assert_receive {:opal_event, ^sid, {:tool_execution_start, "echo_tool", _, _, _}}, 2000
+
+      Agent.prompt(pid, "Queued prompt")
+
+      refute_receive {:opal_event, ^sid, {:agent_start}}, 300
+      assert_receive {:opal_event, ^sid, {:agent_end, messages, _usage}}, 5000
+
+      queued_msgs =
+        Enum.filter(messages, fn m ->
+          m.role == :user && m.content == "Queued prompt"
+        end)
+
+      assert length(queued_msgs) == 1
     end
   end
 

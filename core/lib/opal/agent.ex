@@ -48,7 +48,6 @@ defmodule Opal.Agent do
             current_text: String.t(),
             current_tool_calls: [map()],
             current_thinking: String.t() | nil,
-            pending_tool_calls: MapSet.t(),
             pending_steers: [String.t()],
             status_tag_buffer: String.t(),
             provider: module(),
@@ -71,8 +70,8 @@ defmodule Opal.Agent do
             overflow_detected: boolean(),
             # Optional callback for sub-agents to ask the parent/user questions
             question_handler: (map() -> {:ok, String.t()} | {:error, term()}) | nil,
-            # Tool execution state — tracks pending tool execution
-            pending_tool_task: {reference(), map()} | nil,
+            # Tool execution state — tracks pending supervised tool execution
+            pending_tool_task: {Task.t(), map()} | nil,
             remaining_tool_calls: [map()],
             tool_results: [{map(), term()}],
             tool_context: map() | nil
@@ -94,7 +93,6 @@ defmodule Opal.Agent do
       current_text: "",
       current_tool_calls: [],
       current_thinking: nil,
-      pending_tool_calls: MapSet.new(),
       pending_steers: [],
       status_tag_buffer: "",
       provider: Opal.Provider.Copilot,
@@ -345,7 +343,7 @@ defmodule Opal.Agent do
   end
 
   @impl true
-  def handle_cast({:prompt, text}, %State{} = state) do
+  def handle_cast({:prompt, text}, %State{status: :idle} = state) do
     Logger.debug(
       "Prompt received session=#{state.session_id} len=#{String.length(text)} chars=\"#{String.slice(text, 0, 80)}\""
     )
@@ -355,6 +353,15 @@ defmodule Opal.Agent do
     state = %{state | status: :running}
     broadcast(state, {:agent_start})
     run_turn_internal(state)
+  end
+
+  def handle_cast({:prompt, text}, %State{status: status} = state)
+      when status in [:running, :streaming, :executing_tools] do
+    Logger.debug(
+      "Prompt queued while busy session=#{state.session_id} status=#{status} len=#{String.length(text)}"
+    )
+
+    {:noreply, %{state | pending_steers: state.pending_steers ++ [text]}}
   end
 
   def handle_cast({:steer, text}, %State{status: :idle} = state) do
@@ -444,19 +451,25 @@ defmodule Opal.Agent do
   @impl true
   def handle_info(
         {ref, result},
-        %State{status: :executing_tools, pending_tool_task: {task_ref, tc}} = state
+        %State{
+          status: :executing_tools,
+          pending_tool_task: {%Task{ref: task_ref} = task, tc}
+        } = state
       )
       when ref == task_ref do
     # Tool task completed successfully
-    Process.demonitor(ref, [:flush])
+    Process.demonitor(task.ref, [:flush])
     broadcast(state, {:tool_execution_end, tc.name, tc.call_id, result})
     state = %{state | tool_results: state.tool_results ++ [{tc, result}], pending_tool_task: nil}
-    Opal.Agent.ToolRunner.dispatch_next_tool(state)
+    Opal.Agent.ToolRunner.schedule_dispatch_next_tool(state)
   end
 
   def handle_info(
         {:DOWN, ref, :process, _pid, reason},
-        %State{status: :executing_tools, pending_tool_task: {task_ref, tc}} = state
+        %State{
+          status: :executing_tools,
+          pending_tool_task: {%Task{ref: task_ref}, tc}
+        } = state
       )
       when ref == task_ref do
     # Tool task crashed
@@ -470,6 +483,13 @@ defmodule Opal.Agent do
         pending_tool_task: nil
     }
 
+    Opal.Agent.ToolRunner.schedule_dispatch_next_tool(state)
+  end
+
+  def handle_info(
+        :dispatch_next_tool,
+        %State{status: :executing_tools, pending_tool_task: nil} = state
+      ) do
     Opal.Agent.ToolRunner.dispatch_next_tool(state)
   end
 
@@ -859,9 +879,9 @@ defmodule Opal.Agent do
   # Cancels an in-progress tool execution if present.
   defp cancel_tool_execution(%State{pending_tool_task: nil} = state), do: state
 
-  defp cancel_tool_execution(%State{pending_tool_task: {ref, _tc}} = state) do
-    Process.demonitor(ref, [:flush])
-    # Note: we don't explicitly kill the task process here - we just ignore its result
+  defp cancel_tool_execution(%State{pending_tool_task: {task, _tc}} = state) do
+    _ = Task.shutdown(task, :brutal_kill)
+
     %{
       state
       | pending_tool_task: nil,
@@ -977,7 +997,7 @@ defmodule Opal.Agent do
 
     case provider.stream(model, title_messages, []) do
       {:ok, resp} ->
-        title = collect_stream_text(resp, provider, "")
+        title = Opal.Provider.StreamCollector.collect_text(resp, provider, 10_000)
 
         if title != "" do
           clean = title |> String.trim() |> String.slice(0, 60)
@@ -986,56 +1006,6 @@ defmodule Opal.Agent do
 
       {:error, _} ->
         :ok
-    end
-  end
-
-  # Synchronously collects all text from a streaming response.
-  defp collect_stream_text(resp, provider, acc) do
-    receive do
-      message ->
-        case Req.parse_message(resp, message) do
-          {:ok, chunks} when is_list(chunks) ->
-            new_acc =
-              Enum.reduce(chunks, acc, fn
-                {:data, data}, text_acc ->
-                  binary = IO.iodata_to_binary(data)
-
-                  binary
-                  |> String.split("\n", trim: true)
-                  |> Enum.reduce(text_acc, fn
-                    "data: [DONE]", inner ->
-                      inner
-
-                    "data: " <> json, inner ->
-                      events = provider.parse_stream_event(json)
-
-                      Enum.reduce(events, inner, fn
-                        {:text_delta, delta}, t -> t <> delta
-                        _, t -> t
-                      end)
-
-                    _, inner ->
-                      inner
-                  end)
-
-                :done, text_acc ->
-                  text_acc
-
-                _, text_acc ->
-                  text_acc
-              end)
-
-            if :done in chunks do
-              new_acc
-            else
-              collect_stream_text(resp, provider, new_acc)
-            end
-
-          :unknown ->
-            collect_stream_text(resp, provider, acc)
-        end
-    after
-      10_000 -> acc
     end
   end
 

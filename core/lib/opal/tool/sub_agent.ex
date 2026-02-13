@@ -239,9 +239,9 @@ defmodule Opal.Tool.SubAgent do
           timeout
         )
 
-      {:opal_event, ^sub_session_id, {:tool_execution_start, name, args, _meta} = event} ->
+      {:opal_event, ^sub_session_id, {:tool_execution_start, name, call_id, args, _meta} = event} ->
         forward_event(parent_session_id, sub_session_id, parent_call_id, event)
-        entry = %{tool: name, arguments: args, result: nil}
+        entry = %{tool: name, call_id: call_id, arguments: args, result: nil}
 
         collect_and_forward(
           sub_session_id,
@@ -252,9 +252,35 @@ defmodule Opal.Tool.SubAgent do
           timeout
         )
 
+      {:opal_event, ^sub_session_id, {:tool_execution_start, name, args, _meta} = event} ->
+        forward_event(parent_session_id, sub_session_id, parent_call_id, event)
+        entry = %{tool: name, call_id: nil, arguments: args, result: nil}
+
+        collect_and_forward(
+          sub_session_id,
+          parent_session_id,
+          parent_call_id,
+          text,
+          tool_log ++ [entry],
+          timeout
+        )
+
+      {:opal_event, ^sub_session_id, {:tool_execution_end, name, call_id, result} = event} ->
+        forward_event(parent_session_id, sub_session_id, parent_call_id, event)
+        tool_log = update_last_tool_result(tool_log, call_id, name, result)
+
+        collect_and_forward(
+          sub_session_id,
+          parent_session_id,
+          parent_call_id,
+          text,
+          tool_log,
+          timeout
+        )
+
       {:opal_event, ^sub_session_id, {:tool_execution_end, name, result} = event} ->
         forward_event(parent_session_id, sub_session_id, parent_call_id, event)
-        tool_log = update_last_tool_result(tool_log, name, result)
+        tool_log = update_last_tool_result(tool_log, nil, name, result)
 
         collect_and_forward(
           sub_session_id,
@@ -301,19 +327,30 @@ defmodule Opal.Tool.SubAgent do
     )
   end
 
-  # Updates the result field of the last tool log entry matching the given name.
-  defp update_last_tool_result(tool_log, name, result) do
+  # Updates the result field of the last pending tool log entry, preferring call_id.
+  defp update_last_tool_result(tool_log, call_id, name, result) do
+    case find_pending_tool_entry_index(tool_log, call_id, name) do
+      nil -> tool_log
+      idx -> List.update_at(tool_log, idx, &%{&1 | result: result})
+    end
+  end
+
+  defp find_pending_tool_entry_index(tool_log, call_id, name) do
+    call_id_match =
+      if is_binary(call_id) and call_id != "" do
+        find_last_pending_entry_index(tool_log, &(Map.get(&1, :call_id) == call_id))
+      end
+
+    call_id_match || find_last_pending_entry_index(tool_log, &(&1.tool == name))
+  end
+
+  defp find_last_pending_entry_index(tool_log, matcher) do
     idx =
       tool_log
       |> Enum.reverse()
-      |> Enum.find_index(fn entry -> entry.tool == name and entry.result == nil end)
+      |> Enum.find_index(fn entry -> matcher.(entry) and entry.result == nil end)
 
-    if idx do
-      real_idx = length(tool_log) - 1 - idx
-      List.update_at(tool_log, real_idx, &%{&1 | result: result})
-    else
-      tool_log
-    end
+    if idx, do: length(tool_log) - 1 - idx
   end
 
   # Formats the sub-agent's response and tool log into a readable string.

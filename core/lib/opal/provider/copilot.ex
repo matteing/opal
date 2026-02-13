@@ -74,7 +74,7 @@ defmodule Opal.Provider.Copilot do
 
   defp stream_responses_api(req, model, messages, tools) do
     converted_messages = convert_messages_responses(model, messages)
-    converted_tools = convert_tools(tools)
+    converted_tools = convert_tools_responses(tools)
 
     body = %{
       model: model.id,
@@ -219,6 +219,20 @@ defmodule Opal.Provider.Copilot do
 
   @impl true
   defdelegate convert_tools(tools), to: Opal.Provider
+
+  # Responses API uses a flat tool format: {type, name, description, parameters}
+  # Unlike Chat Completions which nests under "function".
+  defp convert_tools_responses(tools) do
+    Enum.map(tools, fn tool ->
+      %{
+        type: "function",
+        name: tool.name(),
+        description: tool.description(),
+        parameters: tool.parameters(),
+        strict: false
+      }
+    end)
+  end
 
   # ── Chat Completions message format ──────────────────────────────────
   # Delegates to shared OpenAI module for standard message conversion.

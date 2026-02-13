@@ -7,12 +7,11 @@ defmodule Opal.Auth do
   and returns a summary the client can use to decide whether a setup
   wizard is needed.
 
-  ## Provider priority (first ready wins)
+  ## Provider selection (first ready wins)
 
-  1. Explicitly configured provider (via `Opal.Config`)
-  2. Saved API key in settings
-  3. Environment-variable API key detected by ReqLLM
-  4. Copilot token on disk
+  Providers are checked in the order defined by `@known_providers`
+  (`copilot`, `anthropic`, `openai`, `google`). The first provider
+  whose credentials are ready is selected.
 
   If nothing is found, `probe/0` returns `status: "setup_required"` with
   a list of provider options the client can present to the user.

@@ -197,21 +197,35 @@ defmodule Opal.RPC.Handler do
       |> Enum.map(fn m -> Map.put(m, :provider, "copilot") end)
 
     # Include models from direct providers if requested
-    provider_models =
+    provider_models_result =
       case params do
         %{"providers" => providers} when is_list(providers) ->
-          Enum.flat_map(providers, fn p ->
-            provider = String.to_atom(p)
+          Enum.reduce_while(providers, {:ok, []}, fn p, {:ok, acc} ->
+            case parse_provider_name(p) do
+              {:ok, provider} ->
+                models =
+                  Opal.Models.list_provider(provider)
+                  |> Enum.map(fn m -> Map.put(m, :provider, p) end)
 
-            Opal.Models.list_provider(provider)
-            |> Enum.map(fn m -> Map.put(m, :provider, p) end)
+                {:cont, {:ok, acc ++ models}}
+
+              :error ->
+                {:halt, {:error, p}}
+            end
           end)
 
         _ ->
-          []
+          {:ok, []}
       end
 
-    {:ok, %{models: copilot_models ++ provider_models}}
+    case provider_models_result do
+      {:ok, provider_models} ->
+        {:ok, %{models: copilot_models ++ provider_models}}
+
+      {:error, invalid_provider} ->
+        {:error, Opal.RPC.invalid_params(), "Unknown provider in providers list",
+         "unknown provider: #{inspect(invalid_provider)}"}
+    end
   end
 
   def handle("model/set", %{"session_id" => sid, "model_id" => model_id} = params) do
@@ -430,4 +444,14 @@ defmodule Opal.RPC.Handler do
   defp parse_thinking_level(nil), do: :off
   defp parse_thinking_level(level) when level in @valid_thinking_levels, do: String.to_atom(level)
   defp parse_thinking_level(_), do: :off
+
+  defp parse_provider_name(provider) when is_binary(provider) do
+    try do
+      {:ok, String.to_existing_atom(provider)}
+    rescue
+      ArgumentError -> :error
+    end
+  end
+
+  defp parse_provider_name(_), do: :error
 end
