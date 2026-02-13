@@ -163,10 +163,13 @@ jobs:
 
       - name: Install Elixir deps
         run: cd core && mix deps.get
+        env:
+          MIX_ENV: dev
 
       - name: Publish to Hex
         run: cd core && mix hex.publish --yes
         env:
+          MIX_ENV: dev
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
 
       - name: Upload binaries to GitHub Release
