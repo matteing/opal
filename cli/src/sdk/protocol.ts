@@ -264,7 +264,13 @@ export interface AgentStartEvent {
 export interface AgentEndEvent {
   type: "agentEnd";
   /** Cumulative token usage for the session. */
-  usage?: { completionTokens: number; contextWindow: number; currentContextTokens: number; promptTokens: number; totalTokens: number };
+  usage?: {
+    completionTokens: number;
+    contextWindow: number;
+    currentContextTokens: number;
+    promptTokens: number;
+    totalTokens: number;
+  };
 }
 
 export interface AgentAbortEvent {
@@ -352,7 +358,13 @@ export interface SubAgentEventEvent {
 export interface UsageUpdateEvent {
   type: "usageUpdate";
   /** Current token usage snapshot. */
-  usage: { completionTokens: number; contextWindow: number; currentContextTokens: number; promptTokens: number; totalTokens: number };
+  usage: {
+    completionTokens: number;
+    contextWindow: number;
+    currentContextTokens: number;
+    promptTokens: number;
+    totalTokens: number;
+  };
 }
 
 export interface StatusUpdateEvent {
@@ -360,7 +372,6 @@ export interface StatusUpdateEvent {
   /** Brief human-readable status. */
   message: string;
 }
-
 
 export type AgentEvent =
   | AgentStartEvent
