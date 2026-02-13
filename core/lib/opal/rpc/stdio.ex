@@ -171,22 +171,38 @@ defmodule Opal.RPC.Stdio do
   end
 
   defp handle_request(id, method, params, state) do
-    case Opal.RPC.Handler.handle(method, params) do
-      {:ok, result} ->
-        write_stdout(Opal.RPC.encode_response(id, result))
+    try do
+      case Opal.RPC.Handler.handle(method, params) do
+        {:ok, result} ->
+          write_stdout(Opal.RPC.encode_response(id, result))
 
-        # Auto-subscribe to events for new sessions
-        state =
-          if method == "session/start" do
-            subscribe_to_session(result.session_id, state)
-          else
-            state
-          end
+          # Auto-subscribe to events for new sessions
+          state =
+            if method == "session/start" do
+              subscribe_to_session(result.session_id, state)
+            else
+              state
+            end
 
-        state
+          state
 
-      {:error, code, message, data} ->
-        write_stdout(Opal.RPC.encode_error(id, code, message, data))
+        {:error, code, message, data} ->
+          write_stdout(Opal.RPC.encode_error(id, code, message, data))
+          state
+      end
+    rescue
+      e ->
+        Logger.error("RPC handler crashed: #{Exception.message(e)}")
+
+        write_stdout(
+          Opal.RPC.encode_error(
+            id,
+            Opal.RPC.internal_error(),
+            "Internal error",
+            Exception.message(e)
+          )
+        )
+
         state
     end
   end

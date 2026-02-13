@@ -36,6 +36,15 @@ defmodule Opal.RPC.Handler do
       {:ok, agent} ->
         info = Opal.get_info(agent)
 
+        auth =
+          try do
+            Opal.Auth.probe()
+          rescue
+            e ->
+              Logger.error("Auth probe failed: #{Exception.message(e)}")
+              %{status: "setup_required", provider: nil, providers: []}
+          end
+
         {:ok,
          %{
            session_id: info.session_id,
@@ -44,7 +53,7 @@ defmodule Opal.RPC.Handler do
            available_skills: Enum.map(info.available_skills, & &1.name),
            mcp_servers: Enum.map(info.mcp_servers, & &1.name),
            node_name: Atom.to_string(Node.self()),
-           auth: Opal.Auth.probe()
+           auth: auth
          }}
 
       {:error, reason} ->

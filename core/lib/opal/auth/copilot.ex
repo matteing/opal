@@ -11,7 +11,7 @@ defmodule Opal.Auth.Copilot do
   5. Persist tokens to disk for reuse across sessions
 
   Configuration (client ID, domain) comes from `Opal.Config`.
-  Tokens are stored at `Opal.Config.auth_file/0` (default: `~/.opal/auth.json`).
+  Tokens are stored at `Opal.Config.auth_file/1` (default: `~/.opal/auth.json`).
   """
 
   require Logger
