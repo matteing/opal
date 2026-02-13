@@ -54,11 +54,7 @@ defmodule Opal.MixProject do
       main: "Opal",
       source_ref: "v#{@version}",
       extras: [
-        "README.md": [title: "Overview"],
-        "../ARCHITECTURE.md": [title: "Architecture"],
-        "../docs/agent-loop.md": [title: "Agent Loop"],
-        "../docs/supervision.md": [title: "Supervision"],
-        "../docs/otp.md": [title: "OTP Patterns"]
+        "README.md": [title: "Overview"]
       ],
       groups_for_modules: [
         "Public API": [
