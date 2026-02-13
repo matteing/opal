@@ -83,6 +83,27 @@ opal -C /path/to/project                   # set working directory
 opal --auto-confirm                         # skip tool confirmations
 ```
 
+## Providers
+
+Opal supports two provider paths — use one or both:
+
+| Provider | What it connects to | Auth |
+|----------|-------------------|------|
+| **GitHub Copilot** | Claude, GPT-4o, Gemini, Grok via Copilot API | GitHub OAuth (device flow, guided on first run) |
+| **Direct API** | Anthropic, OpenAI, Google, Groq, xAI, AWS Bedrock, OpenRouter, and [more](https://github.com/agentjido/req_llm) | Standard API keys (`ANTHROPIC_API_KEY`, etc.) |
+
+GitHub Copilot is the recommended provider — it's what Opal is developed and tested against.
+
+The model string controls which provider is used:
+
+```sh
+opal --model claude-sonnet-4           # Copilot (default when no prefix)
+opal --model anthropic:claude-sonnet-4 # Direct Anthropic API
+opal --model openai:gpt-4o            # Direct OpenAI API
+```
+
+Direct API support is powered by [ReqLLM](https://github.com/agentjido/req_llm). See the [full provider docs](docs/providers.md) for model discovery, API key setup, and custom providers.
+
 ## Using Opal as a library
 
 Add it to your supervision tree and you get everything — no external process, no serialization. See the [SDK docs](docs/sdk.md) for the full API.
