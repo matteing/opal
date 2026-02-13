@@ -19,6 +19,7 @@ defmodule Opal.Tool.SubAgent do
   """
 
   @behaviour Opal.Tool
+  @sub_agent_timeout 120_000
 
   @impl true
   def name, do: "sub_agent"
@@ -100,6 +101,7 @@ defmodule Opal.Tool.SubAgent do
 
     question_handler = fn %{question: question, choices: choices} ->
       ref = make_ref()
+      monitor = Process.monitor(parent_task)
 
       send(
         parent_task,
@@ -107,7 +109,16 @@ defmodule Opal.Tool.SubAgent do
       )
 
       receive do
-        {:sub_agent_answer, ^ref, answer} -> {:ok, answer}
+        {:sub_agent_answer, ^ref, answer} ->
+          Process.demonitor(monitor, [:flush])
+          {:ok, answer}
+
+        {:sub_agent_answer_error, ^ref, reason} ->
+          Process.demonitor(monitor, [:flush])
+          {:error, reason}
+
+        {:DOWN, ^monitor, :process, _pid, reason} ->
+          {:error, {:parent_task_down, reason}}
       end
     end
 
@@ -139,7 +150,14 @@ defmodule Opal.Tool.SubAgent do
 
         # Collect response while forwarding events
         result =
-          collect_and_forward(sub_session_id, parent_session_id, parent_call_id, "", [], 120_000)
+          collect_and_forward(
+            sub_session_id,
+            parent_session_id,
+            parent_call_id,
+            "",
+            [],
+            @sub_agent_timeout
+          )
 
         # Clean up
         Opal.Events.unsubscribe(sub_session_id)
@@ -209,13 +227,13 @@ defmodule Opal.Tool.SubAgent do
       {:sub_agent_question, from, ref, %{question: question, choices: choices}} ->
         args = %{"question" => question, "choices" => choices}
 
-        answer =
-          case Opal.Tool.Ask.ask_via_rpc(args, %{session_id: parent_session_id}) do
-            {:ok, a} -> a
-            {:error, _} -> "(question could not be answered)"
-          end
+        case Opal.Tool.Ask.ask_via_rpc(args, %{session_id: parent_session_id}) do
+          {:ok, answer} ->
+            send(from, {:sub_agent_answer, ref, answer})
 
-        send(from, {:sub_agent_answer, ref, answer})
+          {:error, reason} ->
+            send(from, {:sub_agent_answer_error, ref, reason})
+        end
 
         collect_and_forward(
           sub_session_id,

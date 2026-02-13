@@ -168,7 +168,7 @@ Streaming events from the server drive all UI updates:
 ```mermaid
 graph LR
     Server["Elixir Agent"] -- "SSE stream" --> Provider
-    Provider -- "parsed events" --> Agent["Agent GenServer"]
+    Provider -- "parsed events" --> Agent["Agent state machine"]
     Agent -- "broadcast" --> Events["Events.Registry"]
     Events -- "JSON-RPC notification" --> Stdio["RPC.Stdio"]
     Stdio -- "stdout" --> Client["OpalClient"]

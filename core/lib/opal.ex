@@ -166,8 +166,8 @@ defmodule Opal do
     model = Opal.Model.coerce(model_spec, opts)
     provider_module = Opal.Model.provider_module(model)
 
-    GenServer.call(agent, {:set_model, model})
-    GenServer.call(agent, {:set_provider, provider_module})
+    Opal.Agent.set_model(agent, model)
+    Opal.Agent.set_provider(agent, provider_module)
   end
 
   @doc """
@@ -175,7 +175,7 @@ defmodule Opal do
   """
   @spec get_context(pid()) :: [Opal.Message.t()]
   def get_context(agent) do
-    GenServer.call(agent, :get_context)
+    Opal.Agent.get_context(agent)
   end
 
   @doc """
@@ -245,7 +245,7 @@ defmodule Opal do
   """
   @spec sync_messages(pid(), list()) :: :ok
   def sync_messages(agent, messages) do
-    GenServer.call(agent, {:sync_messages, messages})
+    Opal.Agent.sync_messages(agent, messages)
   end
 
   @doc """
@@ -263,7 +263,7 @@ defmodule Opal do
   def set_thinking_level(agent, level) do
     state = Opal.Agent.get_state(agent)
     model = %{state.model | thinking_level: level}
-    GenServer.call(agent, {:set_model, model})
+    Opal.Agent.set_model(agent, model)
   end
 
   # --- Private Helpers ---

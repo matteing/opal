@@ -1,6 +1,6 @@
 defmodule Opal.Agent do
   @moduledoc """
-  GenServer implementing the core agent loop.
+  `:gen_statem` implementing the core agent loop.
 
   Manages the lifecycle of an agent session: receiving user prompts, streaming
   LLM responses via a provider, executing tool calls concurrently, and looping
@@ -22,122 +22,14 @@ defmodule Opal.Agent do
   subscriber can observe the full lifecycle in real time.
   """
 
-  use GenServer
+  @behaviour :gen_statem
   require Logger
-
-  defmodule State do
-    @moduledoc """
-    Internal state for `Opal.Agent`.
-
-    Tracks conversation history, streaming state, accumulated response text
-    and tool calls, and the provider module used for LLM communication.
-    """
-
-    @type t :: %__MODULE__{
-            session_id: String.t(),
-            system_prompt: String.t(),
-            messages: [Opal.Message.t()],
-            model: Opal.Model.t(),
-            tools: [module()],
-            working_dir: String.t(),
-            config: Opal.Config.t(),
-            status: :idle | :running | :streaming | :executing_tools,
-            streaming_resp: Req.Response.t() | nil,
-            streaming_ref: reference() | nil,
-            streaming_cancel: (-> :ok) | nil,
-            current_text: String.t(),
-            current_tool_calls: [map()],
-            current_thinking: String.t() | nil,
-            pending_steers: [String.t()],
-            status_tag_buffer: String.t(),
-            provider: module(),
-            session: pid() | nil,
-            tool_supervisor: atom() | pid(),
-            sub_agent_supervisor: atom() | pid(),
-            mcp_supervisor: atom() | pid() | nil,
-            mcp_servers: [map()],
-            context: String.t(),
-            context_files: [String.t()],
-            available_skills: [Opal.Skill.t()],
-            active_skills: [String.t()],
-            token_usage: map(),
-            # Retry state — tracks exponential backoff across consecutive failures
-            retry_count: non_neg_integer(),
-            max_retries: pos_integer(),
-            retry_base_delay_ms: pos_integer(),
-            retry_max_delay_ms: pos_integer(),
-            # Overflow detection — set when usage reports exceed context window
-            overflow_detected: boolean(),
-            # Optional callback for sub-agents to ask the parent/user questions
-            question_handler: (map() -> {:ok, String.t()} | {:error, term()}) | nil,
-            # Tool execution state — tracks pending supervised tool execution
-            pending_tool_task: {Task.t(), map()} | nil,
-            remaining_tool_calls: [map()],
-            tool_results: [{map(), term()}],
-            tool_context: map() | nil
-          }
-
-    @enforce_keys [:session_id, :model, :working_dir, :config]
-    defstruct [
-      :session_id,
-      :model,
-      :working_dir,
-      :config,
-      :streaming_resp,
-      streaming_ref: nil,
-      streaming_cancel: nil,
-      system_prompt: "",
-      messages: [],
-      tools: [],
-      status: :idle,
-      current_text: "",
-      current_tool_calls: [],
-      current_thinking: nil,
-      pending_steers: [],
-      status_tag_buffer: "",
-      provider: Opal.Provider.Copilot,
-      session: nil,
-      tool_supervisor: nil,
-      sub_agent_supervisor: nil,
-      mcp_supervisor: nil,
-      mcp_servers: [],
-      context: "",
-      context_files: [],
-      available_skills: [],
-      active_skills: [],
-      token_usage: %{
-        prompt_tokens: 0,
-        completion_tokens: 0,
-        total_tokens: 0,
-        context_window: 0,
-        current_context_tokens: 0
-      },
-      last_prompt_tokens: 0,
-      last_chunk_at: nil,
-      stream_watchdog: nil,
-      # Retry: exponential backoff for transient provider errors (see Opal.Agent.Retry)
-      retry_count: 0,
-      max_retries: 3,
-      retry_base_delay_ms: 2_000,
-      retry_max_delay_ms: 60_000,
-      # Overflow: flag set when usage-reported tokens exceed the context window
-      overflow_detected: false,
-      # Hybrid estimation: snapshot of message count when usage was last reported.
-      # Messages added after this index are estimated heuristically.
-      last_usage_msg_index: 0,
-      question_handler: nil,
-      # Tool execution state — tracks pending tool execution
-      pending_tool_task: nil,
-      remaining_tool_calls: [],
-      tool_results: [],
-      tool_context: nil
-    ]
-  end
+  alias Opal.Agent.State
 
   # --- Public API ---
 
   @doc """
-  Starts the agent GenServer.
+  Starts the agent state machine.
 
   ## Options
 
@@ -150,7 +42,16 @@ defmodule Opal.Agent do
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts)
+    :gen_statem.start_link(__MODULE__, opts, [])
+  end
+
+  @spec child_spec(keyword()) :: Supervisor.child_spec()
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [opts]},
+      type: :worker
+    }
   end
 
   @doc """
@@ -161,7 +62,7 @@ defmodule Opal.Agent do
   """
   @spec prompt(GenServer.server(), String.t()) :: :ok
   def prompt(agent, text) when is_binary(text) do
-    GenServer.cast(agent, {:prompt, text})
+    :gen_statem.cast(agent, {:prompt, text})
   end
 
   @doc """
@@ -173,7 +74,7 @@ defmodule Opal.Agent do
   """
   @spec steer(GenServer.server(), String.t()) :: :ok
   def steer(agent, text) when is_binary(text) do
-    GenServer.cast(agent, {:steer, text})
+    :gen_statem.cast(agent, {:steer, text})
   end
 
   @doc """
@@ -181,7 +82,7 @@ defmodule Opal.Agent do
   """
   @spec follow_up(GenServer.server(), String.t()) :: :ok
   def follow_up(agent, text) when is_binary(text) do
-    GenServer.cast(agent, {:prompt, text})
+    :gen_statem.cast(agent, {:prompt, text})
   end
 
   @doc """
@@ -191,7 +92,7 @@ defmodule Opal.Agent do
   """
   @spec abort(GenServer.server()) :: :ok
   def abort(agent) do
-    GenServer.cast(agent, :abort)
+    :gen_statem.cast(agent, :abort)
   end
 
   @doc """
@@ -199,7 +100,27 @@ defmodule Opal.Agent do
   """
   @spec get_state(GenServer.server()) :: State.t()
   def get_state(agent) do
-    GenServer.call(agent, :get_state)
+    :gen_statem.call(agent, :get_state)
+  end
+
+  @spec get_context(GenServer.server()) :: [Opal.Message.t()]
+  def get_context(agent) do
+    :gen_statem.call(agent, :get_context)
+  end
+
+  @spec set_model(GenServer.server(), Opal.Model.t()) :: :ok
+  def set_model(agent, %Opal.Model{} = model) do
+    :gen_statem.call(agent, {:set_model, model})
+  end
+
+  @spec set_provider(GenServer.server(), module()) :: :ok
+  def set_provider(agent, provider_module) when is_atom(provider_module) do
+    :gen_statem.call(agent, {:set_provider, provider_module})
+  end
+
+  @spec sync_messages(GenServer.server(), [Opal.Message.t()]) :: :ok
+  def sync_messages(agent, messages) when is_list(messages) do
+    :gen_statem.call(agent, {:sync_messages, messages})
   end
 
   @doc """
@@ -211,7 +132,7 @@ defmodule Opal.Agent do
   @spec load_skill(GenServer.server(), String.t()) ::
           {:ok, String.t()} | {:already_loaded, String.t()} | {:error, String.t()}
   def load_skill(agent, skill_name) do
-    GenServer.call(agent, {:load_skill, skill_name})
+    :gen_statem.call(agent, {:load_skill, skill_name})
   end
 
   @doc """
@@ -226,9 +147,9 @@ defmodule Opal.Agent do
     end
   end
 
-  # --- GenServer Callbacks ---
+  # --- :gen_statem callbacks ---
 
-  @impl true
+  @impl :gen_statem
   def init(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
     Registry.register(Opal.Registry, {:agent, session_id}, nil)
@@ -339,10 +260,50 @@ defmodule Opal.Agent do
       broadcast(state, {:context_discovered, context_files})
     end
 
-    {:ok, state}
+    {:ok, :idle, state}
   end
 
-  @impl true
+  @impl :gen_statem
+  def callback_mode, do: :state_functions
+
+  def idle(event_type, event_content, %State{} = state) do
+    dispatch_state_event(event_type, event_content, %{state | status: :idle})
+  end
+
+  def running(event_type, event_content, %State{} = state) do
+    dispatch_state_event(event_type, event_content, %{state | status: :running})
+  end
+
+  def streaming(event_type, event_content, %State{} = state) do
+    dispatch_state_event(event_type, event_content, %{state | status: :streaming})
+  end
+
+  def executing_tools(event_type, event_content, %State{} = state) do
+    dispatch_state_event(event_type, event_content, %{state | status: :executing_tools})
+  end
+
+  defp dispatch_state_event(:enter, _old_state, state), do: {:keep_state, state}
+
+  defp dispatch_state_event({:call, from}, message, state) do
+    case handle_call(message, from, state) do
+      {:reply, reply, new_state} ->
+        {:next_state, Opal.Agent.Reducer.state_name(new_state), new_state,
+         [{:reply, from, reply}]}
+    end
+  end
+
+  defp dispatch_state_event(:cast, message, state) do
+    handle_cast(message, state)
+    |> Opal.Agent.Effects.from_legacy()
+  end
+
+  defp dispatch_state_event(:info, message, state) do
+    handle_info(message, state)
+    |> Opal.Agent.Effects.from_legacy()
+  end
+
+  defp dispatch_state_event(_event_type, _event_content, state), do: {:keep_state, state}
+
   def handle_cast({:prompt, text}, %State{status: :idle} = state) do
     Logger.debug(
       "Prompt received session=#{state.session_id} len=#{String.length(text)} chars=\"#{String.slice(text, 0, 80)}\""
@@ -386,17 +347,14 @@ defmodule Opal.Agent do
     {:noreply, %{state | status: :idle}}
   end
 
-  @impl true
   def handle_call(:get_state, _from, state) do
     {:reply, state, state}
   end
 
-  @impl true
   def handle_call(:get_context, _from, state) do
     {:reply, build_messages(state), state}
   end
 
-  @impl true
   def handle_call({:set_model, %Opal.Model{} = model}, _from, state) do
     Logger.debug(
       "Model changed session=#{state.session_id} from=#{state.model.id} to=#{model.id}"
@@ -405,19 +363,16 @@ defmodule Opal.Agent do
     {:reply, :ok, %{state | model: model}}
   end
 
-  @impl true
   def handle_call({:set_provider, provider_module}, _from, state) when is_atom(provider_module) do
     Logger.debug("Provider changed session=#{state.session_id} to=#{inspect(provider_module)}")
     {:reply, :ok, %{state | provider: provider_module}}
   end
 
-  @impl true
   def handle_call({:sync_messages, messages}, _from, state) do
     Logger.debug("Messages synced session=#{state.session_id} count=#{length(messages)}")
     {:reply, :ok, %{state | messages: Enum.reverse(messages)}}
   end
 
-  @impl true
   def handle_call({:load_skill, skill_name}, _from, %State{} = state) do
     if skill_name in state.active_skills do
       {:reply, {:already_loaded, skill_name}, state}
@@ -448,7 +403,6 @@ defmodule Opal.Agent do
     end
   end
 
-  @impl true
   def handle_info(
         {ref, result},
         %State{
@@ -461,7 +415,7 @@ defmodule Opal.Agent do
     Process.demonitor(task.ref, [:flush])
     broadcast(state, {:tool_execution_end, tc.name, tc.call_id, result})
     state = %{state | tool_results: state.tool_results ++ [{tc, result}], pending_tool_task: nil}
-    Opal.Agent.ToolRunner.schedule_dispatch_next_tool(state)
+    Opal.Agent.Tools.schedule_dispatch_next_tool(state)
   end
 
   def handle_info(
@@ -483,14 +437,14 @@ defmodule Opal.Agent do
         pending_tool_task: nil
     }
 
-    Opal.Agent.ToolRunner.schedule_dispatch_next_tool(state)
+    Opal.Agent.Tools.schedule_dispatch_next_tool(state)
   end
 
   def handle_info(
         :dispatch_next_tool,
         %State{status: :executing_tools, pending_tool_task: nil} = state
       ) do
-    Opal.Agent.ToolRunner.dispatch_next_tool(state)
+    Opal.Agent.Tools.dispatch_next_tool(state)
   end
 
   # Native event stream (from EventStream providers like Provider.LLM)
@@ -607,7 +561,7 @@ defmodule Opal.Agent do
 
     provider = state.provider
     all_messages = build_messages(state)
-    tools = Opal.Agent.ToolRunner.active_tools(state)
+    tools = Opal.Agent.Tools.active_tools(state)
 
     Logger.debug(
       "Turn start session=#{state.session_id} messages=#{length(all_messages)} tools=#{length(tools)} model=#{state.model.id}"
@@ -673,11 +627,11 @@ defmodule Opal.Agent do
           Opal.Agent.Overflow.context_overflow?(reason) ->
             handle_overflow_compaction(state, reason)
 
-          Opal.Agent.Retry.retryable?(reason) and state.retry_count < state.max_retries ->
+          Opal.Agent.Retries.retryable?(reason) and state.retry_count < state.max_retries ->
             attempt = state.retry_count + 1
 
             delay =
-              Opal.Agent.Retry.delay(attempt,
+              Opal.Agent.Retries.delay(attempt,
                 base_ms: state.retry_base_delay_ms,
                 max_ms: state.retry_max_delay_ms
               )
@@ -703,7 +657,7 @@ defmodule Opal.Agent do
   # report with heuristic estimates for messages added since. This catches
   # growth *between* turns that the lagging `last_prompt_tokens` would miss.
   defp maybe_auto_compact(%State{} = state) do
-    Opal.Agent.UsageTracker.maybe_auto_compact(state)
+    Opal.Agent.Compaction.maybe_auto_compact(state)
   end
 
   # ── Overflow Recovery ─────────────────────────────────────────────────
@@ -715,11 +669,11 @@ defmodule Opal.Agent do
 
   # Without a session process we can't compact — surface the raw error.
   defp handle_overflow_compaction(%State{session: nil} = state, reason) do
-    Opal.Agent.UsageTracker.handle_overflow_compaction(state, reason)
+    Opal.Agent.Compaction.handle_overflow_compaction(state, reason)
   end
 
   defp handle_overflow_compaction(%State{} = state, reason) do
-    Opal.Agent.UsageTracker.handle_overflow_compaction(state, reason)
+    Opal.Agent.Compaction.handle_overflow_compaction(state, reason)
   end
 
   # Prepends system prompt (with discovered context, skill menu, and
@@ -746,7 +700,7 @@ defmodule Opal.Agent do
     # Build dynamic tool guidelines based on which tools are active
     # (prevents the LLM from using shell for read/edit/write operations)
     tool_guidelines =
-      Opal.Agent.SystemPrompt.build_guidelines(Opal.Agent.ToolRunner.active_tools(state))
+      Opal.Agent.SystemPrompt.build_guidelines(Opal.Agent.Tools.active_tools(state))
 
     # Planning instructions — tell the agent where to write plan.md
     planning = planning_instructions(state)
@@ -828,10 +782,10 @@ defmodule Opal.Agent do
   defp finalize_response_continue(state, tool_calls, assistant_msg) do
     if tool_calls != [] do
       broadcast(state, {:turn_end, assistant_msg, []})
-      Opal.Agent.ToolRunner.start_tool_execution(tool_calls, state)
+      Opal.Agent.Tools.start_tool_execution(tool_calls, state)
     else
       # Drain any steering messages that arrived during this turn
-      state = Opal.Agent.ToolRunner.check_for_steering(state)
+      state = Opal.Agent.Tools.check_for_steering(state)
       last_msg = List.first(state.messages)
 
       if last_msg && last_msg.role == :user do

@@ -65,9 +65,11 @@ sequenceDiagram
     Note over SubTask: Sub-agent continues with the answer
 ```
 
+If RPC escalation fails, the parent sends `{:sub_agent_answer_error, ref, reason}` and `AskParent` returns an explicit error to the model (no silent fallback answer).
+
 ### Why this works without deadlocks
 
-The parent tool task is **not** the Agent GenServer — it's a supervised `Task` started by `Task.Supervisor.async_nolink`. While this task blocks in `collect_and_forward`, the Agent GenServer remains responsive (processing other `handle_info` messages). The sub-agent's tool task sends directly to the parent task, bypassing both GenServers entirely.
+The parent tool task is **not** the agent state machine process — it's a supervised `Task` started by `Task.Supervisor.async_nolink`. While this task blocks in `collect_and_forward`, the agent process remains responsive (processing mailbox events). The sub-agent's tool task sends directly to the parent task, bypassing both agent server processes entirely.
 
 During the RPC call (waiting for the user), the sub-agent is blocked too (its tool task is in a `receive`), so no new events flow. Once the user answers, everything unblocks in order: parent task replies → sub-agent task resumes → sub-agent continues its agent loop → events flow again → parent task collects them.
 
@@ -80,6 +82,10 @@ During the RPC call (waiting for the user), the sub-agent is blocked too (its to
 | `Opal.Agent.build_tool_context` | Puts `question_handler` in the tool context map |
 | `Opal.Tool.AskParent.execute` | Calls `handler.(request)` if present; falls back to direct RPC |
 | `Opal.Tool.SubAgent.collect_and_forward` | Receives `:sub_agent_question`, calls `Ask.ask_via_rpc`, replies |
+
+### Placement
+
+`Opal.SubAgent` remains a top-level module because it is a public SDK entry point (`spawn/2`, `run/3`, `stop/1`) used outside the agent internals. Agent-loop internals live under `core/lib/opal/agent/`, while cross-cutting public APIs stay at `core/lib/opal/`.
 
 ## Source
 
