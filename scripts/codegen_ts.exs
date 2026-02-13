@@ -11,7 +11,7 @@ defmodule Codegen.TS do
 
   def run(args) do
     spec = Opal.RPC.Protocol.spec()
-    ts = generate(spec)
+    ts = generate(spec) |> prettier()
 
     if "--check" in args do
       existing = File.read!(@output_path)
@@ -25,6 +25,15 @@ defmodule Codegen.TS do
       File.write!(@output_path, ts)
       IO.puts("Wrote #{@output_path}")
     end
+  end
+
+  defp prettier(code) do
+    tmp = Path.join(System.tmp_dir!(), "codegen_protocol.ts")
+    File.write!(tmp, code)
+    {_output, 0} = System.cmd("npx", ["prettier", "--write", tmp], stderr_to_stdout: true)
+    result = File.read!(tmp)
+    File.rm!(tmp)
+    result
   end
 
   defp generate(spec) do

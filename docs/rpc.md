@@ -30,6 +30,12 @@ Client → Server requests:
 | `session/compact` | Manually trigger compaction |
 | `models/list` | List available models |
 | `model/set` | Switch the active model |
+| `thinking/set` | Change reasoning effort level |
+| `auth/status` | Probe all credential sources |
+| `auth/login` | Start device-code OAuth flow |
+| `auth/poll` | Poll for device-code authorization |
+| `auth/set_key` | Save an API key for a provider |
+| `tasks/list` | List tracked tasks for a session |
 | `settings/get` | Get persistent user settings |
 | `settings/save` | Save user settings (merged) |
 
@@ -37,7 +43,9 @@ Server → Client requests:
 
 | Method | Purpose |
 |--------|---------|
-| `agent/confirmation` | Ask user to approve a tool action |
+| `client/confirm` | Ask user to approve a tool action |
+| `client/input` | Ask user for freeform text input |
+| `client/ask_user` | Ask user a question with optional choices |
 
 ## Events
 
@@ -54,6 +62,7 @@ The server streams agent events as notifications on `agent/event`. The CLI subsc
 | `tool_execution_end` | Tool finished |
 | `turn_end` | LLM turn complete, tools follow |
 | `usage_update` | Live token usage snapshot |
+| `status_update` | Brief human-readable status of current work |
 | `agent_end` | Agent done, returning to idle |
 | `agent_abort` | Agent was cancelled |
 | `error` | Something went wrong |

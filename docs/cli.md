@@ -39,7 +39,7 @@ Platform mapping: `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`.
 ```
 opal [options]
 
---model <id>          Model to use (e.g. claude-sonnet-4, anthropic:claude-sonnet-4)
+--model <provider/id> Model to use (e.g. anthropic/claude-sonnet-4-20250514)
 --working-dir, -C     Working directory (default: cwd)
 --auto-confirm        Auto-allow all tool executions
 --verbose, -v         Pipe server stderr to terminal
@@ -47,6 +47,8 @@ opal [options]
 ```
 
 Working directory resolution: `OPAL_CWD` env → `INIT_CWD` (npm/pnpm sets this) → `process.cwd()`.
+
+The CLI clears the screen on startup and fills the viewport initially; once the first user prompt is submitted, content flows naturally and scrolls like a regular terminal.
 
 ## UI Layout
 
@@ -84,7 +86,12 @@ Working directory resolution: `OPAL_CWD` env → `INIT_CWD` (npm/pnpm sets this)
 | `thinking.tsx` | Animated kaomoji spinner with status label |
 | `bottom-bar.tsx` | Text input, help shortcuts, model + token usage |
 | `confirm-dialog.tsx` | Tool execution approval modal |
+| `ask-user-dialog.tsx` | Agent question dialog with optional multiple-choice |
 | `model-picker.tsx` | Interactive model/thinking-level selector |
+| `device-auth.tsx` | `SetupWizard` — device-code OAuth and API key auth flow |
+| `shimmer-text.tsx` | Animated iridescent text (used for loading state) |
+| `token-bar.tsx` | Context window utilization bar |
+| `tool-status.tsx` | Running/done/error icons for tool entries |
 | `welcome.tsx` | Animated iridescent opal gem on startup |
 
 ## State Management
@@ -93,16 +100,25 @@ All UI state lives in the `useOpal()` hook, which returns `[OpalState, OpalActio
 
 ### Key State Fields
 
+State uses a nested `AgentView` shape. The `main` field holds the primary agent's view; sub-agents have their own views in `subAgents`.
+
 | Field | Type | Purpose |
 |-------|------|---------|
-| `timeline` | `TimelineEntry[]` | Messages, tools, skills, context |
-| `isRunning` | `boolean` | Agent is processing a turn |
-| `thinking` | `string \| null` | Extended thinking text |
-| `statusMessage` | `string \| null` | Current step description (from `<status>` tags) |
-| `currentModel` | `string` | Active model ID |
-| `tokenUsage` | `TokenUsage` | Context window utilization |
+| `main` | `AgentView` | Primary agent view (timeline, isRunning, thinking, statusMessage) |
+| `subAgents` | `Record<string, SubAgent>` | Sub-agent views keyed by session ID |
+| `activeTab` | `string` | `"main"` or a sub-agent session ID |
+| `currentModel` | `string \| null` | Active model display string |
+| `tokenUsage` | `TokenUsage \| null` | Context window utilization |
 | `confirmation` | `ConfirmRequest \| null` | Pending tool approval |
+| `askUser` | `{ question, choices } \| null` | Pending agent question |
+| `modelPicker` | `object \| null` | Model picker overlay state |
 | `sessionReady` | `boolean` | Server connection established |
+| `sessionDir` | `string` | Session data directory path |
+| `authFlow` | `AuthFlow \| null` | Active auth setup wizard state (providers, device code, API key input) |
+| `error` | `string \| null` | Current error message |
+| `workingDir` | `string` | Resolved working directory |
+| `nodeName` | `string` | Erlang node name |
+| `lastDeltaAt` | `number` | Timestamp of last message delta (stall detection) |
 
 ### Actions
 
@@ -113,7 +129,13 @@ All UI state lives in the `useOpal()` hook, which returns `[OpalState, OpalActio
 | `abort()` | Cancel current turn |
 | `compact()` | Compress conversation history |
 | `runCommand(input)` | Process slash commands |
-| `selectModel(id)` | Pick from model list |
+| `selectModel(id, thinkingLevel?)` | Pick from model list |
+| `dismissModelPicker()` | Close model picker without selecting |
+| `resolveConfirmation(action)` | Respond to tool approval dialog |
+| `resolveAskUser(answer)` | Respond to agent question dialog |
+| `switchTab(tabId)` | Switch between main and sub-agent views |
+| `authStartDeviceFlow()` | Start device-code OAuth flow |
+| `authSubmitKey(providerId, apiKey)` | Submit API key for a provider |
 
 ## Slash Commands
 
@@ -124,6 +146,8 @@ All UI state lives in the `useOpal()` hook, which returns `[OpalState, OpalActio
 | `/model <id>` | Switch model (e.g. `/model anthropic:claude-sonnet-4`) |
 | `/models` | Open interactive model picker |
 | `/compact` | Trigger conversation compaction |
+| `/agents` | List active sub-agents |
+| `/agents <n\|main>` | Switch view to a sub-agent or back to main |
 
 ## Keyboard Shortcuts
 
@@ -132,6 +156,7 @@ All UI state lives in the `useOpal()` hook, which returns `[OpalState, OpalActio
 | `ctrl+c` | Running | Abort agent |
 | `ctrl+c` | Idle | Exit CLI |
 | `ctrl+o` | Any | Toggle tool output visibility |
+| `ctrl+y` | Any | Open plan in external editor |
 | `↑` `↓` | Picker | Navigate options |
 | `y` / `n` | Confirm | Quick allow/deny |
 

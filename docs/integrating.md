@@ -200,7 +200,7 @@ Messages are **newline-delimited JSON** (one JSON object per line). The server s
 
 **Server → Client responses:**
 ```json
-{"jsonrpc": "2.0", "id": 1, "result": {"session_id": "abc123", "session_dir": "/home/user/.opal/sessions/abc123"}}
+{"jsonrpc": "2.0", "id": 1, "result": {"session_id": "abc123", "session_dir": "/home/user/.opal/sessions/abc123", "auth": {"status": "ready", "provider": "copilot", "providers": [...]}}}
 ```
 
 **Server → Client notifications (events):**
@@ -217,7 +217,7 @@ Messages are **newline-delimited JSON** (one JSON object per line). The server s
 
 | Method | Params | Description |
 |--------|--------|-------------|
-| `session/start` | `model?`, `system_prompt?`, `working_dir?`, `tools?`, `mcp_servers?`, `session?` | Start a session, returns `session_id` |
+| `session/start` | `model?`, `system_prompt?`, `working_dir?`, `tools?`, `mcp_servers?`, `session?` | Start a session, returns `session_id`, `auth` probe |
 | `agent/prompt` | `session_id`, `text` | Send a prompt (async — events stream via notifications) |
 | `agent/steer` | `session_id`, `text` | Steer the agent mid-run |
 | `agent/abort` | `session_id` | Cancel the current run |
@@ -228,8 +228,10 @@ Messages are **newline-delimited JSON** (one JSON object per line). The server s
 | `models/list` | `providers?` | List available models |
 | `model/set` | `session_id`, `model_id`, `thinking_level?` | Switch model |
 | `thinking/set` | `session_id`, `level` | Set reasoning effort |
-| `auth/status` | — | Check authentication state |
+| `auth/status` | — | Check authentication state (includes full probe result) |
 | `auth/login` | — | Start device-code OAuth flow |
+| `auth/poll` | `device_code`, `interval` | Poll for device-code authorization |
+| `auth/set_key` | `provider`, `api_key` | Save an API key for a provider |
 | `settings/get` | — | Read persisted settings |
 | `settings/save` | `settings` | Save settings |
 | `tasks/list` | `session_id` | List tracked tasks |

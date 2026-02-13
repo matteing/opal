@@ -95,6 +95,8 @@ All providers normalize streaming data into the same event vocabulary:
 | `{:tool_call_done, %{arguments: map}}` | Tool call complete |
 | `{:response_done, %{usage: ...}}` | Response complete |
 | `{:usage, %{...}}` | Token usage report |
+| `{:text_done, text}` | Full text block complete (Responses API) |
+| `{:error, reason}` | Provider-level error |
 
 ## Model Discovery
 
@@ -186,7 +188,7 @@ The provider auto-detects which API to use based on model ID:
 | Chat Completions | Claude, Gemini, GPT-4o, Grok | `/chat/completions` |
 | Responses API | GPT-5 family | `/responses` |
 
-Detection: model IDs starting with `gpt-5` use Responses API; everything else uses Chat Completions.
+Detection: model IDs starting with `gpt-5` or `oswe` use Responses API; everything else uses Chat Completions.
 
 ### SSE Parsing
 
@@ -208,7 +210,7 @@ Both APIs stream Server-Sent Events, but with different JSON structures:
 
 ## Auth (Copilot Only)
 
-`Opal.Auth` implements GitHub's device-code OAuth flow:
+`Opal.Auth.Copilot` implements GitHub's device-code OAuth flow:
 
 1. `start_device_flow()` — POST to `/login/device/code`, get a user code + verification URL
 2. User visits the URL and enters the code
@@ -216,6 +218,8 @@ Both APIs stream Server-Sent Events, but with different JSON structures:
 4. `exchange_copilot_token()` — Exchange the GitHub token for a Copilot API token
 
 Tokens are persisted to `~/.opal/auth.json`. `get_token/0` auto-refreshes expired tokens (5-minute buffer before expiry).
+
+The parent module `Opal.Auth` provides `probe/0`, which checks all credential sources (Copilot token, env-var API keys, saved settings) and returns a unified readiness result. See [Authentication](auth.md) for the full probe + setup flow.
 
 Auth is only required for the Copilot provider. The LLM provider uses standard API keys.
 
@@ -253,5 +257,6 @@ For most use cases, `Opal.Provider.LLM` already covers the provider via ReqLLM. 
 - `core/lib/opal/provider/copilot.ex` — GitHub Copilot implementation
 - `core/lib/opal/provider/llm.ex` — ReqLLM-based multi-provider implementation
 - `core/lib/opal/models.ex` — LLMDB-backed model discovery and metadata
-- `core/lib/opal/auth.ex` — Device-code OAuth and token management (Copilot only)
-- `core/lib/opal/model.ex` — Model struct with `parse/1` for string specs
+- `core/lib/opal/auth.ex` — Provider-agnostic credential probe (`Opal.Auth.probe/0`)
+- `core/lib/opal/auth/copilot.ex` — Device-code OAuth and token management (Copilot only)
+- `core/lib/opal/model.ex` — Model struct with `parse/1` and `coerce/1` for string/tuple specs

@@ -31,7 +31,11 @@ export interface SessionStartResult {
   /** Erlang node name of the server (for debugging). */
   nodeName: string;
   /** Auth probe result: status is 'ready' or 'setup_required', provider is auto-selected ID or null, providers lists all known options with readiness. */
-  auth: { provider: string; providers: Record<string, unknown>[]; status: string };
+  auth: {
+    provider: string;
+    providers: Record<string, unknown>[];
+    status: string;
+  };
 }
 
 export interface AgentPromptParams {
@@ -144,7 +148,11 @@ export interface AuthStatusResult {
   /** True if any provider has credentials. */
   authenticated: boolean;
   /** Full probe result with provider list and readiness. */
-  auth: { provider: string; providers: Record<string, unknown>[]; status: string };
+  auth: {
+    provider: string;
+    providers: Record<string, unknown>[];
+    status: string;
+  };
 }
 
 export type AuthLoginParams = Record<string, never>;
@@ -455,8 +463,14 @@ export interface MethodTypes {
   "agent/abort": { params: AgentAbortParams; result: AgentAbortResult };
   "agent/state": { params: AgentStateParams; result: AgentStateResult };
   "session/list": { params: SessionListParams; result: SessionListResult };
-  "session/branch": { params: SessionBranchParams; result: SessionBranchResult };
-  "session/compact": { params: SessionCompactParams; result: SessionCompactResult };
+  "session/branch": {
+    params: SessionBranchParams;
+    result: SessionBranchResult;
+  };
+  "session/compact": {
+    params: SessionCompactParams;
+    result: SessionCompactResult;
+  };
   "models/list": { params: ModelsListParams; result: ModelsListResult };
   "model/set": { params: ModelSetParams; result: ModelSetResult };
   "thinking/set": { params: ThinkingSetParams; result: ThinkingSetResult };
@@ -467,7 +481,13 @@ export interface MethodTypes {
   "tasks/list": { params: TasksListParams; result: TasksListResult };
   "settings/get": { params: SettingsGetParams; result: SettingsGetResult };
   "settings/save": { params: SettingsSaveParams; result: SettingsSaveResult };
-  "client/confirm": { params: ClientConfirmParams; result: ClientConfirmResult };
+  "client/confirm": {
+    params: ClientConfirmParams;
+    result: ClientConfirmResult;
+  };
   "client/input": { params: ClientInputParams; result: ClientInputResult };
-  "client/ask_user": { params: ClientAsk_userParams; result: ClientAsk_userResult };
+  "client/ask_user": {
+    params: ClientAsk_userParams;
+    result: ClientAsk_userResult;
+  };
 }

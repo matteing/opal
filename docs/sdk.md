@@ -32,8 +32,8 @@ It contains TypeScript interfaces for all method params/results, event types, an
 - Transforms between camelCase (TypeScript) and snake_case (Elixir) at the wire boundary
 
 ```typescript
-const client = await OpalClient.spawn({ workingDir: "/path/to/project" });
-const result = await client.request("session/start", { working_dir: "." });
+const client = new OpalClient({ cwd: "/path/to/project" });
+const result = await client.request("session/start", { workingDir: "." });
 client.onEvent((event: AgentEvent) => { ... });
 ```
 
@@ -42,7 +42,7 @@ client.onEvent((event: AgentEvent) => { ... });
 `Session` wraps the client with a higher-level API:
 
 ```typescript
-const session = await Session.create(client, { workingDir: "." });
+const session = await Session.start({ workingDir: "." });
 
 // Prompt returns an async iterable of events
 for await (const event of session.prompt("Fix the bug")) {
@@ -56,7 +56,20 @@ await session.compact();
 const state = await session.getState();
 const models = await session.listModels();
 await session.setModel("claude-sonnet-4");
+await session.setThinkingLevel("high");
+
+// Settings
+await session.getSettings();
+await session.saveSettings({ default_model: "anthropic:claude-sonnet-4-5" });
+
+// Auth
+await session.authStatus();
+await session.authLogin();
+await session.authPoll(deviceCode, interval);
+await session.authSetKey("anthropic", "sk-...");
 ```
+
+The session exposes an `auth` field from the `session/start` response, containing the probe result (status, provider, providers list).
 
 The Session also provides a typed event emitter:
 
