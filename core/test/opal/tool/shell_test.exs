@@ -7,6 +7,7 @@ defmodule Opal.Tool.ShellTest do
 
   describe "behaviour" do
     test "implements Opal.Tool behaviour" do
+      Code.ensure_loaded!(Shell)
       assert function_exported?(Shell, :name, 0)
       assert function_exported?(Shell, :description, 0)
       assert function_exported?(Shell, :parameters, 0)

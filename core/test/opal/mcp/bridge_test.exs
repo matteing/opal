@@ -61,7 +61,7 @@ defmodule Opal.MCP.BridgeTest do
       }
 
       mod = Bridge.create_tool_module(:echo_server, tool, "echo")
-
+      Code.ensure_loaded!(mod)
       assert function_exported?(mod, :name, 0)
       assert function_exported?(mod, :description, 0)
       assert function_exported?(mod, :parameters, 0)

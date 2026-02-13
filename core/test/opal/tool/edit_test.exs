@@ -7,6 +7,7 @@ defmodule Opal.Tool.EditTest do
 
   describe "behaviour" do
     test "implements Opal.Tool behaviour" do
+      Code.ensure_loaded!(Edit)
       assert function_exported?(Edit, :name, 0)
       assert function_exported?(Edit, :description, 0)
       assert function_exported?(Edit, :parameters, 0)

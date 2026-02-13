@@ -5,6 +5,7 @@ defmodule Opal.Tool.AskParentTest do
 
   describe "behaviour" do
     test "implements Opal.Tool behaviour" do
+      Code.ensure_loaded!(AskParent)
       assert function_exported?(AskParent, :name, 0)
       assert function_exported?(AskParent, :description, 0)
       assert function_exported?(AskParent, :parameters, 0)

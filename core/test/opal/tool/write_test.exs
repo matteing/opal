@@ -7,6 +7,7 @@ defmodule Opal.Tool.WriteTest do
 
   describe "behaviour" do
     test "implements Opal.Tool behaviour" do
+      Code.ensure_loaded!(Write)
       assert function_exported?(Write, :name, 0)
       assert function_exported?(Write, :description, 0)
       assert function_exported?(Write, :parameters, 0)

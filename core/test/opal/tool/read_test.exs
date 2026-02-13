@@ -19,6 +19,7 @@ defmodule Opal.Tool.ReadTest do
 
   describe "behaviour" do
     test "implements Opal.Tool behaviour" do
+      Code.ensure_loaded!(Read)
       assert function_exported?(Read, :name, 0)
       assert function_exported?(Read, :description, 0)
       assert function_exported?(Read, :parameters, 0)

@@ -5,6 +5,7 @@ defmodule Opal.Tool.AskUserTest do
 
   describe "behaviour" do
     test "implements Opal.Tool behaviour" do
+      Code.ensure_loaded!(AskUser)
       assert function_exported?(AskUser, :name, 0)
       assert function_exported?(AskUser, :description, 0)
       assert function_exported?(AskUser, :parameters, 0)
