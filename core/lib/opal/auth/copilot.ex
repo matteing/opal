@@ -14,8 +14,6 @@ defmodule Opal.Auth.Copilot do
   Tokens are stored at `Opal.Config.auth_file/1` (default: `~/.opal/auth.json`).
   """
 
-  require Logger
-
   @copilot_headers %{
     "user-agent" => "GitHubCopilotChat/0.35.0",
     "editor-version" => "vscode/1.107.0",
@@ -42,7 +40,9 @@ defmodule Opal.Auth.Copilot do
   def start_device_flow(dom \\ domain()) do
     case Req.post("https://#{dom}/login/device/code",
            json: %{client_id: client_id(), scope: "read:user"},
-           headers: %{"accept" => "application/json"}
+           headers: %{"accept" => "application/json"},
+           pool_timeout: 5_000,
+           receive_timeout: 10_000
          ) do
       {:ok, %{status: 200, body: body}} ->
         {:ok, body}
@@ -78,7 +78,9 @@ defmodule Opal.Auth.Copilot do
 
     case Req.post("https://#{domain}/login/oauth/access_token",
            json: body,
-           headers: %{"accept" => "application/json"}
+           headers: %{"accept" => "application/json"},
+           pool_timeout: 5_000,
+           receive_timeout: 10_000
          ) do
       {:ok, %{body: %{"access_token" => token}}} ->
         {:ok, token}
@@ -111,7 +113,9 @@ defmodule Opal.Auth.Copilot do
   def exchange_copilot_token(github_token, domain \\ "github.com") do
     case Req.get("https://api.#{domain}/copilot_internal/v2/token",
            auth: {:bearer, github_token},
-           headers: @copilot_headers
+           headers: @copilot_headers,
+           pool_timeout: 5_000,
+           receive_timeout: 10_000
          ) do
       {:ok, %{status: 200, body: body}} ->
         {:ok, body}

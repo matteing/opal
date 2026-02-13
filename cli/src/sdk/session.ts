@@ -71,6 +71,8 @@ export interface SessionOptions extends SessionStartParams {
   autoConfirm?: boolean;
   /** Pipe server stderr to process.stderr for debugging. */
   verbose?: boolean;
+  /** Called with server stderr chunks (useful for startup diagnostics). */
+  onStderr?: (data: string) => void;
 }
 
 // --- Session ---
@@ -103,7 +105,7 @@ export class Session {
    * Start a new session.
    */
   static async start(opts: SessionOptions = {}, clientOpts?: OpalClientOptions): Promise<Session> {
-    const { onConfirm, onInput, onAskUser, autoConfirm, verbose, ...startParams } = opts;
+    const { onConfirm, onInput, onAskUser, autoConfirm, verbose, onStderr, ...startParams } = opts;
 
     const client = new OpalClient({
       ...clientOpts,
@@ -141,6 +143,10 @@ export class Session {
 
     if (verbose) {
       client.on("stderr", (data: string) => process.stderr.write(data));
+    }
+
+    if (onStderr) {
+      client.on("stderr", onStderr);
     }
 
     const result = await client.request("session/start", startParams as SessionStartParams);

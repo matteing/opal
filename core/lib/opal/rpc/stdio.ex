@@ -72,13 +72,16 @@ defmodule Opal.RPC.Stdio do
 
   @impl true
   def init(_opts) do
-    # Use IO.read instead of Port.open({:fd, 0, 1}, ...) for stdin.
-    # Port.open with {:fd, 0, 1} has limited support on Windows: the BEAM's
-    # file-descriptor mapping via _open_osfhandle can fail with piped stdio
-    # (e.g. Burrito releases), and {:line, N} expects OS-dependent newline
-    # sequences (\r\n on Windows) while the Node.js client sends bare \n.
-    # IO.read(:stdio, :line) goes through Erlang's standard I/O system which
-    # handles both \n and \r\n on all platforms.
+    # Read/write raw file descriptors directly, bypassing the Erlang I/O
+    # system (user_drv / prim_tty). Going through IO.read(:stdio, :line)
+    # routes through user_drv which tries to own the TTY and deadlocks
+    # when stdio is piped from a parent process.
+    #
+    # We use :stream mode (not {:line, N}) because {:line, N} has
+    # platform-dependent newline semantics. Instead we accumulate bytes
+    # in the reader and split on \n ourselves.
+    stdout_fd = :erlang.open_port({:fd, 1, 1}, [:binary, :out])
+    Process.put(:stdout_port, stdout_fd)
     parent = self()
 
     {:ok, reader} =
@@ -88,23 +91,55 @@ defmodule Opal.RPC.Stdio do
   end
 
   defp stdin_read_loop(parent) do
-    case IO.read(:stdio, :line) do
-      :eof ->
-        :ok
+    # Open fd 0 (stdin) in binary stream mode. We accumulate chunks
+    # and split on newlines to extract complete JSON-RPC messages.
+    port = :erlang.open_port({:fd, 0, 0}, [:binary, :stream])
+    stdin_loop(port, parent, "")
+  end
 
-      {:error, _reason} ->
-        :ok
+  defp stdin_loop(port, parent, buffer) do
+    receive do
+      {^port, {:data, data}} ->
+        buffer = buffer <> data
+        {lines, rest} = extract_lines(buffer)
 
-      line when is_binary(line) ->
-        # Strip \r\n or \n — IO.read(:stdio, :line) includes the trailing
-        # newline, and on Windows it may be \r\n.
-        trimmed = line |> String.trim_trailing("\n") |> String.trim_trailing("\r")
-        send(parent, {:stdin_line, trimmed})
-        stdin_read_loop(parent)
+        for line <- lines do
+          trimmed = String.trim(line)
+
+          if trimmed != "" do
+            send(parent, {:stdin_line, trimmed})
+          end
+        end
+
+        stdin_loop(port, parent, rest)
+
+      {^port, :eof} ->
+        send(parent, :stdin_eof)
+        :ok
+    end
+  end
+
+  defp extract_lines(buffer) do
+    case String.split(buffer, "\n", parts: 2) do
+      [line, rest] ->
+        {more_lines, final_rest} = extract_lines(rest)
+        {[line | more_lines], final_rest}
+
+      [incomplete] ->
+        {[], incomplete}
     end
   end
 
   # -- Incoming data from stdin --
+
+  @impl true
+  def handle_info(:stdin_eof, state) do
+    # Parent CLI process closed stdin — shut down the VM so the server
+    # doesn't linger as an orphan (e.g. after Ctrl+C in the terminal).
+    Logger.info("stdin closed, shutting down")
+    System.halt(0)
+    {:noreply, state}
+  end
 
   @impl true
   def handle_info({:stdin_line, line}, state) do
@@ -323,6 +358,7 @@ defmodule Opal.RPC.Stdio do
   # -- I/O --
 
   defp write_stdout(json) do
-    IO.write(:stdio, json <> "\n")
+    port = Process.get(:stdout_port)
+    Port.command(port, json <> "\n")
   end
 end

@@ -15,8 +15,6 @@ defmodule Opal.Provider.Copilot do
 
   @behaviour Opal.Provider
 
-  require Logger
-
   # Models that require the Responses API; all others use Chat Completions
   defp use_responses_api?(model_id) do
     String.starts_with?(model_id, "gpt-5") or String.starts_with?(model_id, "oswe")
@@ -59,6 +57,7 @@ defmodule Opal.Provider.Copilot do
     }
 
     body = if converted_tools != [], do: Map.put(body, :tools, converted_tools), else: body
+    body = maybe_add_reasoning_effort(body, model)
 
     case Req.post(req,
            url: "/chat/completions",
@@ -85,6 +84,7 @@ defmodule Opal.Provider.Copilot do
     }
 
     body = if converted_tools != [], do: Map.put(body, :tools, converted_tools), else: body
+    body = maybe_add_reasoning_config(body, model)
 
     case Req.post(req, url: "/responses", json: body, into: :self, receive_timeout: 120_000) do
       {:ok, resp} -> {:ok, resp}
@@ -109,106 +109,11 @@ defmodule Opal.Provider.Copilot do
   end
 
   # ── Chat Completions SSE format ──
-  # Shape: {"choices": [{"delta": {"content": "..."}, "finish_reason": null}]}
+  # Delegates to shared OpenAI module for standard choices[0].delta parsing.
 
-  defp do_parse_event(%{"choices" => [%{"delta" => delta} = choice | _]} = event) do
-    events = []
-
-    # Text content
-    events =
-      case delta do
-        %{"content" => content} when is_binary(content) and content != "" ->
-          events ++ [{:text_delta, content}]
-
-        _ ->
-          events
-      end
-
-    # Reasoning / thinking content
-    events =
-      case delta do
-        %{"reasoning_content" => rc} when is_binary(rc) and rc != "" ->
-          events ++ [{:thinking_delta, rc}]
-
-        _ ->
-          events
-      end
-
-    # Tool calls
-    events =
-      case delta do
-        %{"tool_calls" => tool_calls} when is_list(tool_calls) ->
-          Enum.reduce(tool_calls, events, fn tc, acc ->
-            cond do
-              # New tool call (has id)
-              tc["id"] ->
-                acc ++
-                  [
-                    {:tool_call_start,
-                     %{
-                       call_id: tc["id"],
-                       name: get_in(tc, ["function", "name"]) || ""
-                     }}
-                  ]
-
-              # Argument delta
-              get_in(tc, ["function", "arguments"]) ->
-                acc ++ [{:tool_call_delta, get_in(tc, ["function", "arguments"])}]
-
-              true ->
-                acc
-            end
-          end)
-
-        _ ->
-          events
-      end
-
-    # Role start — only on the first chunk (role present, no content yet)
-    events =
-      case delta do
-        %{"role" => "assistant", "content" => c} when c in [nil, ""] ->
-          [{:text_start, %{}} | events]
-
-        %{"role" => "assistant"} when not is_map_key(delta, "content") ->
-          [{:text_start, %{}} | events]
-
-        _ ->
-          events
-      end
-
-    # Finish reason → finalize tool calls or mark done
-    events =
-      case choice do
-        %{"finish_reason" => "tool_calls"} ->
-          events ++ [{:response_done, %{usage: %{}, stop_reason: :tool_calls}}]
-
-        %{"finish_reason" => reason} when is_binary(reason) ->
-          events ++ [{:response_done, %{usage: %{}, stop_reason: :stop}}]
-
-        _ ->
-          events
-      end
-
-    # Usage stats (comes in a separate chunk with empty choices)
-    events =
-      case event do
-        %{"usage" => usage} when is_map(usage) and usage != %{} ->
-          events ++ [{:usage, usage}]
-
-        _ ->
-          events
-      end
-
-    events
+  defp do_parse_event(%{"choices" => _} = event) do
+    Opal.Provider.OpenAI.parse_chat_event(event)
   end
-
-  # Usage-only chunk (choices is empty list)
-  defp do_parse_event(%{"choices" => [], "usage" => usage}) when is_map(usage) and usage != %{} do
-    [{:usage, usage}]
-  end
-
-  defp do_parse_event(%{"choices" => []}), do: []
 
   # ── Responses API SSE format ──
 
@@ -316,50 +221,11 @@ defmodule Opal.Provider.Copilot do
   defdelegate convert_tools(tools), to: Opal.Provider
 
   # ── Chat Completions message format ──────────────────────────────────
+  # Delegates to shared OpenAI module for standard message conversion.
 
-  defp convert_messages_completions(model, messages) do
-    Enum.flat_map(messages, fn msg -> convert_msg_completions(model, msg) end)
+  defp convert_messages_completions(_model, messages) do
+    Opal.Provider.OpenAI.convert_messages(messages, include_thinking: true)
   end
-
-  defp convert_msg_completions(_model, %Opal.Message{role: :system, content: content}) do
-    [%{role: "system", content: content}]
-  end
-
-  defp convert_msg_completions(_model, %Opal.Message{role: :user, content: content}) do
-    [%{role: "user", content: content}]
-  end
-
-  defp convert_msg_completions(_model, %Opal.Message{
-         role: :assistant,
-         content: content,
-         tool_calls: tool_calls
-       })
-       when is_list(tool_calls) and tool_calls != [] do
-    calls =
-      Enum.map(tool_calls, fn tc ->
-        %{
-          id: tc.call_id,
-          type: "function",
-          function: %{name: tc.name, arguments: Jason.encode!(tc.arguments)}
-        }
-      end)
-
-    [%{role: "assistant", content: content || "", tool_calls: calls}]
-  end
-
-  defp convert_msg_completions(_model, %Opal.Message{role: :assistant, content: content}) do
-    [%{role: "assistant", content: content || ""}]
-  end
-
-  defp convert_msg_completions(_model, %Opal.Message{
-         role: :tool_result,
-         call_id: call_id,
-         content: content
-       }) do
-    [%{role: "tool", tool_call_id: call_id, content: content || ""}]
-  end
-
-  defp convert_msg_completions(_model, _msg), do: []
 
   # ── Responses API message format ─────────────────────────────────────
 
@@ -379,9 +245,24 @@ defmodule Opal.Provider.Copilot do
   defp convert_msg_responses(_model, %Opal.Message{
          role: :assistant,
          content: content,
+         thinking: thinking,
          tool_calls: tool_calls
        })
        when is_list(tool_calls) and tool_calls != [] do
+    # Reasoning item for roundtripping (OpenAI recommends passing back reasoning items)
+    reasoning_item =
+      if thinking do
+        [
+          %{
+            type: "reasoning",
+            id: "rs_roundtrip",
+            summary: [%{type: "summary_text", text: thinking}]
+          }
+        ]
+      else
+        []
+      end
+
     text_item =
       if content && content != "" do
         [
@@ -406,18 +287,36 @@ defmodule Opal.Provider.Copilot do
         }
       end)
 
-    text_item ++ call_items
+    reasoning_item ++ text_item ++ call_items
   end
 
-  defp convert_msg_responses(_model, %Opal.Message{role: :assistant, content: content}) do
-    [
-      %{
-        type: "message",
-        role: "assistant",
-        content: [%{type: "output_text", text: content || ""}],
-        status: "completed"
-      }
-    ]
+  defp convert_msg_responses(_model, %Opal.Message{
+         role: :assistant,
+         content: content,
+         thinking: thinking
+       }) do
+    reasoning_item =
+      if thinking do
+        [
+          %{
+            type: "reasoning",
+            id: "rs_roundtrip",
+            summary: [%{type: "summary_text", text: thinking}]
+          }
+        ]
+      else
+        []
+      end
+
+    reasoning_item ++
+      [
+        %{
+          type: "message",
+          role: "assistant",
+          content: [%{type: "output_text", text: content || ""}],
+          status: "completed"
+        }
+      ]
   end
 
   defp convert_msg_responses(_model, %Opal.Message{
@@ -462,5 +361,38 @@ defmodule Opal.Provider.Copilot do
       "openai-intent" => "conversation-edits",
       "x-initiator" => if(last_role != "user", do: "agent", else: "user")
     }
+  end
+
+  # ── Reasoning Effort ─────────────────────────────────────────────────
+
+  # Chat Completions: add reasoning_effort string param
+  defp maybe_add_reasoning_effort(body, %{thinking_level: :off}), do: body
+
+  defp maybe_add_reasoning_effort(body, %{thinking_level: level, id: id}) do
+    if supports_thinking?(id) do
+      Map.put(body, :reasoning_effort, Opal.Provider.OpenAI.reasoning_effort(level))
+    else
+      body
+    end
+  end
+
+  # Responses API: add reasoning object with effort + summary
+  defp maybe_add_reasoning_config(body, %{thinking_level: :off}), do: body
+
+  defp maybe_add_reasoning_config(body, %{thinking_level: level}) do
+    Map.put(body, :reasoning, %{
+      effort: Opal.Provider.OpenAI.reasoning_effort(level),
+      summary: "auto"
+    })
+  end
+
+  # Modern thinking-capable models served through Copilot proxy
+  defp supports_thinking?(id) do
+    String.starts_with?(id, "gpt-5") or
+      String.starts_with?(id, "claude-sonnet-4") or
+      String.starts_with?(id, "claude-opus-4") or
+      String.starts_with?(id, "claude-haiku-4.5") or
+      String.starts_with?(id, "o3") or
+      String.starts_with?(id, "o4")
   end
 end

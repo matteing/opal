@@ -5,9 +5,9 @@ defmodule Opal.Provider.LLM do
   Supports any provider that ReqLLM supports (Anthropic, OpenAI, Google, Groq,
   OpenRouter, xAI, AWS Bedrock, and more) through a unified interface.
 
-  This provider bridges ReqLLM's `StreamResponse` into Opal's mailbox-based
-  streaming model by iterating chunks in a spawned process and sending them
-  as `Req.Response.Async` messages that the agent loop already understands.
+  This provider bridges ReqLLM's `StreamResponse` into Opal's event-based
+  streaming model by iterating chunks in a spawned process and sending
+  pre-parsed event tuples via `Opal.Provider.EventStream`.
 
   ## Model Specification
 
@@ -50,35 +50,18 @@ defmodule Opal.Provider.LLM do
 
     case ReqLLM.stream_text(model_spec, context, stream_opts) do
       {:ok, stream_response} ->
-        bridge_to_async(stream_response)
+        bridge_to_events(stream_response)
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  # Bridge ReqLLM's StreamResponse into a Req.Response.Async that the
-  # agent loop can process through its existing mailbox handling.
-  defp bridge_to_async(stream_response) do
+  # Bridge ReqLLM's StreamResponse into an EventStream that sends
+  # pre-parsed event tuples directly to the agent — no JSON round-trip.
+  defp bridge_to_events(stream_response) do
     caller = self()
     ref = make_ref()
-
-    resp = %Req.Response{
-      status: 200,
-      headers: %{},
-      body: %Req.Response.Async{
-        ref: ref,
-        stream_fun: fn
-          inner_ref, {inner_ref, {:data, data}} -> {:ok, [data: data]}
-          inner_ref, {inner_ref, :done} -> {:ok, [:done]}
-          _, _ -> :unknown
-        end,
-        cancel_fun: fn _ref ->
-          stream_response.cancel.()
-          :ok
-        end
-      }
-    }
 
     spawn(fn ->
       Process.sleep(5)
@@ -88,9 +71,8 @@ defmodule Opal.Provider.LLM do
         Enum.reduce(stream_response.stream, {text_started, %{}}, fn chunk, {started, tc_state} ->
           {events, new_started, new_tc_state} = chunk_to_events(chunk, started, tc_state)
 
-          for event <- events do
-            json = encode_event(event)
-            send(caller, {ref, {:data, "data: #{json}\n"}})
+          if events != [] do
+            send(caller, {ref, {:events, events}})
           end
 
           {new_started, new_tc_state}
@@ -101,15 +83,19 @@ defmodule Opal.Provider.LLM do
 
       if is_map(metadata) do
         if usage = Map.get(metadata, :usage) do
-          json = encode_event({:usage, normalize_usage(usage)})
-          send(caller, {ref, {:data, "data: #{json}\n"}})
+          send(caller, {ref, {:events, [{:usage, normalize_usage(usage)}]}})
         end
       end
 
       send(caller, {ref, :done})
     end)
 
-    {:ok, resp}
+    cancel_fn = fn ->
+      stream_response.cancel.()
+      :ok
+    end
+
+    {:ok, %Opal.Provider.EventStream{ref: ref, cancel_fun: cancel_fn}}
   end
 
   # Convert ReqLLM StreamChunks to Opal stream events.
@@ -198,121 +184,12 @@ defmodule Opal.Provider.LLM do
 
   defp normalize_usage(_), do: %{}
 
-  # Encode an Opal stream event as JSON in a format parse_stream_event understands
-  defp encode_event(event) do
-    data =
-      case event do
-        {:text_start, info} ->
-          %{"_opal" => "text_start", "info" => info}
-
-        {:text_delta, text} ->
-          %{"_opal" => "text_delta", "text" => text}
-
-        {:thinking_start, info} ->
-          %{"_opal" => "thinking_start", "info" => info}
-
-        {:thinking_delta, text} ->
-          %{"_opal" => "thinking_delta", "text" => text}
-
-        {:tool_call_start, info} ->
-          %{"_opal" => "tool_call_start", "call_id" => info.call_id, "name" => info.name}
-
-        {:tool_call_delta, text} ->
-          %{"_opal" => "tool_call_delta", "text" => text}
-
-        {:tool_call_done, info} ->
-          %{
-            "_opal" => "tool_call_done",
-            "call_id" => info.call_id,
-            "name" => info.name,
-            "arguments" => info.arguments
-          }
-
-        {:response_done, info} ->
-          %{
-            "_opal" => "response_done",
-            "stop_reason" => to_string(info.stop_reason),
-            "usage" => info.usage
-          }
-
-        {:usage, usage} ->
-          %{"_opal" => "usage", "usage" => usage}
-
-        {:error, reason} ->
-          %{"_opal" => "error", "reason" => inspect(reason)}
-      end
-
-    Jason.encode!(data)
-  end
-
   # ── parse_stream_event/1 ──────────────────────────────────────────────
+  # This provider uses EventStream (native event tuples), so SSE parsing
+  # is never called. Stub satisfies the @behaviour callback.
 
   @impl true
-  def parse_stream_event(data) do
-    case Jason.decode(data) do
-      {:ok, %{"_opal" => type} = parsed} ->
-        decode_opal_event(type, parsed)
-
-      {:ok, _other} ->
-        # Fallback: try OpenAI-format parsing for mixed scenarios
-        []
-
-      {:error, _} ->
-        []
-    end
-  end
-
-  defp decode_opal_event("text_start", %{"info" => info}),
-    do: [{:text_start, atomize_keys(info)}]
-
-  defp decode_opal_event("text_delta", %{"text" => text}),
-    do: [{:text_delta, text}]
-
-  defp decode_opal_event("thinking_start", %{"info" => info}),
-    do: [{:thinking_start, atomize_keys(info)}]
-
-  defp decode_opal_event("thinking_delta", %{"text" => text}),
-    do: [{:thinking_delta, text}]
-
-  defp decode_opal_event("tool_call_start", %{"call_id" => call_id, "name" => name}),
-    do: [{:tool_call_start, %{call_id: call_id, name: name}}]
-
-  defp decode_opal_event("tool_call_delta", %{"text" => text}),
-    do: [{:tool_call_delta, text}]
-
-  defp decode_opal_event("tool_call_done", %{
-         "call_id" => call_id,
-         "name" => name,
-         "arguments" => args
-       }),
-       do: [{:tool_call_done, %{call_id: call_id, name: name, arguments: args}}]
-
-  defp decode_opal_event("response_done", %{"stop_reason" => reason, "usage" => usage}) do
-    stop_reason = if reason == "tool_calls", do: :tool_calls, else: :stop
-    [{:response_done, %{usage: usage, stop_reason: stop_reason}}]
-  end
-
-  defp decode_opal_event("usage", %{"usage" => usage}),
-    do: [{:usage, usage}]
-
-  defp decode_opal_event("error", %{"reason" => reason}),
-    do: [{:error, reason}]
-
-  defp decode_opal_event(_, _), do: []
-
-  defp atomize_keys(map) when is_map(map) do
-    Map.new(map, fn {k, v} -> {safe_to_atom(k), v} end)
-  end
-
-  defp atomize_keys(other), do: other
-
-  defp safe_to_atom(key) when is_binary(key) do
-    String.to_existing_atom(key)
-  rescue
-    ArgumentError -> key
-  end
-
-  defp safe_to_atom(key), do: key
+  def parse_stream_event(_data), do: []
 
   # ── convert_messages/2 ──────────────────────────────────────────────
 
@@ -369,6 +246,7 @@ defmodule Opal.Provider.LLM do
   defp to_req_llm_message(_model, %Opal.Message{
          role: :assistant,
          content: content,
+         thinking: thinking,
          tool_calls: tool_calls
        })
        when is_list(tool_calls) and tool_calls != [] do
@@ -377,11 +255,17 @@ defmodule Opal.Provider.LLM do
         ReqLLM.ToolCall.new(tc.call_id, tc.name, Jason.encode!(tc.arguments))
       end)
 
-    [ReqLLM.Context.assistant(content || "", tool_calls: req_tool_calls)]
+    meta = if thinking, do: %{thinking: thinking}, else: %{}
+    [ReqLLM.Context.assistant(content || "", tool_calls: req_tool_calls, metadata: meta)]
   end
 
-  defp to_req_llm_message(_model, %Opal.Message{role: :assistant, content: content}) do
-    [ReqLLM.Context.assistant(content || "")]
+  defp to_req_llm_message(_model, %Opal.Message{
+         role: :assistant,
+         content: content,
+         thinking: thinking
+       }) do
+    meta = if thinking, do: %{thinking: thinking}, else: %{}
+    [ReqLLM.Context.assistant(content || "", metadata: meta)]
   end
 
   defp to_req_llm_message(_model, %Opal.Message{
@@ -409,6 +293,8 @@ defmodule Opal.Provider.LLM do
   defp maybe_add_thinking(opts, %{thinking_level: :off}), do: opts
 
   defp maybe_add_thinking(opts, %{thinking_level: level}) do
+    # ReqLLM accepts :low, :medium, :high for reasoning_effort.
+    # :max maps to Anthropic's adaptive "max" — pass through to ReqLLM.
     Keyword.put(opts, :reasoning_effort, level)
   end
 

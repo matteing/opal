@@ -120,6 +120,12 @@ export class OpalClient extends EventEmitter {
       this.rejectAll(new Error(`opal-server exited (code=${code}, signal=${signal})${detail}`));
       this.emit("exit", code, signal);
     });
+
+    // Ensure the server process is killed when the parent exits (e.g. Ctrl+C).
+    // Without this, the Elixir VM can linger as an orphan process.
+    const cleanup = () => this.close();
+    process.on("exit", cleanup);
+    this.process.on("exit", () => process.removeListener("exit", cleanup));
   }
 
   /**

@@ -14,7 +14,7 @@ defmodule Opal.Model do
       %Opal.Model{provider: :copilot, id: "claude-sonnet-4-5", thinking_level: :high}
   """
 
-  @type thinking_level :: :off | :low | :medium | :high
+  @type thinking_level :: :off | :low | :medium | :high | :max
 
   @type t :: %__MODULE__{
           provider: atom(),
@@ -25,7 +25,7 @@ defmodule Opal.Model do
   @enforce_keys [:provider, :id]
   defstruct [:provider, :id, thinking_level: :off]
 
-  @valid_thinking_levels [:off, :low, :medium, :high]
+  @valid_thinking_levels [:off, :low, :medium, :high, :max]
 
   @doc """
   Creates a new model configuration.
@@ -35,7 +35,7 @@ defmodule Opal.Model do
     * `provider` — the provider atom (e.g. `:copilot`, `:anthropic`, `:openai`)
     * `id` — the model identifier string (e.g. `"claude-sonnet-4-5"`)
     * `opts` — optional keyword list:
-      * `:thinking_level` — one of `:off`, `:low`, `:medium`, `:high` (default: `:off`)
+      * `:thinking_level` — one of `:off`, `:low`, `:medium`, `:high`, `:max` (default: `:off`)
 
   ## Examples
 

@@ -69,14 +69,15 @@ On first run, if no credentials are found for any provider, the CLI presents a s
 ## Provider Behaviour
 
 ```elixir
-@callback stream(model, messages, tools, opts) :: {:ok, Req.Response.t()} | {:error, term()}
+@callback stream(model, messages, tools, opts) ::
+  {:ok, Req.Response.t() | Opal.Provider.EventStream.t()} | {:error, term()}
 @callback parse_stream_event(String.t()) :: [event]
 @callback convert_messages(model, [Opal.Message.t()]) :: [map()]
 @callback convert_tools([module()]) :: [map()]
 ```
 
-- `stream/4` — Initiates an async streaming request. Returns a `Req.Response` whose body streams chunks as Erlang messages into the calling process (the Agent GenServer).
-- `parse_stream_event/1` — Parses one data line into semantic events (`:text_delta`, `:tool_call_start`, etc.).
+- `stream/4` — Initiates an async streaming request. Returns either a `Req.Response` (raw SSE — agent uses `parse_stream_event/1` to decode) or an `EventStream` (pre-parsed event tuples sent directly to the agent).
+- `parse_stream_event/1` — Parses one SSE data line into semantic events (`:text_delta`, `:tool_call_start`, etc.). Only called for SSE-mode providers.
 - `convert_messages/2` — Translates `Opal.Message` structs into the provider's wire format.
 - `convert_tools/1` — Translates tool modules into the provider's function-calling schema.
 
@@ -141,18 +142,38 @@ LLMDB's `github_copilot` provider maps these correctly, so when using the Copilo
 
 Context windows also differ — Copilot typically limits context to 128k even for models that support 200k upstream (e.g., Claude). LLMDB reflects the Copilot-specific limits.
 
+## Streaming Modes
+
+The agent loop supports two streaming modes, selected automatically based on what `stream/4` returns:
+
+```mermaid
+graph TD
+    subgraph "SSE Mode (Copilot)"
+        C[HTTP SSE] -->|Req.parse_message| A1[parse_sse_data]
+        A1 -->|provider.parse_stream_event| A2[handle_stream_event]
+    end
+
+    subgraph "EventStream Mode (LLM)"
+        L["ReqLLM stream"] -->|chunk_to_events| E["{ref, {:events, tuples}}"]
+        E -->|direct dispatch| A3[handle_stream_event]
+    end
+```
+
+- **SSE mode** — `stream/4` returns `{:ok, %Req.Response{}}`. HTTP chunks arrive in the agent's mailbox via `Req.Response.Async`. The agent calls `Req.parse_message/2` to extract raw JSON lines, then `provider.parse_stream_event/1` to decode them into semantic events.
+- **EventStream mode** — `stream/4` returns `{:ok, %Opal.Provider.EventStream{ref, cancel_fun}}`. The provider spawns a process that sends `{ref, {:events, [event_tuples]}}` messages directly to the agent — no JSON serialization round-trip.
+
 ## LLM Provider (ReqLLM)
 
-`Opal.Provider.LLM` bridges ReqLLM's streaming into Opal's mailbox-based agent loop.
+`Opal.Provider.LLM` bridges ReqLLM's streaming into Opal's event-based agent loop using EventStream mode.
 
 ### How It Works
 
 1. Converts Opal messages and tools to ReqLLM format (`ReqLLM.Context`, `ReqLLM.Tool`)
 2. Calls `ReqLLM.stream_text/3` to get a `StreamResponse` with a lazy chunk stream
-3. Spawns a bridge process that iterates the stream and sends events through a `Req.Response.Async` ref
-4. The agent's existing SSE processing loop receives and dispatches these events via `parse_stream_event/1`
+3. Spawns a bridge process that iterates the stream, converts each `ReqLLM.StreamChunk` into Opal semantic event tuples via `chunk_to_events/3`, and sends them directly as `{ref, {:events, events}}`
+4. The agent's `handle_info` dispatches events straight to `handle_stream_event/2`
 
-The bridge encodes each `ReqLLM.StreamChunk` as a JSON object with an `_opal` type tag, which `parse_stream_event/1` decodes back into Opal's semantic events. This avoids modifying the agent loop while supporting any ReqLLM provider.
+Thinking content is preserved during message conversion: assistant messages with a `thinking` field store it in ReqLLM's message metadata for roundtripping.
 
 ### Model Specification
 
@@ -238,10 +259,12 @@ RPC methods: `settings/get`, `settings/save`. See [directories.md](directories.m
 To add a custom LLM provider:
 
 1. Create a module implementing `Opal.Provider`
-2. Implement `stream/4` to return a `Req.Response` with async streaming
-3. Implement `parse_stream_event/1` to normalize your API's events
+2. Implement `stream/4` to return either a `Req.Response` (SSE mode) or `Opal.Provider.EventStream` (native events)
+3. Implement `parse_stream_event/1` to normalize your API's events (or return `[]` if using EventStream)
 4. Implement `convert_messages/2` and `convert_tools/1` for your API's format
 5. Pass it in config: `Opal.start_session(%{provider: MyProvider})`
+
+For OpenAI-compatible APIs, `Opal.Provider.OpenAI` provides shared Chat Completions parsing (`parse_chat_event/1`) and message conversion (`convert_messages/2`) that can be reused.
 
 For most use cases, `Opal.Provider.LLM` already covers the provider via ReqLLM. Custom providers are only needed for proprietary APIs not supported by ReqLLM.
 
@@ -254,8 +277,10 @@ For most use cases, `Opal.Provider.LLM` already covers the provider via ReqLLM. 
 ## Source
 
 - `core/lib/opal/provider.ex` — Behaviour definition and event types
-- `core/lib/opal/provider/copilot.ex` — GitHub Copilot implementation
-- `core/lib/opal/provider/llm.ex` — ReqLLM-based multi-provider implementation
+- `core/lib/opal/provider/copilot.ex` — GitHub Copilot implementation (Chat Completions + Responses API)
+- `core/lib/opal/provider/llm.ex` — ReqLLM-based multi-provider implementation (EventStream mode)
+- `core/lib/opal/provider/openai.ex` — Shared Chat Completions parsing, message conversion, and reasoning effort mapping
+- `core/lib/opal/provider/event_stream.ex` — EventStream struct for native event delivery
 - `core/lib/opal/models.ex` — LLMDB-backed model discovery and metadata
 - `core/lib/opal/auth.ex` — Provider-agnostic credential probe (`Opal.Auth.probe/0`)
 - `core/lib/opal/auth/copilot.ex` — Device-code OAuth and token management (Copilot only)

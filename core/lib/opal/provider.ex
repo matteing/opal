@@ -31,15 +31,20 @@ defmodule Opal.Provider do
   @doc """
   Initiates a streaming request to the LLM provider.
 
-  Returns `{:ok, resp}` where `resp` can be used with `Req.parse_message/2`
-  to iterate over SSE chunks arriving in the calling process's mailbox.
+  Returns either:
+
+    * `{:ok, %Req.Response{}}` — raw SSE stream; the agent uses
+      `Req.parse_message/2` and `parse_stream_event/1` to decode chunks.
+    * `{:ok, %Opal.Provider.EventStream{}}` — pre-parsed event stream;
+      the provider sends `{ref, {:events, [stream_event()]}}` messages
+      directly, bypassing SSE parsing.
   """
   @callback stream(
               model :: Opal.Model.t(),
               messages :: [Opal.Message.t()],
               tools :: [module()],
               opts :: keyword()
-            ) :: {:ok, Req.Response.t()} | {:error, term()}
+            ) :: {:ok, Req.Response.t() | Opal.Provider.EventStream.t()} | {:error, term()}
 
   @doc """
   Parses a raw SSE data line into a list of stream events.

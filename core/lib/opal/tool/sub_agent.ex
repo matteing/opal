@@ -20,8 +20,6 @@ defmodule Opal.Tool.SubAgent do
 
   @behaviour Opal.Tool
 
-  require Logger
-
   @impl true
   def name, do: "sub_agent"
 

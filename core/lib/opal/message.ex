@@ -27,6 +27,7 @@ defmodule Opal.Message do
           parent_id: String.t() | nil,
           role: role(),
           content: String.t() | nil,
+          thinking: String.t() | nil,
           tool_calls: [tool_call()] | nil,
           call_id: String.t() | nil,
           name: String.t() | nil,
@@ -42,6 +43,7 @@ defmodule Opal.Message do
     :parent_id,
     :role,
     :content,
+    :thinking,
     :tool_calls,
     :call_id,
     :name,
@@ -72,12 +74,13 @@ defmodule Opal.Message do
       iex> msg.role
       :assistant
   """
-  @spec assistant(String.t() | nil, [tool_call()]) :: t()
-  def assistant(content, tool_calls \\ []) do
+  @spec assistant(String.t() | nil, [tool_call()], keyword()) :: t()
+  def assistant(content, tool_calls \\ [], opts \\ []) do
     %__MODULE__{
       id: generate_id(),
       role: :assistant,
       content: content,
+      thinking: Keyword.get(opts, :thinking),
       tool_calls: tool_calls
     }
   end

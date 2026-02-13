@@ -43,8 +43,11 @@ defmodule Opal.Agent do
             config: Opal.Config.t(),
             status: :idle | :running | :streaming | :executing_tools,
             streaming_resp: Req.Response.t() | nil,
+            streaming_ref: reference() | nil,
+            streaming_cancel: (-> :ok) | nil,
             current_text: String.t(),
             current_tool_calls: [map()],
+            current_thinking: String.t() | nil,
             pending_tool_calls: MapSet.t(),
             pending_steers: [String.t()],
             status_tag_buffer: String.t(),
@@ -82,12 +85,15 @@ defmodule Opal.Agent do
       :working_dir,
       :config,
       :streaming_resp,
+      streaming_ref: nil,
+      streaming_cancel: nil,
       system_prompt: "",
       messages: [],
       tools: [],
       status: :idle,
       current_text: "",
       current_tool_calls: [],
+      current_thinking: nil,
       pending_tool_calls: MapSet.new(),
       pending_steers: [],
       status_tag_buffer: "",
@@ -467,6 +473,26 @@ defmodule Opal.Agent do
     Opal.Agent.ToolRunner.dispatch_next_tool(state)
   end
 
+  # Native event stream (from EventStream providers like Provider.LLM)
+  def handle_info(
+        {ref, {:events, events}},
+        %State{status: :streaming, streaming_ref: ref} = state
+      ) do
+    state = %{state | last_chunk_at: System.monotonic_time(:second)}
+
+    state =
+      Enum.reduce(events, state, fn event, acc ->
+        Opal.Agent.Stream.handle_stream_event(event, acc)
+      end)
+
+    {:noreply, state}
+  end
+
+  def handle_info({ref, :done}, %State{status: :streaming, streaming_ref: ref} = state) do
+    finalize_response(state)
+  end
+
+  # SSE stream (from HTTP providers like Provider.Copilot)
   def handle_info(message, %State{status: :streaming, streaming_resp: resp} = state)
       when resp != nil do
     case Req.parse_message(resp, message) do
@@ -570,6 +596,28 @@ defmodule Opal.Agent do
     broadcast(state, {:request_start, %{model: state.model.id, messages: length(all_messages)}})
 
     case provider.stream(state.model, all_messages, tools) do
+      {:ok, %Opal.Provider.EventStream{ref: ref, cancel_fun: cancel_fn}} ->
+        Logger.debug("Provider event stream started (native events)")
+
+        broadcast(state, {:request_end})
+
+        watchdog = Process.send_after(self(), :stream_watchdog, 10_000)
+
+        state = %{
+          state
+          | streaming_resp: nil,
+            streaming_ref: ref,
+            streaming_cancel: cancel_fn,
+            status: :streaming,
+            current_text: "",
+            current_tool_calls: [],
+            current_thinking: nil,
+            last_chunk_at: System.monotonic_time(:second),
+            stream_watchdog: watchdog
+        }
+
+        {:noreply, state}
+
       {:ok, resp} ->
         Logger.debug(
           "Provider stream started. Response status: #{resp.status}, body type: #{inspect(resp.body.__struct__)}"
@@ -582,9 +630,12 @@ defmodule Opal.Agent do
         state = %{
           state
           | streaming_resp: resp,
+            streaming_ref: nil,
+            streaming_cancel: nil,
             status: :streaming,
             current_text: "",
             current_tool_calls: [],
+            current_thinking: nil,
             last_chunk_at: System.monotonic_time(:second),
             stream_watchdog: watchdog
         }
@@ -729,7 +780,14 @@ defmodule Opal.Agent do
 
     tool_calls = finalize_tool_calls(state.current_tool_calls)
 
-    assistant_msg = Opal.Message.assistant(state.current_text, tool_calls)
+    thinking_opt =
+      if state.current_thinking && state.current_thinking != "" do
+        [thinking: state.current_thinking]
+      else
+        []
+      end
+
+    assistant_msg = Opal.Message.assistant(state.current_text, tool_calls, thinking_opt)
     state = append_message(state, assistant_msg)
 
     # A successful response resets the retry counter — consecutive failures
@@ -814,7 +872,24 @@ defmodule Opal.Agent do
   end
 
   # Cancels an in-progress streaming response if present.
-  defp cancel_streaming(%State{streaming_resp: nil} = state), do: state
+  defp cancel_streaming(%State{streaming_resp: nil, streaming_ref: nil} = state), do: state
+
+  defp cancel_streaming(%State{streaming_ref: ref, streaming_cancel: cancel_fn} = state)
+       when ref != nil do
+    cancel_watchdog(state)
+    if is_function(cancel_fn, 0), do: cancel_fn.()
+
+    %{
+      state
+      | streaming_ref: nil,
+        streaming_cancel: nil,
+        current_text: "",
+        current_tool_calls: [],
+        current_thinking: nil,
+        stream_watchdog: nil,
+        last_chunk_at: nil
+    }
+  end
 
   defp cancel_streaming(%State{streaming_resp: resp} = state) do
     cancel_watchdog(state)
@@ -825,6 +900,7 @@ defmodule Opal.Agent do
       | streaming_resp: nil,
         current_text: "",
         current_tool_calls: [],
+        current_thinking: nil,
         stream_watchdog: nil,
         last_chunk_at: nil
     }

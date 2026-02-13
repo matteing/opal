@@ -22,8 +22,6 @@ defmodule Opal.Session.BranchSummary do
   enough signal to justify the overhead.
   """
 
-  require Logger
-
   @min_messages 3
 
   @doc """

@@ -492,6 +492,7 @@ defmodule Opal.Session do
 
     map = if msg.call_id, do: Map.put(map, :call_id, msg.call_id), else: map
     map = if msg.name, do: Map.put(map, :name, msg.name), else: map
+    map = if msg.thinking, do: Map.put(map, :thinking, msg.thinking), else: map
     # Persist structured metadata (compaction summaries, file-op tracking, etc.)
     map = if msg.metadata, do: Map.put(map, :metadata, msg.metadata), else: map
 
@@ -523,6 +524,7 @@ defmodule Opal.Session do
       parent_id: data["parent_id"],
       role: String.to_existing_atom(data["role"]),
       content: data["content"],
+      thinking: data["thinking"],
       tool_calls: tool_calls,
       call_id: data["call_id"],
       name: data["name"],

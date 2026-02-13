@@ -47,7 +47,8 @@ export type TimelineEntry =
   | { kind: "message"; message: Message }
   | { kind: "tool"; task: Task }
   | { kind: "skill"; skill: Skill }
-  | { kind: "context"; context: Context };
+  | { kind: "context"; context: Context }
+  | { kind: "thinking"; text: string };
 
 /** Shared view shape used by both main agent and sub-agents. */
 export interface AgentView {
@@ -113,6 +114,8 @@ export interface OpalState {
   workingDir: string;
   nodeName: string;
   lastDeltaAt: number;
+  /** Server stderr lines captured during startup for diagnostics. */
+  serverLogs: string[];
 }
 
 export interface OpalActions {
@@ -157,6 +160,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     workingDir: opts.workingDir ?? process.cwd(),
     nodeName: "",
     lastDeltaAt: 0,
+    serverLogs: [],
   });
 
   const sessionRef = useRef<Session | null>(null);
@@ -171,6 +175,20 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     Session.start({
       session: true,
       ...opts,
+      onStderr: (data: string) => {
+        if (!mounted) return;
+        // Capture server logs during startup for diagnostics display
+        const lines = data
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0);
+        if (lines.length > 0) {
+          setState((s) => ({
+            ...s,
+            serverLogs: [...s.serverLogs, ...lines].slice(-20),
+          }));
+        }
+      },
       onConfirm: async (req) => {
         if (!mounted) return "deny";
         return new Promise<string>((resolve) => {
@@ -265,9 +283,13 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     const batch = pendingEventsRef.current;
     if (batch.length === 0) return;
     pendingEventsRef.current = [];
+
+    // Pre-combine consecutive delta events to reduce allocations
+    const combined = combineDeltas(batch);
+
     setState((s) => {
       let next: OpalState = { ...s, main: { ...s.main, timeline: [...s.main.timeline] } };
-      for (const event of batch) {
+      for (const event of combined) {
         next = applyEvent(next, event);
       }
       return next;
@@ -643,13 +665,8 @@ function applyAgentEvent(view: AgentView, event: Record<string, unknown>): Agent
 
     case "messageStart":
     case "message_start":
-      return {
-        ...view,
-        timeline: [
-          ...view.timeline,
-          { kind: "message", message: { role: "assistant", content: "" } },
-        ],
-      };
+      view.timeline.push({ kind: "message", message: { role: "assistant", content: "" } });
+      return { ...view };
 
     case "messageDelta":
     case "message_delta":
@@ -660,48 +677,53 @@ function applyAgentEvent(view: AgentView, event: Record<string, unknown>): Agent
 
     case "thinkingStart":
     case "thinking_start":
+      view.timeline.push({ kind: "thinking", text: "" });
       return { ...view, thinking: "" };
 
     case "thinkingDelta":
-    case "thinking_delta":
-      return { ...view, thinking: (view.thinking ?? "") + ((event.delta as string) ?? "") };
+    case "thinking_delta": {
+      const delta = (event.delta as string) ?? "";
+      return {
+        ...view,
+        thinking: (view.thinking ?? "") + delta,
+        timeline: appendThinkingDelta(view.timeline, delta),
+      };
+    }
 
     case "toolExecutionStart":
     case "tool_execution_start":
-      return {
-        ...view,
-        timeline: [
-          ...view.timeline,
-          {
-            kind: "tool",
-            task: {
-              tool: (event.tool as string) ?? "",
-              callId: ((event.callId ?? event.call_id) as string) ?? "",
-              args: (event.args as Record<string, unknown>) ?? {},
-              meta: (event.meta as string) ?? "",
-              status: "running",
-            },
-          },
-        ],
-      };
+      view.timeline.push({
+        kind: "tool",
+        task: {
+          tool: (event.tool as string) ?? "",
+          callId: ((event.callId ?? event.call_id) as string) ?? "",
+          args: (event.args as Record<string, unknown>) ?? {},
+          meta: (event.meta as string) ?? "",
+          status: "running",
+        },
+      });
+      return { ...view };
 
     case "toolExecutionEnd":
     case "tool_execution_end": {
       const callId = ((event.callId ?? event.call_id) as string) ?? "";
       const result = event.result as { ok: boolean; output?: string; error?: string };
-      const timeline = view.timeline.map((entry) =>
-        entry.kind === "tool" && entry.task.callId === callId
-          ? {
-              ...entry,
-              task: {
-                ...entry.task,
-                status: (result.ok ? "done" : "error") as Task["status"],
-                result,
-              },
-            }
-          : entry,
+      // Mutate in place — timeline was already copied at batch start
+      const idx = view.timeline.findIndex(
+        (e) => e.kind === "tool" && e.task.callId === callId,
       );
-      return { ...view, timeline };
+      if (idx >= 0) {
+        const entry = view.timeline[idx] as { kind: "tool"; task: Task };
+        view.timeline[idx] = {
+          kind: "tool",
+          task: {
+            ...entry.task,
+            status: (result.ok ? "done" : "error") as Task["status"],
+            result,
+          },
+        };
+      }
+      return { ...view, timeline: view.timeline };
     }
 
     case "statusUpdate":
@@ -817,34 +839,18 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
       return { ...state, main: { ...state.main, isRunning: false }, error: event.reason };
 
     case "skillLoaded":
-      return {
-        ...state,
-        main: {
-          ...state.main,
-          timeline: [
-            ...state.main.timeline,
-            {
-              kind: "skill",
-              skill: { name: event.name, description: event.description, status: "loaded" },
-            },
-          ],
-        },
-      };
+      state.main.timeline.push({
+        kind: "skill",
+        skill: { name: event.name, description: event.description, status: "loaded" },
+      });
+      return { ...state, main: { ...state.main } };
 
     case "contextDiscovered":
-      return {
-        ...state,
-        main: {
-          ...state.main,
-          timeline: [
-            ...state.main.timeline,
-            {
-              kind: "context",
-              context: { files: event.files, skills: [], mcpServers: [], status: "discovered" },
-            },
-          ],
-        },
-      };
+      state.main.timeline.push({
+        kind: "context",
+        context: { files: event.files, skills: [], mcpServers: [], status: "discovered" },
+      });
+      return { ...state, main: { ...state.main } };
 
     case "usageUpdate":
       return {
@@ -866,20 +872,46 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
 }
 
 function appendMessageDelta(timeline: TimelineEntry[], delta: string): TimelineEntry[] {
-  if (timeline.length > 0) {
-    const last = timeline[timeline.length - 1];
-    if (last.kind === "message" && last.message.role === "assistant") {
-      // Mutate the last entry in place — safe because applyEvent already
-      // created a new state object and this timeline is the working copy
-      // within the batch reducer.
-      const updated = {
-        kind: "message" as const,
-        message: { ...last.message, content: last.message.content + delta },
-      };
-      timeline[timeline.length - 1] = updated;
-      return timeline;
-    }
+  const last = timeline[timeline.length - 1];
+  if (last?.kind === "message" && last.message.role === "assistant") {
+    // Replace with a new entry object so React detects the change via memo
+    timeline[timeline.length - 1] = {
+      kind: "message",
+      message: { role: "assistant", content: last.message.content + delta },
+    };
+    return timeline;
   }
   timeline.push({ kind: "message", message: { role: "assistant", content: delta } });
   return timeline;
+}
+
+function appendThinkingDelta(timeline: TimelineEntry[], delta: string): TimelineEntry[] {
+  const last = timeline[timeline.length - 1];
+  if (last?.kind === "thinking") {
+    timeline[timeline.length - 1] = { kind: "thinking", text: last.text + delta };
+    return timeline;
+  }
+  timeline.push({ kind: "thinking", text: delta });
+  return timeline;
+}
+
+/**
+ * Merge consecutive messageDelta / thinkingDelta events into single events
+ * so the reducer creates only one intermediate object per batch instead of N.
+ */
+function combineDeltas(events: AgentEvent[]): AgentEvent[] {
+  const out: AgentEvent[] = [];
+  for (const ev of events) {
+    if (ev.type === "messageDelta" || ev.type === "thinkingDelta") {
+      const prev = out[out.length - 1];
+      if (prev && prev.type === ev.type) {
+        // Safe cast — both types carry a `delta` string
+        (prev as { delta?: string }).delta =
+          ((prev as { delta?: string }).delta ?? "") + ((ev as { delta?: string }).delta ?? "");
+        continue;
+      }
+    }
+    out.push(ev);
+  }
+  return out;
 }

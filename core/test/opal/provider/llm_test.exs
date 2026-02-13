@@ -34,120 +34,14 @@ defmodule Opal.Provider.LLMTest do
   end
 
   # ============================================================
-  # parse_stream_event/1 — Opal bridge format
+  # parse_stream_event/1 — stub (EventStream bypasses SSE parsing)
   # ============================================================
 
-  describe "parse_stream_event/1 — text events" do
-    test "text_start event" do
-      data = Jason.encode!(%{"_opal" => "text_start", "info" => %{}})
-      assert [{:text_start, %{}}] = LLM.parse_stream_event(data)
-    end
-
-    test "text_delta event" do
-      data = Jason.encode!(%{"_opal" => "text_delta", "text" => "Hello, world!"})
-      assert [{:text_delta, "Hello, world!"}] = LLM.parse_stream_event(data)
-    end
-
-    test "text_delta with empty string" do
-      data = Jason.encode!(%{"_opal" => "text_delta", "text" => ""})
-      assert [{:text_delta, ""}] = LLM.parse_stream_event(data)
-    end
-  end
-
-  describe "parse_stream_event/1 — thinking events" do
-    test "thinking_start event" do
-      data = Jason.encode!(%{"_opal" => "thinking_start", "info" => %{}})
-      assert [{:thinking_start, %{}}] = LLM.parse_stream_event(data)
-    end
-
-    test "thinking_delta event" do
-      data = Jason.encode!(%{"_opal" => "thinking_delta", "text" => "Let me think..."})
-      assert [{:thinking_delta, "Let me think..."}] = LLM.parse_stream_event(data)
-    end
-  end
-
-  describe "parse_stream_event/1 — tool call events" do
-    test "tool_call_start event" do
-      data =
-        Jason.encode!(%{
-          "_opal" => "tool_call_start",
-          "call_id" => "call_123",
-          "name" => "read_file"
-        })
-
-      assert [{:tool_call_start, %{call_id: "call_123", name: "read_file"}}] =
-               LLM.parse_stream_event(data)
-    end
-
-    test "tool_call_delta event" do
-      data = Jason.encode!(%{"_opal" => "tool_call_delta", "text" => "{\"path\":"})
-      assert [{:tool_call_delta, "{\"path\":"}] = LLM.parse_stream_event(data)
-    end
-
-    test "tool_call_done event with parsed arguments" do
-      data =
-        Jason.encode!(%{
-          "_opal" => "tool_call_done",
-          "call_id" => "call_456",
-          "name" => "write_file",
-          "arguments" => %{"path" => "/tmp/out.txt", "content" => "hello"}
-        })
-
-      assert [{:tool_call_done, result}] = LLM.parse_stream_event(data)
-      assert result.call_id == "call_456"
-      assert result.name == "write_file"
-      assert result.arguments == %{"path" => "/tmp/out.txt", "content" => "hello"}
-    end
-  end
-
-  describe "parse_stream_event/1 — response events" do
-    test "response_done with stop reason" do
-      data = Jason.encode!(%{"_opal" => "response_done", "stop_reason" => "stop", "usage" => %{}})
-      assert [{:response_done, result}] = LLM.parse_stream_event(data)
-      assert result.stop_reason == :stop
-    end
-
-    test "response_done with tool_calls stop reason" do
-      data =
-        Jason.encode!(%{
-          "_opal" => "response_done",
-          "stop_reason" => "tool_calls",
-          "usage" => %{}
-        })
-
-      assert [{:response_done, result}] = LLM.parse_stream_event(data)
-      assert result.stop_reason == :tool_calls
-    end
-
-    test "usage event" do
-      data =
-        Jason.encode!(%{
-          "_opal" => "usage",
-          "usage" => %{"prompt_tokens" => 100, "completion_tokens" => 50}
-        })
-
-      assert [{:usage, usage}] = LLM.parse_stream_event(data)
-      assert usage["prompt_tokens"] == 100
-    end
-  end
-
-  describe "parse_stream_event/1 — error handling" do
-    test "error event" do
-      data = Jason.encode!(%{"_opal" => "error", "reason" => "Rate limited"})
-      assert [{:error, "Rate limited"}] = LLM.parse_stream_event(data)
-    end
-
-    test "malformed JSON returns empty list" do
-      assert [] = LLM.parse_stream_event("not json at all{{{")
-    end
-
-    test "empty string returns empty list" do
+  describe "parse_stream_event/1 — stub" do
+    test "returns empty list (EventStream providers skip SSE parsing)" do
+      assert [] = LLM.parse_stream_event("any data")
       assert [] = LLM.parse_stream_event("")
-    end
-
-    test "non-opal JSON returns empty list" do
-      data = Jason.encode!(%{"choices" => []})
-      assert [] = LLM.parse_stream_event(data)
+      assert [] = LLM.parse_stream_event(Jason.encode!(%{"text" => "hello"}))
     end
   end
 

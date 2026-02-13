@@ -22,8 +22,6 @@ defmodule Opal do
       {:ok, response} = Opal.prompt_sync(agent, "What is 2 + 2?")
   """
 
-  require Logger
-
   @doc """
   Starts a new agent session with the given configuration.
 

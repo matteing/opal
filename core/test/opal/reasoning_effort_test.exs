@@ -33,7 +33,7 @@ defmodule Opal.ReasoningEffortTest do
     end
 
     test "rejects invalid levels" do
-      for invalid <- [:xhigh, :extreme, :max, :auto, :none] do
+      for invalid <- [:xhigh, :extreme, :auto, :none] do
         assert_raise ArgumentError, ~r/invalid thinking_level/, fn ->
           Model.new(:copilot, "test", thinking_level: invalid)
         end
@@ -196,12 +196,12 @@ defmodule Opal.ReasoningEffortTest do
   # ============================================================
 
   describe "LLM provider reasoning effort" do
-    test "thinking events are parsed from bridge format" do
+    test "thinking events bypass SSE parsing (EventStream sends tuples directly)" do
+      # LLM provider now uses EventStream — parse_stream_event is a stub.
+      # Thinking events are sent as native tuples via {ref, {:events, [...]}}
+      # and never go through JSON encoding. Verify the stub returns [].
       data = Jason.encode!(%{"_opal" => "thinking_start", "info" => %{}})
-      assert [{:thinking_start, %{}}] = LLM.parse_stream_event(data)
-
-      data = Jason.encode!(%{"_opal" => "thinking_delta", "text" => "Reasoning..."})
-      assert [{:thinking_delta, "Reasoning..."}] = LLM.parse_stream_event(data)
+      assert [] = LLM.parse_stream_event(data)
     end
 
     # The maybe_add_thinking/2 function is private, but we can verify
@@ -241,7 +241,8 @@ defmodule Opal.ReasoningEffortTest do
       claude = Enum.find(models, &(&1.id == "claude-opus-4.6"))
       assert claude != nil
       assert claude.supports_thinking == true
-      assert claude.thinking_levels == ["low", "medium", "high"]
+      # Opus 4.6+ supports adaptive thinking with "max" effort
+      assert claude.thinking_levels == ["low", "medium", "high", "max"]
     end
 
     test "non-reasoning models have empty thinking_levels" do
@@ -267,7 +268,8 @@ defmodule Opal.ReasoningEffortTest do
 
       claude = Enum.find(models, &(&1.id == "claude-opus-4-6"))
       assert claude.supports_thinking == true
-      assert claude.thinking_levels == ["low", "medium", "high"]
+      # Opus 4.6+ supports adaptive thinking with "max" effort
+      assert claude.thinking_levels == ["low", "medium", "high", "max"]
     end
   end
 

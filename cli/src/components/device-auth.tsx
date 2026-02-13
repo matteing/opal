@@ -2,6 +2,7 @@ import React, { useState, type FC } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import type { AuthFlow, AuthProvider, OpalActions } from "../hooks/use-opal.js";
+import { openUrl, copyToClipboard } from "../open-url.js";
 
 export interface SetupWizardProps {
   flow: AuthFlow;
@@ -12,28 +13,7 @@ export interface SetupWizardProps {
 export const SetupWizard: FC<SetupWizardProps> = ({ flow, actions, error }) => {
   // Device-code flow is active — show code and wait
   if (flow.deviceCode) {
-    return (
-      <Box flexDirection="column" padding={1} gap={1}>
-        <Text bold color="yellow">
-          ✦ GitHub Copilot — Sign In
-        </Text>
-        <Box flexDirection="column" marginLeft={2}>
-          <Text>
-            Open:{" "}
-            <Text bold color="cyan">
-              {flow.deviceCode.verificationUri}
-            </Text>
-          </Text>
-          <Text>
-            Code:{" "}
-            <Text bold color="green">
-              {flow.deviceCode.userCode}
-            </Text>
-          </Text>
-        </Box>
-        <Text dimColor>Waiting for authorization…</Text>
-      </Box>
-    );
+    return <DeviceCodeScreen flow={flow} />;
   }
 
   // API key input is active
@@ -43,6 +23,46 @@ export const SetupWizard: FC<SetupWizardProps> = ({ flow, actions, error }) => {
 
   // Default: show provider picker
   return <ProviderPicker providers={flow.providers} actions={actions} error={error} />;
+};
+
+// --- Device code screen ---
+
+const DeviceCodeScreen: FC<{ flow: AuthFlow }> = ({ flow }) => {
+  const [opened, setOpened] = useState(false);
+
+  useInput((_input, key) => {
+    if (key.return && !opened && flow.deviceCode) {
+      const copied = copyToClipboard(flow.deviceCode.userCode);
+      openUrl(flow.deviceCode.verificationUri);
+      setOpened(true);
+      if (!copied) {
+        // Clipboard failed — user will need to copy manually
+        process.stderr.write("Could not copy to clipboard.\n");
+      }
+    }
+  });
+
+  return (
+    <Box flexDirection="column" padding={1} gap={1}>
+      <Text bold color="yellow">
+        ✦ GitHub Copilot — Sign In
+      </Text>
+      <Box flexDirection="column" marginLeft={2}>
+        <Text>
+          Code:{" "}
+          <Text bold color="green">
+            {flow.deviceCode?.userCode}
+          </Text>
+          {opened && <Text dimColor> (copied)</Text>}
+        </Text>
+      </Box>
+      {opened ? (
+        <Text dimColor>Browser opened — paste the code and authorize…</Text>
+      ) : (
+        <Text dimColor>Press Enter to copy code and open browser</Text>
+      )}
+    </Box>
+  );
 };
 
 // --- Provider picker ---

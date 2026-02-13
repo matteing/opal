@@ -426,7 +426,7 @@ defmodule Opal.RPC.Handler do
     }
   end
 
-  @valid_thinking_levels ~w(off low medium high)
+  @valid_thinking_levels ~w(off low medium high max)
   defp parse_thinking_level(nil), do: :off
   defp parse_thinking_level(level) when level in @valid_thinking_levels, do: String.to_atom(level)
   defp parse_thinking_level(_), do: :off

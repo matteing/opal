@@ -99,12 +99,21 @@ defmodule Opal.Agent.Stream do
 
   def handle_stream_event({:thinking_start, _info}, state) do
     broadcast(state, {:thinking_start})
-    state
+    %{state | current_thinking: ""}
   end
 
   def handle_stream_event({:thinking_delta, delta}, state) do
+    # Auto-emit thinking_start if the provider didn't (e.g. Chat Completions)
+    state =
+      if is_nil(state.current_thinking) do
+        broadcast(state, {:thinking_start})
+        %{state | current_thinking: ""}
+      else
+        state
+      end
+
     broadcast(state, {:thinking_delta, %{delta: delta}})
-    state
+    %{state | current_thinking: state.current_thinking <> delta}
   end
 
   def handle_stream_event({:tool_call_start, info}, state) do

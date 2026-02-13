@@ -79,15 +79,9 @@ export const MessageList: FC<MessageListProps> = ({
               }
               let isStreaming = false;
               if (view.isRunning && entry.message.role === "assistant") {
-                let isLast = true;
-                for (let j = i + 1; j < view.timeline.length; j++) {
-                  const next = view.timeline[j];
-                  if (next && next.kind === "message" && next.message.role === "assistant") {
-                    isLast = false;
-                    break;
-                  }
-                }
-                isStreaming = isLast;
+                // Only mark as streaming if this is the very last timeline entry
+                // (no tool/message entries after it — still actively receiving deltas)
+                isStreaming = i === view.timeline.length - 1;
               }
               return (
                 <MessageBlock
@@ -129,6 +123,9 @@ export const MessageList: FC<MessageListProps> = ({
                 </Box>
               );
             }
+            if (entry.kind === "thinking" && showToolOutput) {
+              return <ThinkingBlock key={`thinking-${i}`} text={entry.text} width={width} />;
+            }
             if (entry.kind === "context") {
               return <ContextLines key={i} context={entry.context} />;
             }
@@ -146,7 +143,7 @@ const MessageBlock: FC<{
   showBadge?: boolean;
   isStreaming?: boolean;
 }> = memo(
-  ({ message, width, showBadge = true, isStreaming = false }) => {
+  ({ message, width, showBadge = true, isStreaming: _isStreaming = false }) => {
     const isUser = message.role === "user";
     const badge = isUser ? "❯ You" : "✦ opal";
     const color = isUser ? "cyan" : "magenta";
@@ -159,12 +156,7 @@ const MessageBlock: FC<{
     } else {
       const contentWidth = Math.min(width - 4, 120);
       const cached = cacheRef.current;
-      // Re-parse if: content differs significantly (>80 chars since last parse) or is shorter (edit/new msg)
-      const delta = message.content.length - cached.content.length;
       if (cached.content === message.content) {
-        rendered = cached.rendered;
-      } else if (isStreaming && delta > 0 && delta < 80) {
-        // During streaming with small delta, return cached version (skip expensive re-parse)
         rendered = cached.rendered;
       } else {
         rendered = renderMarkdown(message.content || "", contentWidth);
@@ -186,9 +178,9 @@ const MessageBlock: FC<{
     );
   },
   (prev, next) => {
-    // Custom comparison: skip re-render if content/width/badge haven't changed
     return (
-      prev.message === next.message &&
+      prev.message.content === next.message.content &&
+      prev.message.role === next.message.role &&
       prev.width === next.width &&
       prev.showBadge === next.showBadge &&
       prev.isStreaming === next.isStreaming
@@ -258,6 +250,19 @@ function truncateOutput(output: string, maxLines: number, maxWidth: number): str
   const lines = output.split(/\r?\n/).slice(-maxLines);
   return lines.map((l) => l.slice(0, maxWidth)).join("\n");
 }
+
+const ThinkingBlock: FC<{ text: string; width: number }> = ({ text, width }) => {
+  if (!text) return null;
+  const maxWidth = Math.min(width - 6, 120);
+  const truncated = truncateOutput(text, 8, maxWidth);
+  return (
+    <Box flexDirection="column" marginBottom={1} marginLeft={2}>
+      <Text dimColor italic color="gray">
+        💭 {truncated}
+      </Text>
+    </Box>
+  );
+};
 
 const ContextLines: FC<{ context: Context }> = ({ context }) => {
   const items: string[] = [];

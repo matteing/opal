@@ -109,17 +109,30 @@ defmodule Opal.Models do
   # Supported thinking levels per model family.
   # OpenAI: low/medium/high per their reasoning docs.
   # Anthropic: low/medium/high mapped to budget_tokens by ReqLLM.
-  # Gemini/Grok: low/medium/high.
+  # Anthropic Opus 4.6+: low/medium/high/max via adaptive thinking.
   @standard_thinking_levels ["low", "medium", "high"]
+  @max_thinking_levels ["low", "medium", "high", "max"]
+
+  # Opus 4.6+ supports adaptive thinking with "max" effort level
+  defp supports_max_thinking?(id) do
+    String.contains?(id, "opus-4.6") or String.contains?(id, "opus-4-6")
+  end
 
   defp to_model_info(m) do
     supports_thinking = get_in(m.capabilities, [:reasoning, :enabled]) == true
+
+    thinking_levels =
+      cond do
+        not supports_thinking -> []
+        supports_max_thinking?(m.id) -> @max_thinking_levels
+        true -> @standard_thinking_levels
+      end
 
     %{
       id: m.id,
       name: m.name,
       supports_thinking: supports_thinking,
-      thinking_levels: if(supports_thinking, do: @standard_thinking_levels, else: [])
+      thinking_levels: thinking_levels
     }
   end
 end

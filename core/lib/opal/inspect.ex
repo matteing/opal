@@ -5,8 +5,6 @@ defmodule Opal.Inspect do
   Call `Opal.Inspect.watch()` to stream all agent events to the console.
   """
 
-  require Logger
-
   @doc """
   Subscribe to all session events and print them to the console.
 

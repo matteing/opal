@@ -132,8 +132,17 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
 
   if (!state.sessionReady) {
     return (
-      <Box padding={1} minHeight={rows}>
+      <Box flexDirection="column" padding={1} minHeight={rows}>
         <ShimmerText>Starting opal-server…</ShimmerText>
+        {state.serverLogs.length > 0 && (
+          <Box flexDirection="column" marginTop={1}>
+            {state.serverLogs.slice(-8).map((line, i) => (
+              <Text key={i} dimColor>
+                {line}
+              </Text>
+            ))}
+          </Box>
+        )}
       </Box>
     );
   }
