@@ -28,7 +28,10 @@
   "release": {
     "projects": ["cli"],
     "version": {
-      "conventionalCommits": true
+      "conventionalCommits": true,
+      "generatorOptions": {
+        "postVersionCommand": "node scripts/sync-elixir-version.mjs {version}"
+      }
     },
     "releaseTag": {
       "pattern": "v{version}"

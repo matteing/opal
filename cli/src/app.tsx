@@ -9,6 +9,7 @@ import { ConfirmDialog } from "./components/confirm-dialog.js";
 import { AskUserDialog } from "./components/ask-user-dialog.js";
 import { ModelPicker } from "./components/model-picker.js";
 import { ShimmerText } from "./components/shimmer-text.js";
+import { SetupWizard } from "./components/device-auth.js";
 import { openPlanInEditor } from "./open-editor.js";
 import type { SessionOptions } from "./sdk/session.js";
 
@@ -117,6 +118,14 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
         <Text color="red" bold>
           Error: {state.error}
         </Text>
+      </Box>
+    );
+  }
+
+  if (state.authFlow) {
+    return (
+      <Box flexDirection="column" minHeight={rows}>
+        <SetupWizard flow={state.authFlow} actions={actions} error={state.error} />
       </Box>
     );
   }

@@ -43,7 +43,8 @@ defmodule Opal.RPC.Handler do
            context_files: info.context_files,
            available_skills: Enum.map(info.available_skills, & &1.name),
            mcp_servers: Enum.map(info.mcp_servers, & &1.name),
-           node_name: Atom.to_string(Node.self())
+           node_name: Atom.to_string(Node.self()),
+           auth: Opal.Auth.probe()
          }}
 
       {:error, reason} ->
@@ -233,13 +234,8 @@ defmodule Opal.RPC.Handler do
   end
 
   def handle("auth/status", _params) do
-    case Opal.Auth.Copilot.get_token() do
-      {:ok, _token_data} ->
-        {:ok, %{authenticated: true}}
-
-      {:error, _} ->
-        {:ok, %{authenticated: false}}
-    end
+    result = Opal.Auth.probe()
+    {:ok, %{authenticated: result.status == "ready", auth: result}}
   end
 
   def handle("auth/login", _params) do
@@ -256,6 +252,54 @@ defmodule Opal.RPC.Handler do
       {:error, reason} ->
         {:error, Opal.RPC.internal_error(), "Login flow failed", inspect(reason)}
     end
+  end
+
+  def handle("auth/poll", %{"device_code" => device_code, "interval" => interval}) do
+    domain = Opal.Config.new().copilot.domain
+
+    case Opal.Auth.Copilot.poll_for_token(domain, device_code, interval * 1_000) do
+      {:ok, github_token} ->
+        case Opal.Auth.Copilot.exchange_copilot_token(github_token) do
+          {:ok, copilot_response} ->
+            token_data = %{
+              "github_token" => github_token,
+              "copilot_token" => copilot_response["token"],
+              "expires_at" => copilot_response["expires_at"],
+              "base_url" => Opal.Auth.Copilot.base_url(copilot_response)
+            }
+
+            Opal.Auth.Copilot.save_token(token_data)
+            {:ok, %{authenticated: true}}
+
+          {:error, reason} ->
+            {:error, Opal.RPC.internal_error(), "Token exchange failed", inspect(reason)}
+        end
+
+      {:error, reason} ->
+        {:error, Opal.RPC.internal_error(), "Polling failed", inspect(reason)}
+    end
+  end
+
+  def handle("auth/poll", _params) do
+    {:error, Opal.RPC.invalid_params(), "Missing required params: device_code, interval", nil}
+  end
+
+  def handle("auth/set_key", %{"provider" => provider, "api_key" => api_key})
+      when is_binary(provider) and is_binary(api_key) and api_key != "" do
+    # Derive the env var name (e.g. "anthropic" → "ANTHROPIC_API_KEY")
+    env_var = "#{String.upcase(provider)}_API_KEY"
+
+    # Save to persistent settings so it survives restarts
+    Opal.Settings.save(%{"#{provider}_api_key" => api_key})
+
+    # Set in process env so ReqLLM picks it up immediately
+    System.put_env(env_var, api_key)
+
+    {:ok, %{ok: true}}
+  end
+
+  def handle("auth/set_key", _params) do
+    {:error, Opal.RPC.invalid_params(), "Missing required params: provider, api_key", nil}
   end
 
   def handle("tasks/list", %{"session_id" => sid}) do

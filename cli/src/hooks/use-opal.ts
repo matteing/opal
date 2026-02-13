@@ -67,6 +67,22 @@ export interface SubAgent extends AgentView {
   toolCount: number;
 }
 
+export interface AuthProvider {
+  id: string;
+  name: string;
+  method: "device_code" | "api_key";
+  envVar?: string;
+  ready: boolean;
+}
+
+export interface AuthFlow {
+  providers: AuthProvider[];
+  // Active device-code flow (set after user picks Copilot)
+  deviceCode?: { userCode: string; verificationUri: string };
+  // Active API key input (set after user picks a key-based provider)
+  apiKeyInput?: { providerId: string; providerName: string };
+}
+
 export interface OpalState {
   // Main agent view
   main: AgentView;
@@ -93,6 +109,7 @@ export interface OpalState {
   sessionDir: string;
   availableSkills: string[];
   error: string | null;
+  authFlow: AuthFlow | null;
   workingDir: string;
   nodeName: string;
   lastDeltaAt: number;
@@ -109,6 +126,8 @@ export interface OpalActions {
   selectModel: (modelId: string, thinkingLevel?: string) => void;
   dismissModelPicker: () => void;
   switchTab: (tabId: string) => void;
+  authStartDeviceFlow: () => void;
+  authSubmitKey: (providerId: string, apiKey: string) => void;
 }
 
 // --- Hook ---
@@ -134,6 +153,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     sessionDir: "",
     availableSkills: [],
     error: null,
+    authFlow: null,
     workingDir: opts.workingDir ?? process.cwd(),
     nodeName: "",
     lastDeltaAt: 0,
@@ -176,42 +196,16 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
         }
         sessionRef.current = session;
 
-        // Inject context discovery into timeline from session start response
-        const initialTimeline: TimelineEntry[] = [];
-        if (
-          session.contextFiles.length > 0 ||
-          session.availableSkills.length > 0 ||
-          session.mcpServers.length > 0
-        ) {
-          initialTimeline.push({
-            kind: "context",
-            context: {
-              files: session.contextFiles,
-              skills: session.availableSkills,
-              mcpServers: session.mcpServers,
-              status: "discovered",
-            },
-          });
+        // Server-driven auth: check probe result from session/start
+        if (session.auth.status === "setup_required") {
+          const providers = (session.auth.providers as unknown as AuthProvider[]).filter(
+            (p) => !p.ready,
+          );
+          setState((s) => ({ ...s, authFlow: { providers } }));
+          return;
         }
 
-        setState((s) => ({
-          ...s,
-          sessionReady: true,
-          sessionDir: session.sessionDir,
-          nodeName: session.nodeName,
-          availableSkills: session.availableSkills,
-          main: { ...s.main, timeline: [...s.main.timeline, ...initialTimeline] },
-        }));
-        session
-          .getState()
-          .then((res) => {
-            const displaySpec =
-              res.model.provider !== "copilot"
-                ? `${res.model.provider}:${res.model.id}`
-                : res.model.id;
-            setState((s) => ({ ...s, currentModel: displaySpec }));
-          })
-          .catch(() => {});
+        markSessionReady(session);
       })
       .catch((err) => {
         if (mounted) {
@@ -227,6 +221,44 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       sessionRef.current?.close();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Shared helper to transition from auth → ready
+  const markSessionReady = useCallback((session: Session) => {
+    const initialTimeline: TimelineEntry[] = [];
+    if (
+      session.contextFiles.length > 0 ||
+      session.availableSkills.length > 0 ||
+      session.mcpServers.length > 0
+    ) {
+      initialTimeline.push({
+        kind: "context",
+        context: {
+          files: session.contextFiles,
+          skills: session.availableSkills,
+          mcpServers: session.mcpServers,
+          status: "discovered",
+        },
+      });
+    }
+
+    setState((s) => ({
+      ...s,
+      sessionReady: true,
+      authFlow: null,
+      sessionDir: session.sessionDir,
+      nodeName: session.nodeName,
+      availableSkills: session.availableSkills,
+      main: { ...s.main, timeline: [...s.main.timeline, ...initialTimeline] },
+    }));
+    session
+      .getState()
+      .then((res) => {
+        const displaySpec =
+          res.model.provider !== "copilot" ? `${res.model.provider}:${res.model.id}` : res.model.id;
+        setState((s) => ({ ...s, currentModel: displaySpec }));
+      })
+      .catch(() => {});
+  }, []);
 
   const flushEvents = useCallback(() => {
     flushTimerRef.current = null;
@@ -507,6 +539,71 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     setState((s) => ({ ...s, activeTab: tabId }));
   }, []);
 
+  const authStartDeviceFlow = useCallback(() => {
+    const session = sessionRef.current;
+    if (!session) return;
+    session
+      .authLogin()
+      .then((flow) => {
+        setState((s) => ({
+          ...s,
+          authFlow: s.authFlow
+            ? {
+                ...s.authFlow,
+                deviceCode: {
+                  userCode: flow.userCode,
+                  verificationUri: flow.verificationUri,
+                },
+              }
+            : null,
+        }));
+        // Poll blocks server-side until user authorizes
+        return session.authPoll(flow.deviceCode, flow.interval);
+      })
+      .then(() => {
+        markSessionReady(session);
+      })
+      .catch((e: unknown) => {
+        setState((s) => ({ ...s, error: errorMessage(e) }));
+      });
+  }, [markSessionReady]);
+
+  const authSubmitKey = useCallback(
+    (providerId: string, apiKey: string) => {
+      const session = sessionRef.current;
+      if (!session) return;
+
+      // Empty key = show the input screen for this provider
+      if (!apiKey) {
+        const provider = state.authFlow?.providers.find((p) => p.id === providerId);
+        setState((s) => ({
+          ...s,
+          error: null,
+          authFlow: s.authFlow
+            ? {
+                ...s.authFlow,
+                apiKeyInput: {
+                  providerId,
+                  providerName: provider?.name ?? providerId,
+                },
+              }
+            : null,
+        }));
+        return;
+      }
+
+      session
+        .authSetKey(providerId, apiKey)
+        .then(() => {
+          markSessionReady(session);
+        })
+        .catch((e: unknown) => {
+          setState((s) => ({ ...s, error: errorMessage(e) }));
+        });
+    },
+    [markSessionReady, state.authFlow],
+  );
+
   return [
     state,
     {
@@ -520,6 +617,8 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       selectModel,
       dismissModelPicker,
       switchTab,
+      authStartDeviceFlow,
+      authSubmitKey,
     },
   ];
 }

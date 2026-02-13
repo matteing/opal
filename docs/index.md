@@ -61,7 +61,8 @@ graph LR
 | **Supervision** | Per-session process trees, fault isolation, message passing | [supervision.md](supervision.md) |
 | **Tools** | Built-in tool implementations (read, edit, write, shell, sub-agent) | [tools.md](tools.md) |
 | **RPC** | JSON-RPC 2.0 protocol over stdio between CLI and server | [rpc.md](rpc.md) |
-| **Providers** | LLM integration (auth, streaming, SSE parsing) | [providers.md](providers.md) |
+| **Providers** | LLM integration (streaming, SSE parsing, model discovery) | [providers.md](providers.md) |
+| **Authentication** | Server-driven credential detection and setup wizard | [auth.md](auth.md) |
 | **MCP** | Model Context Protocol bridge for external tool servers | [mcp.md](mcp.md) |
 | **Testing** | Fixture-based provider mocking, SSE simulation, no Mox | [testing.md](testing.md) |
 | **CLI** | Terminal UI, components, state management, slash commands | [cli.md](cli.md) |

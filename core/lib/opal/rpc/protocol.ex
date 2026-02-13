@@ -160,6 +160,18 @@ defmodule Opal.RPC.Protocol do
           name: "node_name",
           type: :string,
           description: "Erlang node name of the server (for debugging)."
+        },
+        %{
+          name: "auth",
+          type:
+            {:object,
+             %{
+               "status" => :string,
+               "provider" => :string,
+               "providers" => {:array, :object}
+             }},
+          description:
+            "Auth probe result: status is 'ready' or 'setup_required', provider is auto-selected ID or null, providers lists all known options with readiness."
         }
       ]
     },
@@ -318,10 +330,25 @@ defmodule Opal.RPC.Protocol do
     %{
       method: "auth/status",
       direction: :client_to_server,
-      description: "Check whether the server is authenticated.",
+      description: "Probe all credential sources and return auth readiness.",
       params: [],
       result: [
-        %{name: "authenticated", type: :boolean, description: "True if a valid token exists."}
+        %{
+          name: "authenticated",
+          type: :boolean,
+          description: "True if any provider has credentials."
+        },
+        %{
+          name: "auth",
+          type:
+            {:object,
+             %{
+               "status" => :string,
+               "provider" => :string,
+               "providers" => {:array, :object}
+             }},
+          description: "Full probe result with provider list and readiness."
+        }
       ]
     },
     %{
@@ -334,6 +361,54 @@ defmodule Opal.RPC.Protocol do
         %{name: "verification_uri", type: :string, description: "URL to visit."},
         %{name: "device_code", type: :string, description: "Device code for polling."},
         %{name: "interval", type: :integer, description: "Polling interval in seconds."}
+      ]
+    },
+    %{
+      method: "auth/poll",
+      direction: :client_to_server,
+      description: "Poll for device-code authorization and exchange for a Copilot token.",
+      params: [
+        %{
+          name: "device_code",
+          type: :string,
+          required: true,
+          description: "Device code from auth/login."
+        },
+        %{
+          name: "interval",
+          type: :integer,
+          required: true,
+          description: "Polling interval in seconds."
+        }
+      ],
+      result: [
+        %{
+          name: "authenticated",
+          type: :boolean,
+          description: "True once the user has authorized."
+        }
+      ]
+    },
+    %{
+      method: "auth/set_key",
+      direction: :client_to_server,
+      description: "Save an API key for a provider. Takes effect immediately.",
+      params: [
+        %{
+          name: "provider",
+          type: :string,
+          required: true,
+          description: "Provider ID (e.g. 'anthropic', 'openai')."
+        },
+        %{
+          name: "api_key",
+          type: :string,
+          required: true,
+          description: "The API key to save."
+        }
+      ],
+      result: [
+        %{name: "ok", type: :boolean, description: "True if the key was saved."}
       ]
     },
     %{

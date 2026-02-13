@@ -29,7 +29,7 @@ Right now, Opal can:
 - **Parallelize work** — sub-agents are cheap OTP processes, so it can split tasks up easily.
 - **Ask questions** — will ask for clarification when planning instead of guessing.
 
-It's a hobby project. There's no permission or approval system yet — the agent can run any shell command and write to any file in your working directory. **No guardrails, no sandbox.** Use it on things you can afford to break. See [Disclaimer](#disclaimer).
+**Adjust expectations; it's a hobby project.** There's no permission or approval system yet — the agent can run any shell command and write to any file in your working directory. **No guardrails, no sandbox.** Use it on things you can afford to break. See [disclaimer](#disclaimer).
 
 In library usage, the harness can be cleanly integrated into Elixir (or other language) systems. When integrating with Elixir, you get no serialization boundary (just Erlang message passing). 
 
@@ -44,37 +44,35 @@ opal
 
 Or as an Elixir dependency: `{:opal, "~> 0.1"}`
 
-[→ Full installation guide](docs/installing.md) — authentication, API keys, configuration, GitHub Enterprise.
+See the [installation guide](docs/installing.md) for authentication, API keys, configuration, and GitHub Enterprise setup.
 
 ## What's interesting about this?
 
-**You can connect to a running agent and watch it think.** Opal uses Erlang distribution — connect from another terminal and stream every event from every agent and sub-agent in real time. Crack open `:observer` and see the full process tree, message queues, memory — everything. [→ Inspecting](docs/inspecting.md)
+**You can [connect to a running agent](docs/inspecting.md) and watch it think.** Opal uses Erlang distribution — connect from another terminal and stream every event from every agent and sub-agent in real time. Crack open `:observer` and see the full process tree, message queues, memory — everything.
 
-**Sub-agents are just processes.** Spawn a child agent — it gets its own message history, tools, and model. Runs in parallel, fully isolated. Parent dies? Sub-agents are cleaned up automatically. No thread pools, no `Promise.all`. Just OTP. [→ Supervision](docs/supervision.md)
+**Sub-agents are just processes.** Spawn a child agent — it gets its own message history, tools, and model. Runs in parallel, fully isolated. Parent dies? [Cleaned up automatically](docs/supervision.md). No thread pools, no `Promise.all`. Just OTP.
 
-**The process mailbox is the steering queue.** `Opal.steer(agent, "focus on tests instead")` drops a message into the GenServer's mailbox. Between tool executions, the agent checks for it. No polling, no callback chains. [→ Agent loop](docs/agent-loop.md)
+**The process mailbox is the steering queue.** `Opal.steer(agent, "focus on tests instead")` drops a message into the GenServer's mailbox. Between tool executions, the [agent loop](docs/agent-loop.md) checks for it. No polling, no callback chains.
 
-**It's an embeddable library.** Add `{:opal, ...}` to your deps and the full harness lives inside your Elixir app — just Erlang message passing. Or consume it over JSON-RPC from any language. [→ SDK docs](docs/sdk.md)
+**It's an embeddable library.** Add `{:opal, ...}` to your deps and the full harness lives inside your Elixir app — just Erlang message passing. Or consume it over [JSON-RPC](docs/rpc.md) from any language. See the [SDK docs](docs/sdk.md).
 
 ## What you get
 
 - **Interactive TUI** — fullscreen terminal chat (React/Ink) with streaming, model picker, thinking display
-- **8 built-in tools** — `read_file`, `write_file`, `edit_file`, `shell`, `sub_agent`, `tasks`, `use_skill`, `ask_user` [→ Tools](docs/tools.md)
-- **MCP host** — auto-discovers servers from `.vscode/mcp.json` and friends; stdio, SSE, streamable HTTP [→ MCP](docs/mcp.md)
-- **Multiple providers** — GitHub Copilot + anything [ReqLLM](https://github.com/doughsay/req_llm) supports (Anthropic, OpenAI, Google, etc.) [→ Providers](docs/providers.md)
-- **Auto-compaction & extended thinking** — LLM-powered summarization near context limits, configurable thinking levels [→ Compaction](docs/compaction.md) · [Reasoning](docs/reasoning.md)
-- **Event system** — `Registry`-based pub/sub, subscribe from any process [→ OTP patterns](docs/otp.md)
+- **[8 built-in tools](docs/tools.md)** — `read_file`, `write_file`, `edit_file`, `shell`, `sub_agent`, `tasks`, `use_skill`, `ask_user`
+- **[MCP host](docs/mcp.md)** — auto-discovers servers from `.vscode/mcp.json` and friends; stdio, SSE, streamable HTTP
+- **[Multiple providers](docs/providers.md)** — GitHub Copilot + anything [ReqLLM](https://github.com/doughsay/req_llm) supports (Anthropic, OpenAI, Google, etc.)
+- **[Auto-compaction](docs/compaction.md) & [extended thinking](docs/reasoning.md)** — LLM-powered summarization near context limits, configurable thinking levels
+- **[Event system](docs/otp.md)** — `Registry`-based pub/sub, subscribe from any process
 
-## Architecture
-
-An [Nx](https://nx.dev) monorepo with two projects:
+## What's in here?
 
 | Project     | What it is |
 | ----------- | ---------- |
 | **`core/`** | The Elixir SDK — agent engine, tools, providers, sessions, MCP bridge, RPC server. Embeddable in any supervision tree. |
 | **`cli/`**  | React/Ink terminal UI + typed TypeScript client SDK. Talks to core over JSON-RPC stdio. Published as `@unfinite/opal` on npm. |
 
-[→ Full architecture](docs/index.md)
+See the [full architecture docs](docs/index.md) for the process tree, request flow, and supervision model.
 
 ## CLI
 
@@ -87,7 +85,7 @@ opal --auto-confirm                         # skip tool confirmations
 
 ## Using Opal as a library
 
-Add it to your supervision tree and you get everything — no external process, no serialization. [→ Full SDK docs](docs/sdk.md)
+Add it to your supervision tree and you get everything — no external process, no serialization. See the [SDK docs](docs/sdk.md) for the full API.
 
 ```elixir
 {:ok, agent} = Opal.start_session(%{
@@ -125,6 +123,7 @@ nx run-many -t deps       # install deps
 nx run cli:dev             # run TUI in dev mode
 nx run-many -t test        # tests
 pnpm lint && pnpm format   # lint & format
+pnpm inspect               # ooooo this is a cool one, it'll connect you via iex to a running dev mode instance
 ```
 
 ## Principles
@@ -139,6 +138,16 @@ pnpm lint && pnpm format   # lint & format
 I wanted to understand how agent harnesses actually work — not just use one, but build one from the ground up. I studied [Pi](https://github.com/badlogic/pi-mono) and the more I stared at the problem — long-running loops, concurrent tool execution, process isolation, sub-agent orchestration — the more it looked like Erlang/OTP. So I built it. 
 
 Sub-agents? Processes. Steering? Mailbox. Fault isolation? Supervision tree. Live debugging? Erlang distribution. I didn't have to build any of that. The language did that.
+
+## Future plans
+
+- A more fully featured TUI
+- Proper SDK docs, NPM package
+- Random gaps in functionality that come through!
+- Subagents + agents talking to each other through message passing? 
+  - subagent X asked subagent Y a question
+  - not sure if that would even work but whatevs
+- A toy OpenClaw reimplementation using Opal 
 
 ## Disclaimer
 
@@ -165,7 +174,12 @@ And from my beloved past at XDA Forums:
 * flag removal etc.
 */
 ```
+## References
 
+Standing on the shoulders of giants. Other references (papers, projects) are in the relevant documentation files.
+
+- [Pi](https://pi.dev): The best open-source harness, huge source of inspiration
+- [oh-my-pi](https://github.com/can1357/oh-my-pi): An awesome customization of Pi with so many goodies and tricks
 
 ## License
 

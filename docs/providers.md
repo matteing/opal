@@ -58,11 +58,13 @@ OPENAI_API_KEY=sk-...
 GOOGLE_API_KEY=...
 ```
 
-Or programmatically:
+Or save a key via the `auth/set_key` RPC (persists to `~/.opal/settings.json` and takes effect immediately):
 
-```elixir
-ReqLLM.put_key(:anthropic_api_key, "sk-ant-...")
+```json
+{"method": "auth/set_key", "params": {"provider": "anthropic", "api_key": "sk-ant-..."}}
 ```
+
+On first run, if no credentials are found for any provider, the CLI presents a setup wizard. See [Authentication](auth.md) for the full flow.
 
 ## Provider Behaviour
 

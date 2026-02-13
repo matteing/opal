@@ -11,6 +11,10 @@ import type {
   ConfirmRequest,
   InputRequest,
   ClientAsk_userParams,
+  AuthStatusResult,
+  AuthLoginResult,
+  AuthPollResult,
+  AuthSet_keyResult,
 } from "./protocol.js";
 
 // --- Event callback types ---
@@ -78,6 +82,7 @@ export class Session {
   readonly availableSkills: string[];
   readonly mcpServers: string[];
   readonly nodeName: string;
+  readonly auth: SessionStartResult["auth"];
   private client: OpalClient;
   private listeners = new Map<EventName, Set<(...args: unknown[]) => void>>();
 
@@ -89,6 +94,7 @@ export class Session {
     this.availableSkills = result.availableSkills;
     this.mcpServers = result.mcpServers;
     this.nodeName = result.nodeName;
+    this.auth = result.auth;
 
     client.onEvent((event) => this.dispatchEvent(event));
   }
@@ -260,6 +266,37 @@ export class Session {
    */
   async saveSettings(settings: Record<string, unknown>): Promise<SettingsSaveResult> {
     return this.client.request("settings/save", { settings });
+  }
+
+  /**
+   * Check whether the server has a valid auth token.
+   */
+  async authStatus(): Promise<AuthStatusResult> {
+    return this.client.request("auth/status", {});
+  }
+
+  /**
+   * Start the device-code OAuth login flow.
+   */
+  async authLogin(): Promise<AuthLoginResult> {
+    return this.client.request("auth/login", {});
+  }
+
+  /**
+   * Poll for device-code authorization. Blocks until user authorizes or error.
+   */
+  async authPoll(deviceCode: string, interval: number): Promise<AuthPollResult> {
+    return this.client.request("auth/poll", {
+      deviceCode,
+      interval,
+    });
+  }
+
+  /**
+   * Save an API key for a provider. Takes effect immediately (no restart).
+   */
+  async authSetKey(provider: string, apiKey: string): Promise<AuthSet_keyResult> {
+    return this.client.request("auth/set_key", { provider, apiKey });
   }
 
   /**

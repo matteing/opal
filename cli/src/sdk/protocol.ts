@@ -30,6 +30,8 @@ export interface SessionStartResult {
   mcpServers: string[];
   /** Erlang node name of the server (for debugging). */
   nodeName: string;
+  /** Auth probe result: status is 'ready' or 'setup_required', provider is auto-selected ID or null, providers lists all known options with readiness. */
+  auth: { provider: string; providers: Record<string, unknown>[]; status: string };
 }
 
 export interface AgentPromptParams {
@@ -139,8 +141,10 @@ export interface ThinkingSetResult {
 export type AuthStatusParams = Record<string, never>;
 
 export interface AuthStatusResult {
-  /** True if a valid token exists. */
+  /** True if any provider has credentials. */
   authenticated: boolean;
+  /** Full probe result with provider list and readiness. */
+  auth: { provider: string; providers: Record<string, unknown>[]; status: string };
 }
 
 export type AuthLoginParams = Record<string, never>;
@@ -154,6 +158,30 @@ export interface AuthLoginResult {
   deviceCode: string;
   /** Polling interval in seconds. */
   interval: number;
+}
+
+export interface AuthPollParams {
+  /** Device code from auth/login. */
+  deviceCode: string;
+  /** Polling interval in seconds. */
+  interval: number;
+}
+
+export interface AuthPollResult {
+  /** True once the user has authorized. */
+  authenticated: boolean;
+}
+
+export interface AuthSet_keyParams {
+  /** Provider ID (e.g. 'anthropic', 'openai'). */
+  provider: string;
+  /** The API key to save. */
+  apiKey: string;
+}
+
+export interface AuthSet_keyResult {
+  /** True if the key was saved. */
+  ok: boolean;
 }
 
 export interface TasksListParams {
@@ -368,6 +396,8 @@ export const Methods = {
   THINKING_SET: "thinking/set" as const,
   AUTH_STATUS: "auth/status" as const,
   AUTH_LOGIN: "auth/login" as const,
+  AUTH_POLL: "auth/poll" as const,
+  AUTH_SET_KEY: "auth/set_key" as const,
   TASKS_LIST: "tasks/list" as const,
   SETTINGS_GET: "settings/get" as const,
   SETTINGS_SAVE: "settings/save" as const,
@@ -421,6 +451,8 @@ export interface MethodTypes {
   "thinking/set": { params: ThinkingSetParams; result: ThinkingSetResult };
   "auth/status": { params: AuthStatusParams; result: AuthStatusResult };
   "auth/login": { params: AuthLoginParams; result: AuthLoginResult };
+  "auth/poll": { params: AuthPollParams; result: AuthPollResult };
+  "auth/set_key": { params: AuthSet_keyParams; result: AuthSet_keyResult };
   "tasks/list": { params: TasksListParams; result: TasksListResult };
   "settings/get": { params: SettingsGetParams; result: SettingsGetResult };
   "settings/save": { params: SettingsSaveParams; result: SettingsSaveResult };
