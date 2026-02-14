@@ -15,8 +15,13 @@ defmodule Codegen.TS do
 
     if "--check" in args do
       existing = File.read!(@output_path)
+
       if existing != ts do
-        IO.puts(:stderr, "protocol.ts is out of date. Run: cd core && mix run ../scripts/codegen_ts.exs")
+        IO.puts(
+          :stderr,
+          "protocol.ts is out of date. Run: cd core && mix run ../scripts/codegen_ts.exs"
+        )
+
         System.halt(1)
       else
         IO.puts("protocol.ts is up to date.")
@@ -88,25 +93,30 @@ defmodule Codegen.TS do
       "export interface #{name}Event {\n  type: \"#{snake_to_camel(type)}\";\n}\n\n"
     else
       field_lines = Enum.map_join(fields, "\n", &event_field/1)
+
       "export interface #{name}Event {\n  type: \"#{snake_to_camel(type)}\";\n#{field_lines}\n}\n\n"
     end
   end
 
   defp agent_event_union(event_types) do
-    names = Enum.map_join(event_types, "\n  | ", fn %{type: t} -> "#{snake_to_pascal(t)}Event" end)
+    names =
+      Enum.map_join(event_types, "\n  | ", fn %{type: t} -> "#{snake_to_pascal(t)}Event" end)
+
     "\nexport type AgentEvent =\n  | #{names};\n"
   end
 
   defp method_constants(methods, server_requests) do
-    method_lines = Enum.map_join(methods, "\n", fn %{method: m} ->
-      const = method_to_const(m)
-      "  #{const}: \"#{m}\" as const,"
-    end)
+    method_lines =
+      Enum.map_join(methods, "\n", fn %{method: m} ->
+        const = method_to_const(m)
+        "  #{const}: \"#{m}\" as const,"
+      end)
 
-    sr_lines = Enum.map_join(server_requests, "\n", fn %{method: m} ->
-      const = method_to_const(m)
-      "  #{const}: \"#{m}\" as const,"
-    end)
+    sr_lines =
+      Enum.map_join(server_requests, "\n", fn %{method: m} ->
+        const = method_to_const(m)
+        "  #{const}: \"#{m}\" as const,"
+      end)
 
     "export const Methods = {\n#{method_lines}\n#{sr_lines}\n} as const;\n"
   end
@@ -123,7 +133,7 @@ defmodule Codegen.TS do
 
     export interface ToolResult {
       ok: boolean;
-      output?: string;
+      output?: unknown;
       error?: string;
     }
 
@@ -143,7 +153,8 @@ defmodule Codegen.TS do
   end
 
   defp method_type_map(methods, server_requests) do
-    entries = (methods ++ server_requests)
+    entries =
+      (methods ++ server_requests)
       |> Enum.map_join("\n", fn %{method: m} ->
         base = method_to_type_name(m)
         "  \"#{m}\": { params: #{base}Params; result: #{base}Result };"
@@ -178,10 +189,13 @@ defmodule Codegen.TS do
   defp type_to_ts(:integer), do: "number"
   defp type_to_ts(:object), do: "Record<string, unknown>"
   defp type_to_ts({:array, inner}), do: "#{type_to_ts(inner)}[]"
+
   defp type_to_ts({:object, fields}) when is_map(fields) do
-    entries = fields
+    entries =
+      fields
       |> Enum.sort_by(&elem(&1, 0))
       |> Enum.map_join("; ", fn {k, v} -> "#{snake_to_camel(k)}: #{type_to_ts(v)}" end)
+
     "{ #{entries} }"
   end
 

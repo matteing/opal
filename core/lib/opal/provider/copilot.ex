@@ -149,13 +149,37 @@ defmodule Opal.Provider.Copilot do
   defp do_parse_event(%{"type" => "response.output_text.done", "text" => text}),
     do: [{:text_done, text}]
 
-  defp do_parse_event(%{"type" => "response.function_call_arguments.delta", "delta" => delta}),
-    do: [{:tool_call_delta, delta}]
+  defp do_parse_event(%{"type" => "response.function_call_arguments.delta"} = event) do
+    case event["delta"] do
+      delta when is_binary(delta) ->
+        [
+          {:tool_call_delta,
+           compact_tool_info(%{
+             delta: delta,
+             item_id: event["item_id"],
+             call_id: event["call_id"],
+             call_index: event["output_index"],
+             name: event["name"]
+           })}
+        ]
 
-  defp do_parse_event(%{"type" => "response.function_call_arguments.done", "arguments" => args}) do
-    case Jason.decode(args) do
-      {:ok, parsed_args} -> [{:tool_call_done, %{arguments: parsed_args}}]
-      {:error, _} -> [{:tool_call_done, %{arguments_raw: args}}]
+      _ ->
+        []
+    end
+  end
+
+  defp do_parse_event(%{"type" => "response.function_call_arguments.done"} = event) do
+    info =
+      compact_tool_info(%{
+        item_id: event["item_id"],
+        call_id: event["call_id"],
+        call_index: event["output_index"],
+        name: event["name"]
+      })
+
+    case decode_tool_arguments(event["arguments"]) do
+      {:ok, parsed_args} -> [{:tool_call_done, Map.put(info, :arguments, parsed_args)}]
+      {:error, raw} -> [{:tool_call_done, Map.put(info, :arguments_raw, raw)}]
     end
   end
 
@@ -203,6 +227,23 @@ defmodule Opal.Provider.Copilot do
     do: [{:error, error}]
 
   defp do_parse_event(_), do: []
+
+  defp decode_tool_arguments(args) when is_binary(args) do
+    case Jason.decode(args) do
+      {:ok, parsed_args} -> {:ok, parsed_args}
+      {:error, _} -> {:error, args}
+    end
+  end
+
+  defp decode_tool_arguments(_), do: {:ok, %{}}
+
+  defp compact_tool_info(map) do
+    Enum.reduce(map, %{}, fn
+      {_k, nil}, acc -> acc
+      {_k, ""}, acc -> acc
+      {k, v}, acc -> Map.put(acc, k, v)
+    end)
+  end
 
   # ── convert_messages/2 (behaviour callback) ──────────────────────────
 
@@ -360,14 +401,14 @@ defmodule Opal.Provider.Copilot do
 
   # ── Copilot Headers ──────────────────────────────────────────────────
 
-  defp copilot_headers(messages, _opts) do
+  defp copilot_headers(messages, opts) do
     last_role =
       case List.last(messages) do
         %{role: role} -> to_string(role)
         _ -> "user"
       end
 
-    %{
+    base_headers = %{
       "user-agent" => "GitHubCopilotChat/0.35.0",
       "editor-version" => "vscode/1.107.0",
       "editor-plugin-version" => "copilot-chat/0.35.0",
@@ -375,7 +416,18 @@ defmodule Opal.Provider.Copilot do
       "openai-intent" => "conversation-edits",
       "x-initiator" => if(last_role != "user", do: "agent", else: "user")
     }
+
+    override_headers =
+      opts
+      |> Keyword.get(:headers, %{})
+      |> normalize_headers()
+
+    Map.merge(base_headers, override_headers)
   end
+
+  defp normalize_headers(headers) when is_map(headers), do: headers
+  defp normalize_headers(headers) when is_list(headers), do: Map.new(headers)
+  defp normalize_headers(_), do: %{}
 
   # ── Reasoning Effort ─────────────────────────────────────────────────
 

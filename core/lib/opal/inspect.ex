@@ -81,13 +81,13 @@ defmodule Opal.Inspect do
   defp format_event({:tool_execution_start, tool, _args}), do: {"tool_start", "#{tool}"}
 
   defp format_event({:tool_execution_end, tool, _call_id, {:ok, out}}),
-    do: {"tool_end", "#{tool} ok #{String.slice(out || "", 0, 60)}"}
+    do: {"tool_end", "#{tool} ok #{out |> to_preview() |> String.slice(0, 60)}"}
 
   defp format_event({:tool_execution_end, tool, _call_id, {:error, e}}),
     do: {"tool_end", "#{tool} error #{inspect(e) |> String.slice(0, 60)}"}
 
   defp format_event({:tool_execution_end, tool, {:ok, out}}),
-    do: {"tool_end", "#{tool} ok #{String.slice(out || "", 0, 60)}"}
+    do: {"tool_end", "#{tool} ok #{out |> to_preview() |> String.slice(0, 60)}"}
 
   defp format_event({:tool_execution_end, tool, {:error, e}}),
     do: {"tool_end", "#{tool} error #{inspect(e) |> String.slice(0, 60)}"}
@@ -116,4 +116,8 @@ defmodule Opal.Inspect do
   defp event_color("error"), do: IO.ANSI.red()
   defp event_color("request" <> _), do: IO.ANSI.faint()
   defp event_color(_), do: IO.ANSI.faint()
+
+  defp to_preview(val) when is_binary(val), do: val
+  defp to_preview(nil), do: ""
+  defp to_preview(val), do: inspect(val, limit: 3, printable_limit: 80)
 end

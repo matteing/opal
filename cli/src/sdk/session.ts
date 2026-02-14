@@ -41,7 +41,7 @@ type EventMap = {
   toolExecutionEnd: [
     tool: string,
     callId: string,
-    result: { ok: boolean; output?: string; error?: string },
+    result: { ok: boolean; output?: unknown; error?: string },
   ];
   subAgentEvent: [parentCallId: string, subSessionId: string, inner: Record<string, unknown>];
   turnEnd: [message: string];

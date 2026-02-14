@@ -78,8 +78,8 @@ defmodule Opal.Agent.ToolRunner do
     tool_result_messages =
       Enum.map(results, fn {tc, result} ->
         case result do
-          {:ok, output} -> Opal.Message.tool_result(tc.call_id, output)
-          {:error, reason} -> Opal.Message.tool_result(tc.call_id, reason, true)
+          {:ok, output} -> Opal.Message.tool_result(tc.call_id, tool_output_text(output))
+          {:error, reason} -> Opal.Message.tool_result(tc.call_id, tool_output_text(reason), true)
         end
       end)
 
@@ -333,5 +333,14 @@ defmodule Opal.Agent.ToolRunner do
     tool_mod
     |> Atom.to_string()
     |> String.starts_with?("Elixir.Opal.MCP.Tool.")
+  end
+
+  defp tool_output_text(output) when is_binary(output), do: output
+
+  defp tool_output_text(output) do
+    case Jason.encode(output) do
+      {:ok, json} -> json
+      {:error, _} -> inspect(output)
+    end
   end
 end

@@ -83,7 +83,7 @@ The CLI clears the screen on startup and fills the viewport initially; once the 
 | Component | Purpose |
 |-----------|---------|
 | `header.tsx` | Working directory and node name |
-| `message-list.tsx` | Timeline: messages, tools, context, skills |
+| `message-list.tsx` | Timeline: messages, tools, context, skills (renders a sliding window of the most recent entries for performance) |
 | `thinking.tsx` | Animated kaomoji spinner with status label |
 | `bottom-bar.tsx` | Text input, help shortcuts, model + token usage |
 | `confirm-dialog.tsx` | Tool execution approval modal |

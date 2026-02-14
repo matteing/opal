@@ -23,8 +23,21 @@ defmodule Opal.LiveThinkingTest do
   defmodule RecordingProvider do
     @behaviour Opal.Provider
 
+    @headers %{
+      "capi-beta-1" => "true",
+      "copilot-integration-id" => "vscode-chat",
+      "editor-plugin-version" => "copilot-chat/0.37.5",
+      "editor-version" => "vscode/1.109.2",
+      "openai-intent" => "conversation-agent",
+      "x-vscode-user-agent-library-version" => "electron-fetch",
+      "x-interaction-type" => "conversation-agent",
+      "user-agent" => "GitHubCopilotChat/0.37.5"
+    }
+
     @impl true
     def stream(model, messages, tools, opts \\ []) do
+      opts = Keyword.put(opts, :headers, @headers)
+
       case Opal.Provider.Copilot.stream(model, messages, tools, opts) do
         {:ok, resp} ->
           :persistent_term.put({__MODULE__, :last_response}, resp)

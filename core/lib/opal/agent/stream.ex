@@ -117,18 +117,19 @@ defmodule Opal.Agent.Stream do
   end
 
   def handle_stream_event({:tool_call_start, info}, state) do
-    # Start a new tool call accumulator
     tool_call = %{
       call_id: info[:call_id],
+      item_id: info[:item_id],
+      call_index: tool_call_index(info),
       name: info[:name],
       arguments_json: ""
     }
 
-    %{state | current_tool_calls: state.current_tool_calls ++ [tool_call]}
+    %{state | current_tool_calls: upsert_tool_call(state.current_tool_calls, tool_call)}
   end
 
-  def handle_stream_event({:tool_call_delta, delta}, state) do
-    # Append to the last tool call's arguments JSON
+  # Backward-compatible delta payload (legacy providers emit just a string).
+  def handle_stream_event({:tool_call_delta, delta}, state) when is_binary(delta) do
     updated =
       case List.pop_at(state.current_tool_calls, -1) do
         {nil, _} ->
@@ -141,39 +142,32 @@ defmodule Opal.Agent.Stream do
     %{state | current_tool_calls: updated}
   end
 
+  # Identifier-aware delta payload for interleaved multi-tool streams.
+  def handle_stream_event({:tool_call_delta, %{delta: delta} = info}, state)
+      when is_binary(delta) do
+    tool_call = %{
+      call_id: info[:call_id],
+      item_id: info[:item_id],
+      call_index: tool_call_index(info),
+      name: info[:name],
+      arguments_json: delta
+    }
+
+    %{state | current_tool_calls: append_tool_call_delta(state.current_tool_calls, tool_call)}
+  end
+
+  def handle_stream_event({:tool_call_delta, _}, state), do: state
+
   def handle_stream_event({:tool_call_done, info}, state) do
-    # Finalize the tool call with parsed arguments
-    updated =
-      case List.pop_at(state.current_tool_calls, -1) do
-        {nil, _} ->
-          # No in-progress tool call — create one from the done event
-          [
-            %{
-              call_id: info[:call_id],
-              name: info[:name],
-              arguments: info[:arguments] || %{}
-            }
-          ]
+    tool_call = %{
+      call_id: info[:call_id],
+      item_id: info[:item_id],
+      call_index: tool_call_index(info),
+      name: info[:name],
+      arguments: info[:arguments]
+    }
 
-        {last_tc, rest} ->
-          # Merge final info into the accumulated tool call
-          arguments =
-            info[:arguments] ||
-              case Jason.decode(last_tc[:arguments_json] || "{}") do
-                {:ok, parsed} -> parsed
-                {:error, _} -> %{}
-              end
-
-          finalized = %{
-            call_id: info[:call_id] || last_tc[:call_id],
-            name: info[:name] || last_tc[:name],
-            arguments: arguments
-          }
-
-          rest ++ [finalized]
-      end
-
-    %{state | current_tool_calls: updated}
+    %{state | current_tool_calls: finalize_tool_call(state.current_tool_calls, tool_call)}
   end
 
   def handle_stream_event({:usage, usage}, state) do
@@ -255,6 +249,122 @@ defmodule Opal.Agent.Stream do
   end
 
   # Helper functions
+
+  defp upsert_tool_call(tool_calls, tool_call) do
+    case find_tool_call_index(tool_calls, tool_call) do
+      nil ->
+        tool_calls ++ [tool_call]
+
+      idx ->
+        List.update_at(tool_calls, idx, &merge_tool_call_metadata(&1, tool_call))
+    end
+  end
+
+  defp append_tool_call_delta(tool_calls, tool_call) do
+    case find_tool_call_index(tool_calls, tool_call) do
+      nil ->
+        tool_calls ++ [tool_call]
+
+      idx ->
+        List.update_at(tool_calls, idx, fn existing ->
+          existing
+          |> merge_tool_call_metadata(tool_call)
+          |> Map.put(
+            :arguments_json,
+            (existing[:arguments_json] || "") <> (tool_call[:arguments_json] || "")
+          )
+        end)
+    end
+  end
+
+  defp finalize_tool_call(tool_calls, tool_call) do
+    idx = find_tool_call_index(tool_calls, tool_call) || find_fallback_tool_call_index(tool_calls)
+
+    case idx do
+      nil ->
+        tool_calls ++
+          [
+            Map.put(
+              tool_call,
+              :arguments,
+              tool_call[:arguments] || decode_tool_arguments(tool_call[:arguments_json])
+            )
+          ]
+
+      idx ->
+        List.update_at(tool_calls, idx, fn existing ->
+          existing
+          |> merge_tool_call_metadata(tool_call)
+          |> Map.put(
+            :arguments,
+            tool_call[:arguments] || decode_tool_arguments(existing[:arguments_json])
+          )
+        end)
+    end
+  end
+
+  defp find_tool_call_index(tool_calls, tool_call) do
+    call_id = normalize_tool_id(tool_call[:call_id])
+    item_id = normalize_tool_id(tool_call[:item_id])
+    call_index = tool_call[:call_index]
+
+    cond do
+      call_id != nil ->
+        find_last_index(tool_calls, &(normalize_tool_id(&1[:call_id]) == call_id))
+
+      item_id != nil ->
+        find_last_index(tool_calls, &(normalize_tool_id(&1[:item_id]) == item_id))
+
+      is_integer(call_index) ->
+        find_last_index(tool_calls, &(&1[:call_index] == call_index))
+
+      true ->
+        nil
+    end
+  end
+
+  defp find_fallback_tool_call_index(tool_calls) do
+    find_last_index(tool_calls, &is_nil(&1[:arguments]))
+  end
+
+  defp find_last_index(list, predicate) do
+    list
+    |> Enum.with_index()
+    |> Enum.reduce(nil, fn {item, idx}, acc ->
+      if predicate.(item), do: idx, else: acc
+    end)
+  end
+
+  defp merge_tool_call_metadata(existing, incoming) do
+    existing
+    |> maybe_put_metadata(:call_id, incoming[:call_id])
+    |> maybe_put_metadata(:item_id, incoming[:item_id])
+    |> maybe_put_metadata(:call_index, incoming[:call_index])
+    |> maybe_put_metadata(:name, incoming[:name])
+  end
+
+  defp maybe_put_metadata(map, _key, nil), do: map
+  defp maybe_put_metadata(map, _key, ""), do: map
+  defp maybe_put_metadata(map, key, value), do: Map.put(map, key, value)
+
+  defp normalize_tool_id(id) when is_binary(id) and id != "", do: id
+  defp normalize_tool_id(_), do: nil
+
+  defp tool_call_index(info) do
+    case info[:call_index] || info[:output_index] do
+      idx when is_integer(idx) -> idx
+      _ -> nil
+    end
+  end
+
+  defp decode_tool_arguments(json) when is_binary(json) do
+    case Jason.decode(json) do
+      {:ok, parsed} -> parsed
+      {:error, _} -> %{}
+    end
+  end
+
+  defp decode_tool_arguments(_), do: %{}
 
   defp broadcast(%State{} = state, event), do: Opal.Agent.EventLog.broadcast(state, event)
 end

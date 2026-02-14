@@ -22,7 +22,7 @@ defmodule Opal.Provider do
           | {:thinking_start, map()}
           | {:thinking_delta, String.t()}
           | {:tool_call_start, map()}
-          | {:tool_call_delta, String.t()}
+          | {:tool_call_delta, String.t() | map()}
           | {:tool_call_done, map()}
           | {:response_done, map()}
           | {:usage, map()}

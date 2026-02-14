@@ -52,22 +52,39 @@ defmodule Opal.Provider.OpenAI do
       case delta do
         %{"tool_calls" => tool_calls} when is_list(tool_calls) ->
           Enum.reduce(tool_calls, events, fn tc, acc ->
-            cond do
-              tc["id"] ->
+            call_index = if is_integer(tc["index"]), do: tc["index"], else: nil
+            call_id = tc["id"]
+            name = get_in(tc, ["function", "name"])
+            arguments_delta = get_in(tc, ["function", "arguments"])
+
+            acc =
+              if is_binary(call_id) or is_binary(name) do
                 acc ++
                   [
                     {:tool_call_start,
-                     %{
-                       call_id: tc["id"],
-                       name: get_in(tc, ["function", "name"]) || ""
-                     }}
+                     compact_tool_info(%{
+                       call_id: call_id,
+                       call_index: call_index,
+                       name: name
+                     })}
                   ]
-
-              get_in(tc, ["function", "arguments"]) ->
-                acc ++ [{:tool_call_delta, get_in(tc, ["function", "arguments"])}]
-
-              true ->
+              else
                 acc
+              end
+
+            if is_binary(arguments_delta) and arguments_delta != "" do
+              acc ++
+                [
+                  {:tool_call_delta,
+                   compact_tool_info(%{
+                     call_id: call_id,
+                     call_index: call_index,
+                     name: name,
+                     delta: arguments_delta
+                   })}
+                ]
+            else
+              acc
             end
           end)
 
@@ -123,6 +140,14 @@ defmodule Opal.Provider.OpenAI do
   def parse_chat_event(%{"choices" => []}), do: []
 
   def parse_chat_event(_), do: []
+
+  defp compact_tool_info(map) do
+    Enum.reduce(map, %{}, fn
+      {_k, nil}, acc -> acc
+      {_k, ""}, acc -> acc
+      {k, v}, acc -> Map.put(acc, k, v)
+    end)
+  end
 
   # ── Message Conversion ───────────────────────────────────────────────
 

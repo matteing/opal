@@ -25,6 +25,15 @@ Persistent task tracker backed by DETS. The LLM uses this to maintain a structur
 - **delete** — Remove a task by ID.
 - **batch** — Process an array of operations atomically.
 
+All actions return a structured JSON payload (not ASCII tables) with:
+
+- `kind: "tasks"`
+- `action` — action that produced the payload
+- `tasks` — full task list snapshot
+- `total` and `counts` (`open`, `in_progress`, `done`, `blocked`)
+- `changes` — operation-specific changes (insert/update/delete)
+- `operations` — per-op batch results (batch only)
+
 ## Storage
 
 Tasks are stored in a DETS file at `~/.opal/tasks/<hash>.dets`, where `<hash>` is derived from the working directory so each project gets its own task database. DETS is Erlang's disk-based term storage — tasks survive agent restarts. Each task has `created_at` and `updated_at` timestamps.

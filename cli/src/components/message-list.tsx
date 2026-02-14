@@ -15,6 +15,7 @@ import { Welcome } from "./welcome.js";
 
 let _cachedWidth = 0;
 let _cachedMd: Marked | null = null;
+const MAX_RENDERED_ENTRIES = 400;
 
 function getMd(width: number): Marked {
   if (_cachedMd && _cachedWidth === width) return _cachedMd;
@@ -45,18 +46,34 @@ export const MessageList: FC<MessageListProps> = ({
 }) => {
   const { stdout } = useStdout();
   const width = stdout?.columns ?? 80;
+  const timeline = view.timeline;
+  const startIndex = Math.max(0, timeline.length - MAX_RENDERED_ENTRIES);
+  const visibleTimeline = startIndex > 0 ? timeline.slice(startIndex) : timeline;
+  const hiddenCount = startIndex;
+  const subAgentByCallId = new Map<string, SubAgent>(
+    Object.values(subAgents).map((sub) => [sub.parentCallId, sub]),
+  );
 
-  const hasMessages = view.timeline.some((e: TimelineEntry) => e.kind === "message");
+  const hasMessages = timeline.some((e: TimelineEntry) => e.kind === "message");
 
   return (
     <Box flexDirection="column">
       <Welcome dimmed={hasMessages} />
+      {hiddenCount > 0 && (
+        <Box paddingX={1} marginBottom={1}>
+          <Text dimColor>
+            Showing last {MAX_RENDERED_ENTRIES} of {timeline.length} timeline entries (use /compact{" "}
+            to trim history).
+          </Text>
+        </Box>
+      )}
 
-      {!hasMessages && view.timeline.length > 0 && (
+      {!hasMessages && visibleTimeline.length > 0 && (
         <Box flexDirection="column" paddingX={1}>
-          {view.timeline.map((entry: TimelineEntry, i: number) => {
+          {visibleTimeline.map((entry: TimelineEntry, i: number) => {
+            const timelineIndex = startIndex + i;
             if (entry.kind === "context") {
-              return <ContextLines key={i} context={entry.context} />;
+              return <ContextLines key={timelineIndex} context={entry.context} />;
             }
             return null;
           })}
@@ -65,72 +82,77 @@ export const MessageList: FC<MessageListProps> = ({
 
       {hasMessages && (
         <Box flexDirection="column" paddingX={1}>
-          {view.timeline.map((entry: TimelineEntry, i: number) => {
-            if (entry.kind === "message") {
-              let showBadge = true;
-              if (entry.message.role === "assistant") {
-                for (let j = i - 1; j >= 0; j--) {
-                  const prev = view.timeline[j];
-                  if (prev.kind === "message") {
-                    if (prev.message.role === "assistant") showBadge = false;
-                    break;
-                  }
-                }
-              }
-              let isStreaming = false;
-              if (view.isRunning && entry.message.role === "assistant") {
-                // Only mark as streaming if this is the very last timeline entry
-                // (no tool/message entries after it — still actively receiving deltas)
-                isStreaming = i === view.timeline.length - 1;
-              }
-              return (
-                <MessageBlock
-                  key={i}
-                  message={entry.message}
-                  width={width}
-                  showBadge={showBadge}
-                  isStreaming={isStreaming}
-                />
-              );
-            }
-            if (entry.kind === "tool") {
-              // Sub-agent tool: show collapsed summary
-              const subAgent =
-                entry.task.tool === "sub_agent"
-                  ? findSubAgentByCallId(subAgents, entry.task.callId)
-                  : null;
-              if (subAgent) {
+          {(() => {
+            let lastMessageRole: Message["role"] | null = null;
+            return visibleTimeline.map((entry: TimelineEntry, i: number) => {
+              const timelineIndex = startIndex + i;
+              if (entry.kind === "message") {
+                const showBadge =
+                  entry.message.role === "assistant" ? lastMessageRole !== "assistant" : true;
+                lastMessageRole = entry.message.role;
+                const isStreaming =
+                  view.isRunning &&
+                  entry.message.role === "assistant" &&
+                  timelineIndex === timeline.length - 1;
                 return (
-                  <SubAgentSummary key={entry.task.callId} task={entry.task} subAgent={subAgent} />
+                  <MessageBlock
+                    key={timelineIndex}
+                    message={entry.message}
+                    width={width}
+                    showBadge={showBadge}
+                    isStreaming={isStreaming}
+                  />
                 );
               }
-              return (
-                <ToolBlock
-                  key={entry.task.callId}
-                  task={entry.task}
-                  width={width}
-                  showOutput={showToolOutput}
-                />
-              );
-            }
-            if (entry.kind === "skill") {
-              return (
-                <Box key={i}>
-                  <Text>
-                    <Text color="green">●</Text>{" "}
-                    <Text dimColor>Loaded skill: {entry.skill.name}</Text>
-                  </Text>
-                </Box>
-              );
-            }
-            if (entry.kind === "thinking" && showToolOutput) {
-              return <ThinkingBlock key={`thinking-${i}`} text={entry.text} width={width} />;
-            }
-            if (entry.kind === "context") {
-              return <ContextLines key={i} context={entry.context} />;
-            }
-            return null;
-          })}
+              if (entry.kind === "tool") {
+                // Sub-agent tool: show collapsed summary
+                const subAgent =
+                  entry.task.tool === "sub_agent"
+                    ? (subAgentByCallId.get(entry.task.callId) ?? null)
+                    : null;
+                if (subAgent) {
+                  return (
+                    <SubAgentSummary
+                      key={entry.task.callId}
+                      task={entry.task}
+                      subAgent={subAgent}
+                    />
+                  );
+                }
+                return (
+                  <ToolBlock
+                    key={entry.task.callId}
+                    task={entry.task}
+                    width={width}
+                    showOutput={showToolOutput}
+                  />
+                );
+              }
+              if (entry.kind === "skill") {
+                return (
+                  <Box key={timelineIndex}>
+                    <Text>
+                      <Text color="green">●</Text>{" "}
+                      <Text dimColor>Loaded skill: {entry.skill.name}</Text>
+                    </Text>
+                  </Box>
+                );
+              }
+              if (entry.kind === "thinking" && showToolOutput) {
+                return (
+                  <ThinkingBlock
+                    key={`thinking-${timelineIndex}`}
+                    text={entry.text}
+                    width={width}
+                  />
+                );
+              }
+              if (entry.kind === "context") {
+                return <ContextLines key={timelineIndex} context={entry.context} />;
+              }
+              return null;
+            });
+          })()}
         </Box>
       )}
     </Box>
@@ -209,10 +231,19 @@ const ToolBlock: FC<{ task: Task; width: number; showOutput?: boolean }> = ({
   const color = TOOL_COLORS[task.status];
   const maxOutput = width - 6;
 
-  // Special rendering for tasks tool with list action
-  const isTasksList =
-    task.tool === "tasks" && task.status === "done" && task.result?.ok && task.result.output;
-  const parsedTasks = isTasksList ? parseTasksOutput(task.result!.output!) : null;
+  const isTasksOutput = task.tool === "tasks" && task.status === "done" && task.result?.ok;
+  const outputText = task.result?.output !== undefined ? outputToText(task.result.output) : "";
+  const structuredTasks = isTasksOutput ? parseStructuredTasksOutput(task.result?.output) : null;
+  const parsedTasks =
+    structuredTasks?.tasks ??
+    (isTasksOutput && typeof task.result?.output === "string"
+      ? parseTasksOutput(task.result.output)
+      : null);
+  const taskNotes =
+    structuredTasks?.notes ??
+    (isTasksOutput && typeof task.result?.output === "string"
+      ? parseTaskNotes(task.result.output)
+      : []);
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -220,23 +251,50 @@ const ToolBlock: FC<{ task: Task; width: number; showOutput?: boolean }> = ({
         <Text color={color}>{icon}</Text> <Text bold>{task.tool}</Text>{" "}
         <Text dimColor>{task.meta}</Text>
       </Text>
-      {parsedTasks && parsedTasks.length > 0 ? (
-        <Box marginLeft={2}>
-          <TasksDisplay tasks={parsedTasks} />
-        </Box>
+      {parsedTasks ? (
+        <>
+          {parsedTasks.length > 0 ? (
+            <Box marginLeft={2}>
+              <TasksDisplay tasks={parsedTasks} />
+            </Box>
+          ) : (
+            <Box marginLeft={2}>
+              <Text dimColor>No tasks.</Text>
+            </Box>
+          )}
+          {structuredTasks?.summary && (
+            <Box marginLeft={2}>
+              <Text dimColor>{structuredTasks.summary}</Text>
+            </Box>
+          )}
+          {taskNotes.length > 0 && (
+            <Box marginLeft={2}>
+              <Text dimColor wrap="truncate-end">
+                {truncateOutput(taskNotes.join("\n"), 4, maxOutput)}
+              </Text>
+            </Box>
+          )}
+        </>
       ) : (
         <>
-          {task.result && !task.result.ok && task.result.error && (
+          {isTasksOutput && outputText && (
+            <Box marginLeft={2}>
+              <Text dimColor wrap="truncate-end">
+                {truncateOutput(outputText, 12, maxOutput)}
+              </Text>
+            </Box>
+          )}
+          {!isTasksOutput && task.result && !task.result.ok && task.result.error && (
             <Box marginLeft={2}>
               <Text color="red" wrap="truncate-end">
                 {task.result.error.slice(0, maxOutput)}
               </Text>
             </Box>
           )}
-          {showOutput && task.result?.output && (
+          {!isTasksOutput && showOutput && outputText && (
             <Box marginLeft={2}>
               <Text dimColor wrap="truncate-end">
-                {truncateOutput(task.result.output, 12, maxOutput)}
+                {truncateOutput(outputText, 12, maxOutput)}
               </Text>
             </Box>
           )}
@@ -245,6 +303,20 @@ const ToolBlock: FC<{ task: Task; width: number; showOutput?: boolean }> = ({
     </Box>
   );
 };
+
+function outputToText(output: unknown): string {
+  if (typeof output === "string") return output;
+  if (output == null) return "";
+  if (typeof output === "number" || typeof output === "boolean" || typeof output === "bigint") {
+    return `${output}`;
+  }
+
+  try {
+    return JSON.stringify(output, null, 2);
+  } catch {
+    return "[non-serializable output]";
+  }
+}
 
 function truncateOutput(output: string, maxLines: number, maxWidth: number): string {
   const lines = output.split(/\r?\n/).slice(-maxLines);
@@ -293,6 +365,12 @@ interface ParsedTask {
   group: string;
 }
 
+interface StructuredTasksOutput {
+  tasks: ParsedTask[];
+  notes: string[];
+  summary: string;
+}
+
 const STATUS_MAP: Record<string, "success" | "pending" | "loading" | "warning" | "error"> = {
   done: "success",
   open: "pending",
@@ -300,11 +378,73 @@ const STATUS_MAP: Record<string, "success" | "pending" | "loading" | "warning" |
   blocked: "error",
 };
 
+function parseStructuredTasksOutput(output: unknown): StructuredTasksOutput | null {
+  if (!output || typeof output !== "object" || Array.isArray(output)) return null;
+  const payload = output as Record<string, unknown>;
+  if (payload.kind !== "tasks") return null;
+  if (!Array.isArray(payload.tasks)) return null;
+
+  const tasks = payload.tasks
+    .map((raw) => {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+      const task = raw as Record<string, unknown>;
+
+      const id = typeof task.id === "string" || typeof task.id === "number" ? `${task.id}` : "";
+      const label = typeof task.label === "string" ? task.label : "";
+      const status =
+        typeof task.status === "string" ? task.status : task.done === true ? "done" : "open";
+      const priority = typeof task.priority === "string" ? task.priority : "";
+      const group = typeof task.groupName === "string" ? task.groupName : "";
+
+      return { id, label, status, priority, group };
+    })
+    .filter((task): task is ParsedTask => task !== null);
+
+  const notes = Array.isArray(payload.notes)
+    ? payload.notes.filter((v): v is string => typeof v === "string")
+    : [];
+
+  if (Array.isArray(payload.operations)) {
+    for (const op of payload.operations) {
+      if (!op || typeof op !== "object" || Array.isArray(op)) continue;
+      const operation = op as Record<string, unknown>;
+      if (operation.ok === false && typeof operation.error === "string") {
+        const action = typeof operation.action === "string" ? operation.action : "operation";
+        notes.push(`${action}: ${operation.error}`);
+      }
+    }
+  }
+
+  const total = typeof payload.total === "number" ? payload.total : tasks.length;
+  const counts =
+    payload.counts && typeof payload.counts === "object" && !Array.isArray(payload.counts)
+      ? (payload.counts as Record<string, unknown>)
+      : null;
+  const open = typeof counts?.open === "number" ? counts.open : 0;
+  const inProgress = typeof counts?.inProgress === "number" ? counts.inProgress : 0;
+  const done = typeof counts?.done === "number" ? counts.done : 0;
+  const blocked = typeof counts?.blocked === "number" ? counts.blocked : 0;
+
+  const action = typeof payload.action === "string" ? payload.action : "tasks";
+  const summary = `${action}: ${total} total · ${open} open · ${inProgress} in progress · ${done} done · ${blocked} blocked`;
+
+  return { tasks, notes, summary };
+}
+
 function parseTasksOutput(output: string): ParsedTask[] | null {
-  const lines = output.split(/\r?\n/).filter(Boolean);
-  // Expected: header, separator (---), then data rows, then "N task(s)"
-  if (lines.length < 3) return null;
-  const dataLines = lines.slice(2).filter((l) => !l.match(/^\d+ task\(s\)$/));
+  const lines = output.split(/\r?\n/);
+  const headerIndex = lines.findIndex((line) => line.startsWith("id | "));
+  if (headerIndex < 0 || headerIndex + 2 >= lines.length) return null;
+
+  const dataLines: string[] = [];
+  for (const line of lines.slice(headerIndex + 2)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (/^\d+ task\(s\)$/.test(trimmed)) break;
+    if (!trimmed.includes(" | ")) continue;
+    dataLines.push(trimmed);
+  }
+
   if (dataLines.length === 0) return null;
 
   return dataLines.map((line) => {
@@ -317,6 +457,13 @@ function parseTasksOutput(output: string): ParsedTask[] | null {
       group: cols[4] ?? "",
     };
   });
+}
+
+function parseTaskNotes(output: string): string[] {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^\[[+\-~]\]/.test(line));
 }
 
 const TASK_SPINNER = { interval: 140, frames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] };
@@ -342,16 +489,6 @@ const TasksDisplay: FC<{ tasks: ParsedTask[] }> = ({ tasks }) => {
 };
 
 // --- Sub-agent collapsed summary ---
-
-function findSubAgentByCallId(
-  subAgents: Record<string, SubAgent>,
-  callId: string,
-): SubAgent | null {
-  for (const sub of Object.values(subAgents)) {
-    if (sub.parentCallId === callId) return sub;
-  }
-  return null;
-}
 
 const SubAgentSummary: FC<{ task: Task; subAgent: SubAgent }> = ({ task, subAgent }) => {
   const icon = subAgent.isRunning ? "◐" : TOOL_ICONS[task.status];

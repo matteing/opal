@@ -41,7 +41,7 @@ export interface Task {
   args: Record<string, unknown>;
   meta: string;
   status: "running" | "done" | "error";
-  result?: { ok: boolean; output?: string; error?: string };
+  result?: { ok: boolean; output?: unknown; error?: string };
 }
 
 export interface Skill {
@@ -844,7 +844,7 @@ function applyAgentEvent(view: AgentView, event: Record<string, unknown>): Agent
     case "toolExecutionEnd":
     case "tool_execution_end": {
       const callId = ((event.callId ?? event.call_id) as string) ?? "";
-      const result = event.result as { ok: boolean; output?: string; error?: string };
+      const result = event.result as { ok: boolean; output?: unknown; error?: string };
       const idx = view.timeline.findIndex((e) => e.kind === "tool" && e.task.callId === callId);
       if (idx >= 0) {
         const entry = view.timeline[idx] as { kind: "tool"; task: Task };

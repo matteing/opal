@@ -1,10 +1,13 @@
 defmodule Opal.Tool.Tasks do
   @moduledoc """
-  Project-scoped task tracker backed by DETS (built into Erlang).
+  Session-scoped task tracker backed by DETS (built into Erlang).
 
   Uses structured JSON parameters — no SQL parsing needed. The LLM
   passes action + fields directly. Database stored at `~/.opal/tasks/<hash>.dets`,
-  keyed by the working directory so each project gets its own task database.
+  keyed by session ID when available (with working-dir fallback for compatibility).
+
+  Results are returned as structured maps (task lists, counts, and operation
+  metadata). Rendering is handled client-side.
 
   ## Actions
 
@@ -41,6 +44,7 @@ defmodule Opal.Tool.Tasks do
     Views: open, done, blocked, in_progress, overdue, high_priority.
     Fields: label, status (open|done|blocked|in_progress), priority (low|medium|high|critical),
     group_name, tags (comma-separated), due (ISO date), notes, blocked_by.
+    Returns structured JSON snapshots (`tasks`, `counts`, `changes`, and `operations` for batch).
     """
   end
 
@@ -105,13 +109,21 @@ defmodule Opal.Tool.Tasks do
   end
 
   @impl true
-  def execute(%{"action" => "insert"} = params, %{working_dir: wd}), do: run_insert(wd, params)
-  def execute(%{"action" => "list"} = params, %{working_dir: wd}), do: run_list(wd, params)
-  def execute(%{"action" => "update"} = params, %{working_dir: wd}), do: run_update(wd, params)
-  def execute(%{"action" => "delete"} = params, %{working_dir: wd}), do: run_delete(wd, params)
+  def execute(%{"action" => "insert"} = params, context) when is_map(context),
+    do: run_insert(scope_key(context), params)
 
-  def execute(%{"action" => "batch", "ops" => ops}, %{working_dir: wd}) when is_list(ops),
-    do: run_batch(wd, ops)
+  def execute(%{"action" => "list"} = params, context) when is_map(context),
+    do: run_list(scope_key(context), params)
+
+  def execute(%{"action" => "update"} = params, context) when is_map(context),
+    do: run_update(scope_key(context), params)
+
+  def execute(%{"action" => "delete"} = params, context) when is_map(context),
+    do: run_delete(scope_key(context), params)
+
+  def execute(%{"action" => "batch", "ops" => ops}, context)
+      when is_list(ops) and is_map(context),
+      do: run_batch(scope_key(context), ops)
 
   def execute(%{"action" => "batch"}, _), do: {:error, "Batch requires an 'ops' array."}
 
@@ -121,12 +133,13 @@ defmodule Opal.Tool.Tasks do
   def execute(_, _), do: {:error, "Missing required parameter: action"}
 
   @doc """
-  Clear all tasks. Called at session start to reset the scratchpad.
+  Clear all tasks for a given scope key.
   """
   @spec clear(String.t()) :: :ok
-  def clear(working_dir) do
-    path = dets_path(working_dir)
-    table = table_name(working_dir)
+  def clear(scope) do
+    key = scope_key(scope)
+    path = dets_path(key)
+    table = table_name(key)
 
     case :dets.open_file(table, file: path, type: :set) do
       {:ok, ^table} ->
@@ -140,11 +153,11 @@ defmodule Opal.Tool.Tasks do
   end
 
   @doc """
-  Return active tasks as a list of maps. Used by the RPC layer.
+  Return active tasks as a list of maps for a session or scope key.
   """
-  @spec query_raw(String.t(), String.t()) :: {:ok, [map()]} | {:error, String.t()}
-  def query_raw(working_dir, _query) do
-    with_dets(working_dir, fn table ->
+  @spec query_raw(map() | String.t(), String.t()) :: {:ok, [map()]} | {:error, String.t()}
+  def query_raw(scope, _query) do
+    with_dets(scope_key(scope), fn table ->
       tasks =
         all_tasks(table)
         |> Enum.filter(&(&1.status in ["open", "in_progress", "blocked"]))
@@ -158,15 +171,30 @@ defmodule Opal.Tool.Tasks do
 
   defp run_batch(wd, ops) do
     with_dets(wd, fn table ->
-      results =
+      operation_results =
         Enum.map(ops, fn op ->
+          action = Map.get(op, "action", "unknown")
+
           case run_single(table, op) do
-            {:ok, msg} -> msg
-            {:error, msg} -> "ERROR: #{msg}"
+            {:ok, payload} ->
+              %{
+                action: action,
+                ok: true,
+                changes: Map.get(payload, :changes, []),
+                total: Map.get(payload, :total, 0)
+              }
+
+            {:error, message} ->
+              %{action: action, ok: false, error: message}
           end
         end)
 
-      {:ok, Enum.join(results, "\n")}
+      tasks =
+        table
+        |> all_tasks()
+        |> sort_by_priority()
+
+      {:ok, tasks_payload("batch", tasks, %{operations: operation_results})}
     end)
   end
 
@@ -178,6 +206,11 @@ defmodule Opal.Tool.Tasks do
   defp run_single(_, _), do: {:error, "Each batch op requires an 'action' field."}
 
   # -- DETS Helpers --
+
+  defp scope_key(%{session_id: sid}) when is_binary(sid) and sid != "", do: "session:" <> sid
+  defp scope_key(%{working_dir: wd}) when is_binary(wd) and wd != "", do: wd
+  defp scope_key(scope) when is_binary(scope) and scope != "", do: scope
+  defp scope_key(_), do: File.cwd!()
 
   defp dets_path(working_dir) do
     cfg = Opal.Config.new()
@@ -256,7 +289,12 @@ defmodule Opal.Tool.Tasks do
           }
 
         :dets.insert(table, {id, task})
-        {:ok, "Inserted task ##{id}"}
+        tasks = table |> all_tasks() |> sort_by_priority()
+
+        {:ok,
+         tasks_payload("insert", tasks, %{
+           changes: [%{op: "insert", id: id, label: label}]
+         })}
 
       _ ->
         {:error, "Insert requires a non-empty 'label' field."}
@@ -288,7 +326,7 @@ defmodule Opal.Tool.Tasks do
       end
       |> sort_by_priority()
 
-    {:ok, format_tasks(filtered)}
+    {:ok, tasks_payload("list", filtered)}
   end
 
   defp apply_view(tasks, view) do
@@ -355,7 +393,23 @@ defmodule Opal.Tool.Tasks do
               |> Map.put(:updated_at, now_iso())
 
             :dets.insert(table, {id, updated})
-            {:ok, "Updated task ##{id}"}
+            tasks = table |> all_tasks() |> sort_by_priority()
+
+            changed_fields =
+              @settable_fields
+              |> Enum.map(&to_string/1)
+              |> Enum.filter(&Map.has_key?(params, &1))
+
+            {:ok,
+             tasks_payload("update", tasks, %{
+               changes: [
+                 %{
+                   op: "update",
+                   id: id,
+                   changed_fields: changed_fields
+                 }
+               ]
+             })}
 
           [] ->
             {:error, "Task ##{id} not found."}
@@ -378,9 +432,14 @@ defmodule Opal.Tool.Tasks do
         id = if is_binary(id), do: String.to_integer(id), else: id
 
         case :dets.lookup(table, id) do
-          [{^id, _}] ->
+          [{^id, task}] ->
             :dets.delete(table, id)
-            {:ok, "Deleted task ##{id}"}
+            tasks = table |> all_tasks() |> sort_by_priority()
+
+            {:ok,
+             tasks_payload("delete", tasks, %{
+               changes: [%{op: "delete", id: id, label: task.label}]
+             })}
 
           [] ->
             {:error, "Task ##{id} not found."}
@@ -388,7 +447,7 @@ defmodule Opal.Tool.Tasks do
     end
   end
 
-  # -- Formatting --
+  # -- Payload helpers --
 
   defp sort_by_priority(tasks) do
     priority_order = %{"critical" => 0, "high" => 1, "medium" => 2, "low" => 3}
@@ -398,24 +457,61 @@ defmodule Opal.Tool.Tasks do
     end)
   end
 
-  defp format_tasks([]), do: "No tasks found."
-
-  defp format_tasks(tasks) do
-    cols = ~w(id label status priority group_name tags due)
-    header = Enum.join(cols, " | ")
-    separator = String.duplicate("-", String.length(header))
-
-    body =
-      tasks
-      |> Enum.map(fn task ->
-        cols
-        |> Enum.map(fn col -> task |> Map.get(String.to_atom(col), "") |> to_s() end)
-        |> Enum.join(" | ")
+  defp tasks_payload(action, tasks, extras \\ %{}) do
+    counts =
+      Enum.reduce(tasks, %{"open" => 0, "in_progress" => 0, "done" => 0, "blocked" => 0}, fn t,
+                                                                                             acc ->
+        Map.update(acc, t.status, 1, &(&1 + 1))
       end)
-      |> Enum.join("\n")
 
-    "#{header}\n#{separator}\n#{body}\n\n#{length(tasks)} task(s)"
+    payload = %{
+      kind: "tasks",
+      action: action,
+      tasks: Enum.map(tasks, &task_to_wire_map/1),
+      total: length(tasks),
+      counts: counts,
+      changes: Map.get(extras, :changes, []),
+      notes: Map.get(extras, :notes, [])
+    }
+
+    case Map.get(extras, :operations) do
+      nil -> payload
+      operations -> Map.put(payload, :operations, operations)
+    end
   end
+
+  defp task_to_wire_map(task) do
+    %{
+      id: task.id,
+      label: task.label,
+      status: task.status,
+      done: task.status == "done",
+      priority: task.priority,
+      group_name: task.group_name,
+      tags: split_csv(task.tags),
+      due: nil_if_blank(task.due),
+      notes: task.notes,
+      blocked_by: split_csv(task.blocked_by),
+      created_at: task.created_at,
+      updated_at: task.updated_at
+    }
+  end
+
+  defp split_csv(nil), do: []
+  defp split_csv(""), do: []
+
+  defp split_csv(value) when is_binary(value) do
+    value
+    |> String.split(",", trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp split_csv(value), do: [to_string(value)]
+
+  defp nil_if_blank(nil), do: nil
+  defp nil_if_blank(""), do: nil
+  defp nil_if_blank(value), do: value
 
   defp task_to_string_map(task) do
     Map.new(task, fn {k, v} -> {to_string(k), to_s(v)} end)

@@ -373,8 +373,8 @@ export interface ToolExecutionEndEvent {
   tool: string;
   /** Unique call identifier. */
   callId: string;
-  /** Tool execution result. May include optional output or error string fields. */
-  result: { ok: boolean };
+  /** Tool execution result object. Includes ok plus tool-specific payload fields. */
+  result: Record<string, unknown>;
 }
 
 export interface TurnEndEvent {
@@ -489,7 +489,7 @@ export interface TokenUsage {
 
 export interface ToolResult {
   ok: boolean;
-  output?: string;
+  output?: unknown;
   error?: string;
 }
 

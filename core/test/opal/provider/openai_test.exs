@@ -72,6 +72,28 @@ defmodule Opal.Provider.OpenAITest do
                OpenAI.parse_chat_event(event)
     end
 
+    test "tool_call_start includes call_index when present" do
+      event = %{
+        "choices" => [
+          %{
+            "delta" => %{
+              "tool_calls" => [
+                %{
+                  "index" => 1,
+                  "id" => "call_def",
+                  "function" => %{"name" => "sub_agent"}
+                }
+              ]
+            },
+            "finish_reason" => nil
+          }
+        ]
+      }
+
+      assert [{:tool_call_start, %{call_id: "call_def", call_index: 1, name: "sub_agent"}}] =
+               OpenAI.parse_chat_event(event)
+    end
+
     test "tool_call_delta with arguments" do
       event = %{
         "choices" => [
@@ -84,7 +106,32 @@ defmodule Opal.Provider.OpenAITest do
         ]
       }
 
-      assert [{:tool_call_delta, "{\"path\":"}] = OpenAI.parse_chat_event(event)
+      assert [{:tool_call_delta, %{delta: "{\"path\":"}}] = OpenAI.parse_chat_event(event)
+    end
+
+    test "tool_call_delta includes call identifiers when present" do
+      event = %{
+        "choices" => [
+          %{
+            "delta" => %{
+              "tool_calls" => [
+                %{
+                  "index" => 0,
+                  "id" => "call_xyz",
+                  "function" => %{"arguments" => "{\"prompt\":\"write tests\"}"}
+                }
+              ]
+            },
+            "finish_reason" => nil
+          }
+        ]
+      }
+
+      assert [
+               {:tool_call_start, %{call_id: "call_xyz", call_index: 0}},
+               {:tool_call_delta,
+                %{call_id: "call_xyz", call_index: 0, delta: "{\"prompt\":\"write tests\"}"}}
+             ] = OpenAI.parse_chat_event(event)
     end
   end
 

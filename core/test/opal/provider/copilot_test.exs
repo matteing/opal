@@ -143,7 +143,20 @@ defmodule Opal.Provider.CopilotTest do
   describe "parse_stream_event/1 — function call events" do
     test "function_call_arguments.delta returns tool_call_delta" do
       data = sse_event("response.function_call_arguments.delta", %{"delta" => "{\"path\":"})
-      assert [{:tool_call_delta, "{\"path\":"}] = Copilot.parse_stream_event(data)
+      assert [{:tool_call_delta, %{delta: "{\"path\":"}}] = Copilot.parse_stream_event(data)
+    end
+
+    test "function_call_arguments.delta includes identifiers when present" do
+      data =
+        sse_event("response.function_call_arguments.delta", %{
+          "item_id" => "item_123",
+          "output_index" => 2,
+          "delta" => "{\"prompt\":"
+        })
+
+      assert [
+               {:tool_call_delta, %{item_id: "item_123", call_index: 2, delta: "{\"prompt\":"}}
+             ] = Copilot.parse_stream_event(data)
     end
 
     test "function_call_arguments.done with valid JSON returns parsed arguments" do
@@ -355,7 +368,7 @@ defmodule Opal.Provider.CopilotTest do
         })
 
       events = Copilot.parse_stream_event(data)
-      assert {:tool_call_delta, "{\"path\":"} in events
+      assert {:tool_call_delta, %{delta: "{\"path\":"}} in events
     end
 
     test "parses finish_reason stop" do

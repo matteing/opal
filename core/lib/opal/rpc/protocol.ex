@@ -705,9 +705,9 @@ defmodule Opal.RPC.Protocol do
         %{name: "call_id", type: :string, description: "Unique call identifier."},
         %{
           name: "result",
-          type: {:object, %{"ok" => :boolean}},
+          type: :object,
           description:
-            "Tool execution result. May include optional output or error string fields."
+            "Tool execution result object. Includes ok plus tool-specific payload fields."
         }
       ]
     },

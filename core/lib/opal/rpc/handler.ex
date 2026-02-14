@@ -337,10 +337,8 @@ defmodule Opal.RPC.Handler do
 
   def handle("tasks/list", %{"session_id" => sid}) do
     case lookup_agent(sid) do
-      {:ok, agent} ->
-        info = Opal.get_info(agent)
-
-        case Opal.Tool.Tasks.query_raw(info.working_dir, nil) do
+      {:ok, _agent} ->
+        case Opal.Tool.Tasks.query_raw(%{session_id: sid}, nil) do
           {:ok, tasks} -> {:ok, %{tasks: tasks}}
           {:error, reason} -> {:error, Opal.RPC.internal_error(), "Tasks query failed", reason}
         end
