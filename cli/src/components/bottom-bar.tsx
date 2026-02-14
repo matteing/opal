@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, memo, type FC } from "react";
 import { Box, Text, useStdout } from "ink";
 import { StableTextInput } from "./stable-text-input.js";
 import type { OpalActions, OpalState } from "../hooks/use-opal.js";
+import { formatTokens } from "../lib/formatting.js";
 
 export interface BottomBarProps {
   state: OpalState;
@@ -45,13 +46,7 @@ export const BottomBar: FC<BottomBarProps> = memo(
       }
     }, []);
 
-    const formatTokens = (tokens: number | undefined): string => {
-      if (tokens == null) return "0";
-      if (tokens >= 1000) {
-        return Math.round(tokens / 1000) + "k";
-      }
-      return tokens.toString();
-    };
+    // formatTokens imported from lib/formatting
 
     const tokenDisplay =
       state.tokenUsage && state.tokenUsage.contextWindow > 0

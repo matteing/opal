@@ -27,6 +27,11 @@
       "options": { "cwd": "cli" },
       "inputs": ["source", "{workspaceRoot}/eslint.config.js", "{workspaceRoot}/.prettierrc"]
     },
+    "test": {
+      "command": "pnpm test",
+      "options": { "cwd": "cli" },
+      "inputs": ["source"]
+    },
     "format": {
       "command": "pnpm lint:fix && pnpm format",
       "options": { "cwd": "cli" },
