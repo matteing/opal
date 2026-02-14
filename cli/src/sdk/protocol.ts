@@ -13,6 +13,13 @@ export interface SessionStartParams {
   tools?: string[];
   /** MCP server configurations. */
   mcpServers?: Record<string, unknown>[];
+  /** Boot-time feature toggles. */
+  features?: {
+    debug: boolean;
+    mcp: boolean;
+    skills: boolean;
+    subAgents: boolean;
+  };
   /** If true, enable session persistence. */
   session?: boolean;
 }
@@ -219,6 +226,49 @@ export interface SettingsSaveResult {
   settings: Record<string, unknown>;
 }
 
+export interface OpalConfigGetParams {
+  /** Target session ID. */
+  sessionId: string;
+}
+
+export interface OpalConfigGetResult {
+  /** Current runtime feature flags. */
+  features: {
+    debug: boolean;
+    mcp: boolean;
+    skills: boolean;
+    subAgents: boolean;
+  };
+  /** Tool availability for the session. */
+  tools: { all: string[]; disabled: string[]; enabled: string[] };
+}
+
+export interface OpalConfigSetParams {
+  /** Target session ID. */
+  sessionId: string;
+  /** Feature flags to update. */
+  features?: {
+    debug: boolean;
+    mcp: boolean;
+    skills: boolean;
+    subAgents: boolean;
+  };
+  /** Exact list of enabled tool names. */
+  tools?: string[];
+}
+
+export interface OpalConfigSetResult {
+  /** Current runtime feature flags. */
+  features: {
+    debug: boolean;
+    mcp: boolean;
+    skills: boolean;
+    subAgents: boolean;
+  };
+  /** Tool availability for the session. */
+  tools: { all: string[]; disabled: string[]; enabled: string[] };
+}
+
 export interface ClientConfirmParams {
   /** Session this confirmation belongs to. */
   sessionId: string;
@@ -420,6 +470,8 @@ export const Methods = {
   TASKS_LIST: "tasks/list" as const,
   SETTINGS_GET: "settings/get" as const,
   SETTINGS_SAVE: "settings/save" as const,
+  OPAL_CONFIG_GET: "opal/config/get" as const,
+  OPAL_CONFIG_SET: "opal/config/set" as const,
   CLIENT_CONFIRM: "client/confirm" as const,
   CLIENT_INPUT: "client/input" as const,
   CLIENT_ASK_USER: "client/ask_user" as const,
@@ -481,6 +533,14 @@ export interface MethodTypes {
   "tasks/list": { params: TasksListParams; result: TasksListResult };
   "settings/get": { params: SettingsGetParams; result: SettingsGetResult };
   "settings/save": { params: SettingsSaveParams; result: SettingsSaveResult };
+  "opal/config/get": {
+    params: OpalConfigGetParams;
+    result: OpalConfigGetResult;
+  };
+  "opal/config/set": {
+    params: OpalConfigSetParams;
+    result: OpalConfigSetResult;
+  };
   "client/confirm": {
     params: ClientConfirmParams;
     result: ClientConfirmResult;

@@ -203,7 +203,5 @@ defmodule Opal.Agent.UsageTracker do
 
   defp model_context_window(model), do: Opal.Models.context_window(model)
 
-  defp broadcast(%State{session_id: session_id}, event) do
-    Opal.Events.broadcast(session_id, event)
-  end
+  defp broadcast(%State{} = state, event), do: Opal.Agent.EventLog.broadcast(state, event)
 end

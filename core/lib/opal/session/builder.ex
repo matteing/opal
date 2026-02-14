@@ -11,12 +11,15 @@ defmodule Opal.Session.Builder do
     cfg = Opal.Config.new(config)
     model = resolve_model(config, cfg)
     provider = resolve_provider(config, cfg, model)
+    tools = resolve_tools(config, cfg)
+    disabled_tools = resolve_disabled_tools(config, tools)
 
     [
       session_id: generate_session_id(),
       system_prompt: Map.get(config, :system_prompt, ""),
       model: model,
-      tools: Map.get(config, :tools) || cfg.default_tools,
+      tools: tools,
+      disabled_tools: disabled_tools,
       working_dir: Map.get(config, :working_dir, File.cwd!()),
       config: cfg,
       provider: provider,
@@ -62,5 +65,28 @@ defmodule Opal.Session.Builder do
 
   defp generate_session_id do
     :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
+  end
+
+  defp resolve_tools(config, cfg) do
+    case Map.get(config, :tools) do
+      tools when is_list(tools) -> tools
+      _ -> cfg.default_tools
+    end
+  end
+
+  defp resolve_disabled_tools(config, tools) do
+    all_tool_names = Enum.map(tools, & &1.name())
+
+    case Map.get(config, :tool_names) do
+      names when is_list(names) ->
+        enabled = MapSet.new(names)
+        Enum.reject(all_tool_names, &MapSet.member?(enabled, &1))
+
+      _ ->
+        case Map.get(config, :disabled_tools) do
+          names when is_list(names) -> names
+          _ -> []
+        end
+    end
   end
 end

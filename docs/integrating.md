@@ -217,7 +217,7 @@ Messages are **newline-delimited JSON** (one JSON object per line). The server s
 
 | Method | Params | Description |
 |--------|--------|-------------|
-| `session/start` | `model?`, `system_prompt?`, `working_dir?`, `tools?`, `mcp_servers?`, `session?` | Start a session, returns `session_id`, `auth` probe |
+| `session/start` | `model?`, `system_prompt?`, `working_dir?`, `tools?`, `mcp_servers?`, `features?`, `session?` | Start a session, returns `session_id`, `auth` probe |
 | `agent/prompt` | `session_id`, `text` | Send a prompt (async — events stream via notifications) |
 | `agent/steer` | `session_id`, `text` | Steer the agent mid-run |
 | `agent/abort` | `session_id` | Cancel the current run |
@@ -235,6 +235,10 @@ Messages are **newline-delimited JSON** (one JSON object per line). The server s
 | `settings/get` | — | Read persisted settings |
 | `settings/save` | `settings` | Save settings |
 | `tasks/list` | `session_id` | List tracked tasks |
+| `opal/config/get` | `session_id` | Read runtime feature/tool config for a session |
+| `opal/config/set` | `session_id`, `features?`, `tools?` | Update runtime feature/tool config for a session |
+
+`features` accepts `sub_agents`, `skills`, `mcp`, and `debug` booleans at boot (`session/start`) or runtime (`opal/config/set`).
 
 ### Server → Client Requests
 

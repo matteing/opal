@@ -30,34 +30,44 @@ defmodule Opal.RPC.Handler do
   def handle(method, params)
 
   def handle("session/start", params) do
-    opts = decode_session_opts(params)
+    case decode_session_opts(params) do
+      {:ok, opts} ->
+        case validate_boot_tool_names(opts) do
+          :ok ->
+            case Opal.start_session(opts) do
+              {:ok, agent} ->
+                info = Opal.get_info(agent)
 
-    case Opal.start_session(opts) do
-      {:ok, agent} ->
-        info = Opal.get_info(agent)
+                auth =
+                  try do
+                    Opal.Auth.probe()
+                  rescue
+                    e ->
+                      Logger.error("Auth probe failed: #{Exception.message(e)}")
+                      %{status: "setup_required", provider: nil, providers: []}
+                  end
 
-        auth =
-          try do
-            Opal.Auth.probe()
-          rescue
-            e ->
-              Logger.error("Auth probe failed: #{Exception.message(e)}")
-              %{status: "setup_required", provider: nil, providers: []}
-          end
+                {:ok,
+                 %{
+                   session_id: info.session_id,
+                   session_dir: info.session_dir,
+                   context_files: info.context_files,
+                   available_skills: Enum.map(info.available_skills, & &1.name),
+                   mcp_servers: Enum.map(info.mcp_servers, & &1.name),
+                   node_name: Atom.to_string(Node.self()),
+                   auth: auth
+                 }}
 
-        {:ok,
-         %{
-           session_id: info.session_id,
-           session_dir: info.session_dir,
-           context_files: info.context_files,
-           available_skills: Enum.map(info.available_skills, & &1.name),
-           mcp_servers: Enum.map(info.mcp_servers, & &1.name),
-           node_name: Atom.to_string(Node.self()),
-           auth: auth
-         }}
+              {:error, reason} ->
+                {:error, Opal.RPC.internal_error(), "Failed to start session", inspect(reason)}
+            end
 
-      {:error, reason} ->
-        {:error, Opal.RPC.internal_error(), "Failed to start session", inspect(reason)}
+          {:error, msg, data} ->
+            {:error, Opal.RPC.invalid_params(), msg, data}
+        end
+
+      {:error, msg, data} ->
+        {:error, Opal.RPC.invalid_params(), msg, data}
     end
   end
 
@@ -362,6 +372,47 @@ defmodule Opal.RPC.Handler do
     {:error, Opal.RPC.invalid_params(), "Missing required param: settings", nil}
   end
 
+  def handle("opal/config/get", %{"session_id" => sid}) do
+    case lookup_agent(sid) do
+      {:ok, agent} ->
+        state = Opal.Agent.get_state(agent)
+        {:ok, serialize_runtime_config(state)}
+
+      {:error, reason} ->
+        {:error, Opal.RPC.invalid_params(), "Session not found", reason}
+    end
+  end
+
+  def handle("opal/config/get", _params) do
+    {:error, Opal.RPC.invalid_params(), "Missing required param: session_id", nil}
+  end
+
+  def handle("opal/config/set", %{"session_id" => sid} = params) do
+    with {:ok, agent} <- lookup_agent(sid),
+         {:ok, features} <- parse_feature_overrides(Map.get(params, "features")),
+         {:ok, enabled_tools} <- parse_enabled_tools(Map.get(params, "tools")),
+         :ok <- validate_session_tool_names(agent, enabled_tools) do
+      config = %{
+        features: features,
+        enabled_tools: enabled_tools
+      }
+
+      :ok = Opal.configure_session(agent, config)
+      state = Opal.Agent.get_state(agent)
+      {:ok, serialize_runtime_config(state)}
+    else
+      {:error, reason} when is_binary(reason) ->
+        {:error, Opal.RPC.invalid_params(), "Session not found", reason}
+
+      {:error, msg, data} ->
+        {:error, Opal.RPC.invalid_params(), msg, data}
+    end
+  end
+
+  def handle("opal/config/set", _params) do
+    {:error, Opal.RPC.invalid_params(), "Missing required param: session_id", nil}
+  end
+
   # Catch-all for unknown methods
   def handle(method, _params) do
     {:error, Opal.RPC.method_not_found(), "Method not found: #{method}", nil}
@@ -369,33 +420,157 @@ defmodule Opal.RPC.Handler do
 
   # -- Private Helpers --
 
-  defp decode_session_opts(params) do
-    opts = %{}
+  defp decode_session_opts(params) when is_map(params) do
+    with {:ok, opts} <- decode_model_opt(params, %{}),
+         {:ok, opts} <- decode_feature_opts(params, opts),
+         {:ok, opts} <- decode_tool_opt(params, opts) do
+      opts =
+        opts
+        |> maybe_put_string(params, "system_prompt", :system_prompt)
+        |> Map.put(:working_dir, Map.get(params, "working_dir", File.cwd!()))
+        |> maybe_put_true(params, "session", :session)
 
-    opts =
-      case params do
-        %{"model" => %{"provider" => p, "id" => id}} ->
-          Map.put(opts, :model, {String.to_existing_atom(p), id})
+      {:ok, opts}
+    end
+  end
 
-        _ ->
-          opts
-      end
+  defp decode_session_opts(_), do: {:error, "Invalid params", "params must be an object"}
 
-    opts =
-      case params do
-        %{"system_prompt" => sp} -> Map.put(opts, :system_prompt, sp)
-        _ -> opts
-      end
+  defp decode_model_opt(%{"model" => %{"provider" => p, "id" => id}}, opts)
+       when is_binary(p) and is_binary(id) and p != "" and id != "" do
+    {:ok, Map.put(opts, :model, "#{p}:#{id}")}
+  end
 
-    opts =
-      case params do
-        %{"working_dir" => wd} -> Map.put(opts, :working_dir, wd)
-        _ -> Map.put(opts, :working_dir, File.cwd!())
-      end
+  defp decode_model_opt(%{"model" => _}, _opts) do
+    {:error, "Invalid model param", "model must be {provider, id} with non-empty strings"}
+  end
 
-    case params do
-      %{"session" => true} -> Map.put(opts, :session, true)
+  defp decode_model_opt(_params, opts), do: {:ok, opts}
+
+  defp decode_feature_opts(%{"features" => features}, opts) when is_map(features) do
+    case parse_feature_overrides(features) do
+      {:ok, feature_overrides} when map_size(feature_overrides) == 0 ->
+        {:ok, opts}
+
+      {:ok, feature_overrides} ->
+        normalized =
+          Enum.into(feature_overrides, %{}, fn {key, enabled} ->
+            {key, %{enabled: enabled}}
+          end)
+
+        {:ok, Map.put(opts, :features, normalized)}
+
+      {:error, _, _} = error ->
+        error
+    end
+  end
+
+  defp decode_feature_opts(%{"features" => _}, _opts) do
+    {:error, "Invalid features param", "features must be an object"}
+  end
+
+  defp decode_feature_opts(_params, opts), do: {:ok, opts}
+
+  defp decode_tool_opt(%{"tools" => tools}, opts) when is_list(tools) do
+    if Enum.all?(tools, &is_binary/1) do
+      {:ok, Map.put(opts, :tool_names, tools)}
+    else
+      {:error, "Invalid tools param", "tools must be an array of strings"}
+    end
+  end
+
+  defp decode_tool_opt(%{"tools" => _}, _opts) do
+    {:error, "Invalid tools param", "tools must be an array of strings"}
+  end
+
+  defp decode_tool_opt(_params, opts), do: {:ok, opts}
+
+  defp maybe_put_string(opts, params, from_key, to_key) do
+    case Map.get(params, from_key) do
+      value when is_binary(value) -> Map.put(opts, to_key, value)
       _ -> opts
+    end
+  end
+
+  defp maybe_put_true(opts, params, from_key, to_key) do
+    case Map.get(params, from_key) do
+      true -> Map.put(opts, to_key, true)
+      _ -> opts
+    end
+  end
+
+  defp validate_boot_tool_names(%{tool_names: names} = opts) when is_list(names) do
+    cfg = Opal.Config.new(opts)
+    available = Enum.map(cfg.default_tools, & &1.name())
+    unknown = names -- available
+
+    if unknown == [] do
+      :ok
+    else
+      {:error, "Unknown tools in tools list", "unknown tools: #{Enum.join(unknown, ", ")}"}
+    end
+  end
+
+  defp validate_boot_tool_names(_opts), do: :ok
+
+  defp parse_feature_overrides(nil), do: {:ok, %{}}
+
+  defp parse_feature_overrides(features) when is_map(features) do
+    key_map = %{
+      "sub_agents" => :sub_agents,
+      "skills" => :skills,
+      "mcp" => :mcp,
+      "debug" => :debug
+    }
+
+    unknown_keys =
+      features
+      |> Map.keys()
+      |> Enum.reject(&Map.has_key?(key_map, &1))
+
+    cond do
+      unknown_keys != [] ->
+        {:error, "Unknown feature keys", "unknown features: #{Enum.join(unknown_keys, ", ")}"}
+
+      true ->
+        Enum.reduce_while(features, {:ok, %{}}, fn {key, value}, {:ok, acc} ->
+          if is_boolean(value) do
+            feature_key = Map.fetch!(key_map, key)
+            {:cont, {:ok, Map.put(acc, feature_key, value)}}
+          else
+            {:halt, {:error, "Invalid feature value", "#{key} must be a boolean"}}
+          end
+        end)
+    end
+  end
+
+  defp parse_feature_overrides(_),
+    do: {:error, "Invalid features param", "features must be an object"}
+
+  defp parse_enabled_tools(nil), do: {:ok, nil}
+
+  defp parse_enabled_tools(tools) when is_list(tools) do
+    if Enum.all?(tools, &is_binary/1) do
+      {:ok, tools}
+    else
+      {:error, "Invalid tools param", "tools must be an array of strings"}
+    end
+  end
+
+  defp parse_enabled_tools(_),
+    do: {:error, "Invalid tools param", "tools must be an array of strings"}
+
+  defp validate_session_tool_names(_agent, nil), do: :ok
+
+  defp validate_session_tool_names(agent, enabled_tools) when is_list(enabled_tools) do
+    state = Opal.Agent.get_state(agent)
+    available = Enum.map(state.tools, & &1.name())
+    unknown = enabled_tools -- available
+
+    if unknown == [] do
+      :ok
+    else
+      {:error, "Unknown tools in tools list", "unknown tools: #{Enum.join(unknown, ", ")}"}
     end
   end
 
@@ -429,6 +604,25 @@ defmodule Opal.RPC.Handler do
       message_count: info.message_count,
       tools: Enum.map(info.tools, fn t -> t.name() end),
       token_usage: info.token_usage
+    }
+  end
+
+  defp serialize_runtime_config(%Opal.Agent.State{} = state) do
+    all_tools = Enum.map(state.tools, & &1.name())
+    enabled_tools = Opal.Agent.Tools.active_tools(state) |> Enum.map(& &1.name())
+
+    %{
+      features: %{
+        sub_agents: state.config.features.sub_agents.enabled,
+        skills: state.config.features.skills.enabled,
+        mcp: state.config.features.mcp.enabled,
+        debug: state.config.features.debug.enabled
+      },
+      tools: %{
+        all: all_tools,
+        enabled: enabled_tools,
+        disabled: state.disabled_tools
+      }
     }
   end
 

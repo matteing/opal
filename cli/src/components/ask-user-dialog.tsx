@@ -1,6 +1,6 @@
-import React, { useState, type FC } from "react";
-import { Box, Text, useInput } from "ink";
-import TextInput from "ink-text-input";
+import React, { useState, useCallback, useRef, type FC } from "react";
+import { Box, Text, useInput, type Key } from "ink";
+import { StableTextInput } from "./stable-text-input.js";
 
 export interface AskUserDialogProps {
   question: string;
@@ -13,23 +13,38 @@ export const AskUserDialog: FC<AskUserDialogProps> = ({ question, choices, onRes
   const [freeform, setFreeform] = useState("");
   const hasChoices = choices.length > 0;
 
-  useInput((input, key) => {
-    if (hasChoices) {
-      if (key.upArrow) {
-        setSelected((s) => Math.max(0, s - 1));
-      } else if (key.downArrow) {
-        setSelected((s) => Math.min(choices.length - 1, s + 1));
-      } else if (key.return && !freeform) {
-        onResolve(choices[selected]);
-      }
-    }
-  });
+  // Refs for stable useInput handler
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const freeformRef = useRef(freeform);
+  freeformRef.current = freeform;
+  const onResolveRef = useRef(onResolve);
+  onResolveRef.current = onResolve;
+  const choicesRef = useRef(choices);
+  choicesRef.current = choices;
 
-  const handleFreeformSubmit = (text: string) => {
+  const inputHandler = useCallback(
+    (_input: string, key: Key) => {
+      if (hasChoices) {
+        if (key.upArrow) {
+          setSelected((s) => Math.max(0, s - 1));
+        } else if (key.downArrow) {
+          setSelected((s) => Math.min(choicesRef.current.length - 1, s + 1));
+        } else if (key.return && !freeformRef.current) {
+          onResolveRef.current(choicesRef.current[selectedRef.current]);
+        }
+      }
+    },
+    [hasChoices],
+  );
+
+  useInput(inputHandler);
+
+  const handleFreeformSubmit = useCallback((text: string) => {
     if (text.trim()) {
-      onResolve(text.trim());
+      onResolveRef.current(text.trim());
     }
-  };
+  }, []);
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1}>
@@ -54,7 +69,7 @@ export const AskUserDialog: FC<AskUserDialogProps> = ({ question, choices, onRes
       <Box marginTop={1}>
         {hasChoices && <Text dimColor>Or type a custom answer: </Text>}
         <Text color="cyan">❯ </Text>
-        <TextInput
+        <StableTextInput
           value={freeform}
           onChange={setFreeform}
           onSubmit={handleFreeformSubmit}

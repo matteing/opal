@@ -266,6 +266,14 @@ defmodule Opal do
     Opal.Agent.set_model(agent, model)
   end
 
+  @doc """
+  Updates runtime feature/tool configuration for a running session.
+  """
+  @spec configure_session(pid(), map()) :: :ok
+  def configure_session(agent, attrs) when is_map(attrs) do
+    Opal.Agent.configure(agent, attrs)
+  end
+
   # --- Private Helpers ---
 
   # Finds the SessionServer supervisor that owns the given agent pid.

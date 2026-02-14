@@ -62,8 +62,10 @@ defmodule Opal.Tool.Read do
 
   @impl true
   @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
-  def execute(%{"path" => path} = args, %{working_dir: working_dir}) do
-    with {:ok, resolved} <- FileHelper.resolve_path(path, working_dir),
+  def execute(%{"path" => path} = args, %{working_dir: working_dir} = context) do
+    allow_bases = FileHelper.allowed_bases(context)
+
+    with {:ok, resolved} <- FileHelper.resolve_path(path, working_dir, allow_bases: allow_bases),
          {:ok, raw_content} <- FileHelper.read_file(resolved) do
       # Strip BOM so the LLM sees clean text (BOM is invisible and would
       # cause mismatches if the LLM later tries to edit the file).

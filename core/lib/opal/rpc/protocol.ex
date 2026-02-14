@@ -128,6 +128,19 @@ defmodule Opal.RPC.Protocol do
           description: "MCP server configurations."
         },
         %{
+          name: "features",
+          type:
+            {:object,
+             %{
+               "sub_agents" => :boolean,
+               "skills" => :boolean,
+               "mcp" => :boolean,
+               "debug" => :boolean
+             }},
+          required: false,
+          description: "Boot-time feature toggles."
+        },
+        %{
           name: "session",
           type: :boolean,
           required: false,
@@ -445,6 +458,91 @@ defmodule Opal.RPC.Protocol do
       ],
       result: [
         %{name: "settings", type: :object, description: "The full settings after merge."}
+      ]
+    },
+    %{
+      method: "opal/config/get",
+      direction: :client_to_server,
+      description: "Get runtime feature and tool configuration for a session.",
+      params: [
+        %{name: "session_id", type: :string, required: true, description: "Target session ID."}
+      ],
+      result: [
+        %{
+          name: "features",
+          type:
+            {:object,
+             %{
+               "sub_agents" => :boolean,
+               "skills" => :boolean,
+               "mcp" => :boolean,
+               "debug" => :boolean
+             }},
+          description: "Current runtime feature flags."
+        },
+        %{
+          name: "tools",
+          type:
+            {:object,
+             %{
+               "all" => {:array, :string},
+               "enabled" => {:array, :string},
+               "disabled" => {:array, :string}
+             }},
+          description: "Tool availability for the session."
+        }
+      ]
+    },
+    %{
+      method: "opal/config/set",
+      direction: :client_to_server,
+      description: "Update runtime feature and tool configuration for a session.",
+      params: [
+        %{name: "session_id", type: :string, required: true, description: "Target session ID."},
+        %{
+          name: "features",
+          type:
+            {:object,
+             %{
+               "sub_agents" => :boolean,
+               "skills" => :boolean,
+               "mcp" => :boolean,
+               "debug" => :boolean
+             }},
+          required: false,
+          description: "Feature flags to update."
+        },
+        %{
+          name: "tools",
+          type: {:array, :string},
+          required: false,
+          description: "Exact list of enabled tool names."
+        }
+      ],
+      result: [
+        %{
+          name: "features",
+          type:
+            {:object,
+             %{
+               "sub_agents" => :boolean,
+               "skills" => :boolean,
+               "mcp" => :boolean,
+               "debug" => :boolean
+             }},
+          description: "Current runtime feature flags."
+        },
+        %{
+          name: "tools",
+          type:
+            {:object,
+             %{
+               "all" => {:array, :string},
+               "enabled" => {:array, :string},
+               "disabled" => {:array, :string}
+             }},
+          description: "Tool availability for the session."
+        }
       ]
     }
   ]

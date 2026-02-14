@@ -165,4 +165,85 @@ defmodule Opal.RPC.HandlerTest do
                })
     end
   end
+
+  describe "handle/2 opal/config/get" do
+    test "returns runtime feature and tool config for an active session" do
+      {:ok, agent} = Opal.start_session(%{working_dir: File.cwd!()})
+      on_exit(fn -> Opal.stop_session(agent) end)
+      sid = Opal.get_info(agent).session_id
+
+      assert {:ok, %{features: features, tools: tools}} =
+               Handler.handle("opal/config/get", %{"session_id" => sid})
+
+      assert is_boolean(features.sub_agents)
+      assert is_boolean(features.skills)
+      assert is_boolean(features.mcp)
+      assert is_boolean(features.debug)
+      assert is_list(tools.all)
+      assert is_list(tools.enabled)
+      assert is_list(tools.disabled)
+    end
+  end
+
+  describe "handle/2 opal/config/set" do
+    test "updates runtime features and tool allowlist" do
+      {:ok, agent} = Opal.start_session(%{working_dir: File.cwd!()})
+      on_exit(fn -> Opal.stop_session(agent) end)
+      sid = Opal.get_info(agent).session_id
+
+      assert {:ok, %{tools: %{all: [first_tool | _]}}} =
+               Handler.handle("opal/config/get", %{"session_id" => sid})
+
+      enabled_tools = Enum.uniq([first_tool, "debug_state"])
+
+      assert {:ok, %{features: features, tools: tools}} =
+               Handler.handle("opal/config/set", %{
+                 "session_id" => sid,
+                 "features" => %{"sub_agents" => false, "debug" => true},
+                 "tools" => enabled_tools
+               })
+
+      refute features.sub_agents
+      assert features.debug
+      assert first_tool in tools.enabled
+      assert "debug_state" in tools.enabled
+      assert first_tool in tools.all
+    end
+
+    test "returns invalid_params for unknown tool names" do
+      {:ok, agent} = Opal.start_session(%{working_dir: File.cwd!()})
+      on_exit(fn -> Opal.stop_session(agent) end)
+      sid = Opal.get_info(agent).session_id
+
+      assert {:error, -32602, "Unknown tools in tools list", _} =
+               Handler.handle("opal/config/set", %{
+                 "session_id" => sid,
+                 "tools" => ["definitely_not_a_tool"]
+               })
+    end
+  end
+
+  describe "handle/2 session/start with feature toggles" do
+    test "accepts boot-time feature and tool configuration" do
+      assert {:ok, %{session_id: sid}} =
+               Handler.handle("session/start", %{
+                 "working_dir" => File.cwd!(),
+                 "features" => %{"sub_agents" => false},
+                 "tools" => ["read_file"]
+               })
+
+      on_exit(fn ->
+        case Registry.lookup(Opal.Registry, {:agent, sid}) do
+          [{agent, _}] -> Opal.stop_session(agent)
+          [] -> :ok
+        end
+      end)
+
+      assert {:ok, %{features: features, tools: tools}} =
+               Handler.handle("opal/config/get", %{"session_id" => sid})
+
+      refute features.sub_agents
+      assert tools.enabled == ["read_file"]
+    end
+  end
 end

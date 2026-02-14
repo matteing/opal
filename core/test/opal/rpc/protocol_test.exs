@@ -44,6 +44,8 @@ defmodule Opal.RPC.ProtocolTest do
       assert "models/list" in names
       assert "auth/status" in names
       assert "auth/login" in names
+      assert "opal/config/get" in names
+      assert "opal/config/set" in names
     end
   end
 
@@ -60,6 +62,19 @@ defmodule Opal.RPC.ProtocolTest do
 
     test "returns nil for unknown method" do
       assert Protocol.method("foo/bar") == nil
+    end
+
+    test "feature schemas include debug toggle" do
+      session_start = Protocol.method("session/start")
+      opal_set = Protocol.method("opal/config/set")
+
+      start_features = Enum.find(session_start.params, &(&1.name == "features"))
+      set_features = Enum.find(opal_set.params, &(&1.name == "features"))
+
+      assert {:object, start_feature_fields} = start_features.type
+      assert {:object, set_feature_fields} = set_features.type
+      assert start_feature_fields["debug"] == :boolean
+      assert set_feature_fields["debug"] == :boolean
     end
   end
 

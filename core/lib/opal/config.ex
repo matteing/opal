@@ -42,6 +42,7 @@ defmodule Opal.Config.Features do
     * `:context` — walk-up context file discovery (AGENTS.md, OPAL.md, etc.)
     * `:skills` — skill directory discovery and progressive disclosure
     * `:mcp` — MCP (Model Context Protocol) client integration
+    * `:debug` — internal debug/introspection tooling (disabled by default)
 
   ## Usage
 
@@ -58,7 +59,8 @@ defmodule Opal.Config.Features do
           sub_agents: %{enabled: true},
           context: %{filenames: ["AGENTS.md"]},
           skills: %{extra_dirs: ["/opt/skills"]},
-          mcp: %{enabled: true, servers: [], config_files: []}
+          mcp: %{enabled: true, servers: [], config_files: []},
+          debug: %{enabled: false}
         }
   """
 
@@ -66,7 +68,8 @@ defmodule Opal.Config.Features do
           sub_agents: sub_agents_config(),
           context: context_config(),
           skills: skills_config(),
-          mcp: mcp_config()
+          mcp: mcp_config(),
+          debug: debug_config()
         }
 
   @typedoc """
@@ -112,10 +115,19 @@ defmodule Opal.Config.Features do
   """
   @type mcp_config :: %{enabled: boolean(), servers: [map()], config_files: [String.t()]}
 
+  @typedoc """
+  Internal debug/introspection feature configuration.
+
+    * `:enabled` — whether internal debug tooling is available. Default: `false`.
+      When disabled, the debug tool is filtered out and no in-memory event log is kept.
+  """
+  @type debug_config :: %{enabled: boolean()}
+
   defstruct sub_agents: %{enabled: true},
             context: %{enabled: true, filenames: ["AGENTS.md", "OPAL.md"]},
             skills: %{enabled: true, extra_dirs: []},
-            mcp: %{enabled: true, servers: [], config_files: []}
+            mcp: %{enabled: true, servers: [], config_files: []},
+            debug: %{enabled: false}
 
   @doc """
   Builds a Features struct from a map or keyword list.
@@ -147,6 +159,7 @@ defmodule Opal.Config.Features do
     |> merge_subsystem(:context, attrs)
     |> merge_subsystem(:skills, attrs)
     |> merge_subsystem(:mcp, attrs)
+    |> merge_subsystem(:debug, attrs)
   end
 
   defp merge_subsystem(features, key, attrs) do
@@ -195,7 +208,7 @@ defmodule Opal.Config do
       Default: `{"copilot", "claude-sonnet-4"}`.
 
     * `:default_tools` — list of modules implementing `Opal.Tool` available
-      to the agent. Default: `[Read, Write, EditLines, Shell, SubAgent, Tasks, UseSkill, AskUser]`.
+      to the agent. Default: `[Read, Write, EditLines, Shell, SubAgent, Tasks, UseSkill, AskUser, Debug]`.
 
     * `:provider` — module implementing `Opal.Provider` for LLM communication.
       Default: `Opal.Provider.Copilot`. Use `Opal.Provider.LLM` for ReqLLM-backed
@@ -215,7 +228,7 @@ defmodule Opal.Config do
       subsystems. Each subsystem has an `:enabled` toggle and subsystem-specific
       options. See `Opal.Config.Features` for full documentation.
 
-      Subsystems: `:sub_agents`, `:context`, `:skills`, `:mcp`.
+      Subsystems: `:sub_agents`, `:context`, `:skills`, `:mcp`, `:debug`.
 
   ## Application config example
 
@@ -224,7 +237,8 @@ defmodule Opal.Config do
         shell: :zsh,
         default_model: {"copilot", "claude-sonnet-4-5"},
         default_tools: [Opal.Tool.Read, Opal.Tool.Write, Opal.Tool.EditLines, Opal.Tool.Shell,
-                        Opal.Tool.SubAgent, Opal.Tool.Tasks, Opal.Tool.UseSkill, Opal.Tool.AskUser],
+                        Opal.Tool.SubAgent, Opal.Tool.Tasks, Opal.Tool.UseSkill, Opal.Tool.AskUser,
+                        Opal.Tool.Debug],
         copilot: [
           client_id: "Iv1.b507a08c87ecfe98",
           domain: "github.com"
@@ -233,7 +247,8 @@ defmodule Opal.Config do
           sub_agents: %{enabled: true},
           context: %{filenames: ["AGENTS.md", "OPAL.md"]},
           skills: %{extra_dirs: []},
-          mcp: %{enabled: true, servers: [], config_files: []}
+          mcp: %{enabled: true, servers: [], config_files: []},
+          debug: %{enabled: false}
         }
   """
 
@@ -261,7 +276,8 @@ defmodule Opal.Config do
               Opal.Tool.SubAgent,
               Opal.Tool.Tasks,
               Opal.Tool.UseSkill,
-              Opal.Tool.AskUser
+              Opal.Tool.AskUser,
+              Opal.Tool.Debug
             ],
             provider: Opal.Provider.Copilot,
             auto_save: false,
