@@ -54,6 +54,8 @@ defmodule Opal.Agent.SystemPrompt do
       &write_guidelines/1,
       &shell_display_warning/1,
       &search_guidelines/1,
+      &parallel_tool_calls/1,
+      &sub_agent_parallelism/1,
       &status_tags/1
     ]
     |> Enum.flat_map(fn rule_fn ->
@@ -104,6 +106,40 @@ defmodule Opal.Agent.SystemPrompt do
       "Use shell commands like `cat`, `grep`, `find`, and `ls` for file exploration."
     end
   end
+
+  # -- Parallelism rules ------------------------------------------------------
+
+  # When multiple tools are available, encourage batching independent calls
+  # into a single response so the runtime can execute them concurrently.
+  # The threshold of 3+ tools filters out degenerate cases (e.g. only
+  # read_file + shell) where parallelism opportunities are rare.
+  defp parallel_tool_calls(names) do
+    if MapSet.size(names) >= 3 do
+      [
+        "Check that all the required parameters for each tool call are provided " <>
+          "or can reasonably be inferred from context. " <>
+          "IF there are no relevant tools or there are missing values for required parameters, " <>
+          "ask the user to supply these values; otherwise proceed with the tool calls. " <>
+          "If the user provides a specific value for a parameter (for example provided in quotes), " <>
+          "make sure to use that value EXACTLY. DO NOT make up values for or ask about optional parameters.",
+        "If you intend to call multiple tools and there are no dependencies between the calls, " <>
+          "make all of the independent calls in the same response rather than sequentially, " <>
+          "otherwise you MUST wait for previous calls to finish first to determine the " <>
+          "dependent values (do NOT use placeholders or guess missing parameters)."
+      ]
+    end
+  end
+
+  # When sub_agent is available, encourage using it for independent parallel
+  # workstreams while warning against overuse on simple sequential tasks.
+  defp sub_agent_parallelism(names) do
+    if "sub_agent" in names do
+      "Use `sub_agent` to delegate independent workstreams that can run in parallel. " <>
+        "Avoid sub-agents for simple tasks a single tool call can handle."
+    end
+  end
+
+  # -- Helpers ----------------------------------------------------------------
 
   # Checks if any shell-type tool is in the active set.
   defp has_shell?(names) do

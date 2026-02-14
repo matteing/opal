@@ -32,6 +32,14 @@ defmodule Opal.Agent.SystemPromptTest do
     def name, do: "powershell"
   end
 
+  defmodule SubAgentStub do
+    def name, do: "sub_agent"
+  end
+
+  defmodule TasksStub do
+    def name, do: "tasks"
+  end
+
   defmodule CustomStub do
     def name, do: "custom_tool"
   end
@@ -106,6 +114,63 @@ defmodule Opal.Agent.SystemPromptTest do
       # Each rule should be prefixed with "- "
       lines = result |> String.split("\n") |> Enum.filter(&String.starts_with?(&1, "- "))
       assert length(lines) >= 2
+    end
+  end
+
+  describe "parallel tool calls" do
+    test "emits parallel call guidance when 3+ tools are active" do
+      tools = [ReadStub, WriteStub, ShellStub]
+      result = SystemPrompt.build_guidelines(tools)
+
+      assert result =~ "no dependencies between the calls"
+      assert result =~ "independent calls in the same response"
+    end
+
+    test "does not emit parallel call guidance with only 2 tools" do
+      tools = [ReadStub, ShellStub]
+      result = SystemPrompt.build_guidelines(tools)
+
+      refute result =~ "no dependencies between the calls"
+    end
+
+    test "includes parameter validation guidance with 3+ tools" do
+      tools = [ReadStub, WriteStub, ShellStub]
+      result = SystemPrompt.build_guidelines(tools)
+
+      assert result =~ "required parameters"
+      assert result =~ "DO NOT make up values"
+    end
+
+    test "warns against using placeholders for dependent values" do
+      tools = [ReadStub, EditStub, ShellStub]
+      result = SystemPrompt.build_guidelines(tools)
+
+      assert result =~ "do NOT use placeholders"
+    end
+  end
+
+  describe "sub-agent parallelism" do
+    test "emits sub-agent guidance when sub_agent tool is active" do
+      tools = [ReadStub, ShellStub, SubAgentStub]
+      result = SystemPrompt.build_guidelines(tools)
+
+      assert result =~ "sub_agent"
+      assert result =~ "independent workstreams"
+    end
+
+    test "does not emit sub-agent guidance when sub_agent is absent" do
+      tools = [ReadStub, WriteStub, ShellStub]
+      result = SystemPrompt.build_guidelines(tools)
+
+      refute result =~ "sub_agent"
+      refute result =~ "independent workstreams"
+    end
+
+    test "warns against overuse on simple tasks" do
+      tools = [SubAgentStub, ShellStub]
+      result = SystemPrompt.build_guidelines(tools)
+
+      assert result =~ "Avoid sub-agents for simple tasks"
     end
   end
 end
