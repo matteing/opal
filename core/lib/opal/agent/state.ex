@@ -38,8 +38,7 @@ defmodule Opal.Agent.State do
           retry_max_delay_ms: pos_integer(),
           overflow_detected: boolean(),
           question_handler: (map() -> {:ok, String.t()} | {:error, term()}) | nil,
-          pending_tool_task: {Task.t(), map()} | nil,
-          remaining_tool_calls: [map()],
+          pending_tool_tasks: %{reference() => {Task.t(), map()}},
           tool_results: [{map(), term()}],
           tool_context: map() | nil
         }
@@ -90,8 +89,7 @@ defmodule Opal.Agent.State do
     overflow_detected: false,
     last_usage_msg_index: 0,
     question_handler: nil,
-    pending_tool_task: nil,
-    remaining_tool_calls: [],
+    pending_tool_tasks: %{},
     tool_results: [],
     tool_context: nil
   ]

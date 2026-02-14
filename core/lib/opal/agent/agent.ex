@@ -423,48 +423,33 @@ defmodule Opal.Agent do
     end
   end
 
+  # Tool task completed successfully — match ref against pending_tool_tasks map.
   def handle_info(
         {ref, result},
         %State{
           status: :executing_tools,
-          pending_tool_task: {%Task{ref: task_ref} = task, tc}
+          pending_tool_tasks: tasks
         } = state
       )
-      when ref == task_ref do
-    # Tool task completed successfully
+      when is_reference(ref) and is_map_key(tasks, ref) do
+    {task, tc} = Map.fetch!(tasks, ref)
     Process.demonitor(task.ref, [:flush])
-    broadcast(state, {:tool_execution_end, tc.name, tc.call_id, result})
-    state = %{state | tool_results: state.tool_results ++ [{tc, result}], pending_tool_task: nil}
-    Opal.Agent.Tools.schedule_dispatch_next_tool(state)
+    Opal.Agent.Tools.handle_tool_result(ref, tc, result, state)
   end
 
+  # Tool task crashed — match ref against pending_tool_tasks map.
   def handle_info(
         {:DOWN, ref, :process, _pid, reason},
         %State{
           status: :executing_tools,
-          pending_tool_task: {%Task{ref: task_ref}, tc}
+          pending_tool_tasks: tasks
         } = state
       )
-      when ref == task_ref do
-    # Tool task crashed
+      when is_map_key(tasks, ref) do
+    {_task, tc} = Map.fetch!(tasks, ref)
     error_msg = "Tool execution crashed: #{inspect(reason)}"
     Logger.error(error_msg)
-    broadcast(state, {:tool_execution_end, tc.name, tc.call_id, {:error, error_msg}})
-
-    state = %{
-      state
-      | tool_results: state.tool_results ++ [{tc, {:error, error_msg}}],
-        pending_tool_task: nil
-    }
-
-    Opal.Agent.Tools.schedule_dispatch_next_tool(state)
-  end
-
-  def handle_info(
-        :dispatch_next_tool,
-        %State{status: :executing_tools, pending_tool_task: nil} = state
-      ) do
-    Opal.Agent.Tools.dispatch_next_tool(state)
+    Opal.Agent.Tools.handle_tool_result(ref, tc, {:error, error_msg}, state)
   end
 
   # Native event stream (from EventStream providers like Provider.LLM)
@@ -874,19 +859,9 @@ defmodule Opal.Agent do
 
   # --- Tool Execution ---
 
-  # Cancels an in-progress tool execution if present.
-  defp cancel_tool_execution(%State{pending_tool_task: nil} = state), do: state
-
-  defp cancel_tool_execution(%State{pending_tool_task: {task, _tc}} = state) do
-    _ = Task.shutdown(task, :brutal_kill)
-
-    %{
-      state
-      | pending_tool_task: nil,
-        remaining_tool_calls: [],
-        tool_results: [],
-        tool_context: nil
-    }
+  # Cancels all in-progress tool executions if present.
+  defp cancel_tool_execution(%State{} = state) do
+    Opal.Agent.Tools.cancel_all_tasks(state)
   end
 
   # Cancels an in-progress streaming response if present.

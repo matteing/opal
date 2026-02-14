@@ -2,9 +2,11 @@ defmodule Opal.Agent.ToolRunner do
   @moduledoc """
   Tool execution orchestration for the Agent loop.
 
-  Handles sequential execution of tool calls with steering support, task supervision,
-  and auto-loading of skills based on file modifications. Each tool runs under the
-  session's Task.Supervisor with crash isolation and streaming output support.
+  Spawns all tool calls in a batch concurrently under the session's
+  `Task.Supervisor`. Each tool runs in its own task process with crash
+  isolation and streaming output support. When every task in the batch
+  completes (or crashes), results are collected and the next agent turn
+  begins.
   """
 
   require Logger
@@ -14,14 +16,14 @@ defmodule Opal.Agent.ToolRunner do
   @file_tools ~w(write_file edit_file)
 
   @doc """
-  Starts non-blocking execution of a batch of tool calls.
+  Starts parallel execution of a batch of tool calls.
 
-  Instead of executing tools synchronously, this function sets up the state
-  for sequential tool execution via handle_info callbacks. This allows the
-  GenServer to remain responsive to abort, steer, and other messages while
-  tools are running.
+  All tool calls are spawned concurrently as supervised tasks. The GenServer
+  remains responsive to abort, steer, and other messages while tools run.
+  Results are collected as each task completes; when all are done,
+  `finalize_tool_batch/1` continues to the next turn.
 
-  Returns {:noreply, state} with status set to :executing_tools.
+  Returns `{:noreply, state}` with status set to `:executing_tools`.
   """
   @spec start_tool_execution([map()], State.t()) :: {:noreply, State.t()}
   def start_tool_execution(tool_calls, %State{} = state) do
@@ -30,66 +32,35 @@ defmodule Opal.Agent.ToolRunner do
     state = %{
       state
       | status: :executing_tools,
-        remaining_tool_calls: tool_calls,
+        pending_tool_tasks: %{},
         tool_results: [],
         tool_context: context
     }
 
-    schedule_dispatch_next_tool(state)
-  end
+    # Spawn all tool calls concurrently
+    state = Enum.reduce(tool_calls, state, &spawn_tool_task(&1, &2))
 
-  @doc """
-  Schedules dispatch of the next queued tool call.
-  """
-  @spec schedule_dispatch_next_tool(State.t()) :: {:noreply, State.t()}
-  def schedule_dispatch_next_tool(%State{} = state) do
-    send(self(), :dispatch_next_tool)
     {:noreply, state}
   end
 
   @doc """
-  Dispatches the next tool in the queue or finalizes if all tools are done.
-
-  This function is called from agent.ex handle_info callbacks and must be public.
-  Checks for steering before starting the next tool, allowing user interruption.
+  Handles a completed tool task. Records the result and finalizes
+  the batch when all tasks are done.
   """
-  @spec dispatch_next_tool(State.t()) :: {:noreply, State.t()}
-  def dispatch_next_tool(%State{remaining_tool_calls: []} = state) do
-    # All tools done — finalize
-    finalize_tool_batch(state)
-  end
+  @spec handle_tool_result(reference(), map(), {:ok, term()} | {:error, term()}, State.t()) ::
+          {:noreply, State.t()}
+  def handle_tool_result(ref, tc, result, %State{} = state) do
+    broadcast(state, {:tool_execution_end, tc.name, tc.call_id, result})
 
-  def dispatch_next_tool(%State{remaining_tool_calls: [tc | rest]} = state) do
-    if state.pending_steers != [] do
-      # Skip remaining tools
-      skipped =
-        Enum.map([tc | rest], fn tc ->
-          broadcast(state, {:tool_skipped, tc.name, tc.call_id})
-          {tc, {:error, "Skipped — user sent a steering message"}}
-        end)
+    state = %{
+      state
+      | tool_results: state.tool_results ++ [{tc, result}],
+        pending_tool_tasks: Map.delete(state.pending_tool_tasks, ref)
+    }
 
-      state = %{state | remaining_tool_calls: [], tool_results: state.tool_results ++ skipped}
+    if map_size(state.pending_tool_tasks) == 0 do
       finalize_tool_batch(state)
     else
-      tool_mod = find_tool_module(tc.name, active_tools(state))
-      meta = if tool_mod, do: Opal.Tool.meta(tool_mod, tc.arguments), else: tc.name
-
-      Logger.debug(
-        "Tool start session=#{state.session_id} tool=#{tc.name} args=#{inspect(tc.arguments, limit: 5, printable_limit: 200)}"
-      )
-
-      broadcast(state, {:tool_execution_start, tc.name, tc.call_id, tc.arguments, meta})
-
-      emit = fn chunk -> broadcast(state, {:tool_output, tc.name, chunk}) end
-      ctx = state.tool_context |> Map.put(:emit, emit) |> Map.put(:call_id, tc.call_id)
-
-      task =
-        Task.Supervisor.async_nolink(state.tool_supervisor, fn ->
-          :proc_lib.set_label("tool:#{tc.name}")
-          execute_single_tool(tool_mod, tc.arguments, ctx)
-        end)
-
-      state = %{state | remaining_tool_calls: rest, pending_tool_task: {task, tc}}
       {:noreply, state}
     end
   end
@@ -115,9 +86,30 @@ defmodule Opal.Agent.ToolRunner do
     state = append_messages(state, tool_result_messages)
     state = maybe_auto_load_skills(results, state)
     state = check_for_steering(state)
-    state = %{state | pending_tool_task: nil, tool_context: nil, tool_results: []}
+    state = %{state | pending_tool_tasks: %{}, tool_context: nil, tool_results: []}
 
     Opal.Agent.run_turn(state)
+  end
+
+  @doc """
+  Cancels all in-flight tool tasks and resets execution state.
+  """
+  @spec cancel_all_tasks(State.t()) :: State.t()
+  def cancel_all_tasks(%State{pending_tool_tasks: tasks} = state) when map_size(tasks) == 0 do
+    state
+  end
+
+  def cancel_all_tasks(%State{pending_tool_tasks: tasks} = state) do
+    Enum.each(tasks, fn {_ref, {task, _tc}} ->
+      Task.shutdown(task, :brutal_kill)
+    end)
+
+    %{
+      state
+      | pending_tool_tasks: %{},
+        tool_results: [],
+        tool_context: nil
+    }
   end
 
   @doc """
@@ -292,7 +284,31 @@ defmodule Opal.Agent.ToolRunner do
     end
   end
 
-  # Private helper functions
+  # -- Private --
+
+  # Spawns a single tool as a supervised task and tracks it in pending_tool_tasks.
+  defp spawn_tool_task(tc, %State{} = state) do
+    tool_mod = find_tool_module(tc.name, active_tools(state))
+    meta = if tool_mod, do: Opal.Tool.meta(tool_mod, tc.arguments), else: tc.name
+
+    Logger.debug(
+      "Tool start session=#{state.session_id} tool=#{tc.name} args=#{inspect(tc.arguments, limit: 5, printable_limit: 200)}"
+    )
+
+    broadcast(state, {:tool_execution_start, tc.name, tc.call_id, tc.arguments, meta})
+
+    emit = fn chunk -> broadcast(state, {:tool_output, tc.name, chunk}) end
+    ctx = state.tool_context |> Map.put(:emit, emit) |> Map.put(:call_id, tc.call_id)
+
+    task =
+      Task.Supervisor.async_nolink(state.tool_supervisor, fn ->
+        :proc_lib.set_label("tool:#{tc.name}")
+        execute_single_tool(tool_mod, tc.arguments, ctx)
+      end)
+
+    %{state | pending_tool_tasks: Map.put(state.pending_tool_tasks, task.ref, {task, tc})}
+  end
+
   defp broadcast(%State{} = state, event), do: Opal.Agent.EventLog.broadcast(state, event)
 
   defp append_message(%State{session: nil} = state, msg) do

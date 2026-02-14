@@ -9,11 +9,12 @@ defmodule Opal.Agent.Tools do
   @spec start_tool_execution([map()], State.t()) :: {:noreply, State.t()}
   defdelegate start_tool_execution(tool_calls, state), to: ToolRunner
 
-  @spec schedule_dispatch_next_tool(State.t()) :: {:noreply, State.t()}
-  defdelegate schedule_dispatch_next_tool(state), to: ToolRunner
+  @spec handle_tool_result(reference(), map(), {:ok, term()} | {:error, term()}, State.t()) ::
+          {:noreply, State.t()}
+  defdelegate handle_tool_result(ref, tc, result, state), to: ToolRunner
 
-  @spec dispatch_next_tool(State.t()) :: {:noreply, State.t()}
-  defdelegate dispatch_next_tool(state), to: ToolRunner
+  @spec cancel_all_tasks(State.t()) :: State.t()
+  defdelegate cancel_all_tasks(state), to: ToolRunner
 
   @spec active_tools(State.t()) :: [module()]
   defdelegate active_tools(state), to: ToolRunner

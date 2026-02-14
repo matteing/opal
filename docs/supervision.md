@@ -263,15 +263,19 @@ with a tree border (┌─ / │ / └─) to visually distinguish them from the
 
 ## Tool Execution
 
-Tool calls are executed sequentially using `Task.Supervisor.async_nolink` with
-results delivered via mailbox `:info` events, keeping the agent process non-blocking:
+Tool calls are executed in parallel using `Task.Supervisor.async_nolink` — all tools
+in a batch are spawned concurrently, with results delivered via mailbox `:info` events,
+keeping the agent process non-blocking:
 
 ```mermaid
 flowchart LR
-    Agent["Agent<br/><i>:executing_tools</i>"] -- "async_nolink(tool)" --> TaskSup["Task.Supervisor<br/><i>per-session</i>"]
-    TaskSup --> T1["Task: current tool"]
+    Agent["Agent<br/><i>:executing_tools</i>"] -- "async_nolink(tool) × N" --> TaskSup["Task.Supervisor<br/><i>per-session</i>"]
+    TaskSup --> T1["Task: tool 1"]
+    TaskSup --> T2["Task: tool 2"]
+    TaskSup --> TN["Task: tool N"]
     T1 -- "handle_info {ref, result}" --> Agent
-    Agent -- "dispatch_next_tool" --> TaskSup
+    T2 -- "handle_info {ref, result}" --> Agent
+    TN -- "handle_info {ref, result}" --> Agent
 ```
 
 **Why `async_nolink` + `handle_info`?**
@@ -298,11 +302,11 @@ message via `handle_info`. It converts this to an error tool result and continue
 ```elixir
 def handle_info(
       {:DOWN, ref, :process, _pid, reason},
-      %State{status: :executing_tools, pending_tool_task: {task_ref, tc}} = state
-    ) when ref == task_ref do
+      %State{status: :executing_tools, pending_tool_tasks: tasks} = state
+    ) when is_map_key(tasks, ref) do
+  {_task, tc} = Map.fetch!(tasks, ref)
   error_msg = "Tool execution crashed: #{inspect(reason)}"
-  state = %{state | tool_results: state.tool_results ++ [{tc, {:error, error_msg}}], ...}
-  ToolRunner.dispatch_next_tool(state)
+  Opal.Agent.Tools.handle_tool_result(ref, tc, {:error, error_msg}, state)
 end
 ```
 

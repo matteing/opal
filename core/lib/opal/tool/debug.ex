@@ -67,8 +67,9 @@ defmodule Opal.Tool.Debug do
       working_dir: state.working_dir,
       queues: %{
         pending_steers: length(state.pending_steers),
-        remaining_tool_calls: length(state.remaining_tool_calls),
-        has_pending_tool_task: not is_nil(state.pending_tool_task)
+        pending_tool_tasks: map_size(state.pending_tool_tasks),
+        in_flight_tools:
+          state.pending_tool_tasks |> Map.values() |> Enum.map(fn {_task, tc} -> tc.name end)
       },
       tools: %{
         all: Enum.map(state.tools, & &1.name()),
