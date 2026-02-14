@@ -81,6 +81,7 @@ opal                                       # interactive TUI
 opal --model anthropic/claude-sonnet-4     # choose a model
 opal -C /path/to/project                   # set working directory
 opal --auto-confirm                         # skip tool confirmations
+opal --debug                                # enable debug feature/tools for this session
 ```
 
 ## Providers
@@ -142,6 +143,7 @@ end
 ```sh
 nx run-many -t deps       # install deps
 nx run cli:dev             # run TUI in dev mode
+pnpm dev -- --debug        # run pnpm dev with debug feature/tools enabled
 nx run-many -t test        # tests
 pnpm lint && pnpm format   # lint & format
 pnpm inspect               # ooooo this is a cool one, it'll connect you via iex to a running dev mode instance

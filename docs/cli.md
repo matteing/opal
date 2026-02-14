@@ -42,6 +42,7 @@ opal [options]
 --model <provider/id> Model to use (e.g. anthropic/claude-sonnet-4-20250514)
 --working-dir, -C     Working directory (default: cwd)
 --auto-confirm        Auto-allow all tool executions
+--debug               Enable debug feature/tools for this session
 --verbose, -v         Pipe server stderr to terminal
 --help, -h            Show usage
 ```
