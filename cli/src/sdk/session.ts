@@ -57,6 +57,7 @@ type EventMap = {
   error: [reason: string];
   contextDiscovered: [files: string[]];
   skillLoaded: [name: string, description: string];
+  agentRecovered: [];
 };
 
 type EventName = keyof EventMap;
@@ -338,6 +339,13 @@ export class Session {
   }
 
   /**
+   * Liveness check. Resolves if the server responds within the timeout.
+   */
+  async ping(timeoutMs?: number): Promise<void> {
+    await this.client.ping(timeoutMs);
+  }
+
+  /**
    * Close the session and kill the server.
    */
   close(): void {
@@ -391,6 +399,9 @@ export class Session {
           break;
         case "skillLoaded":
           handler(event.name, event.description);
+          break;
+        case "agentRecovered":
+          handler();
           break;
       }
     }

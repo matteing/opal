@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, type FC } from "react";
 import { Box, Text, useApp, useInput, useStdout, type Key } from "ink";
-import { useOpal, type Task } from "./hooks/use-opal.js";
+import { useOpal } from "./hooks/use-opal.js";
 import { Header } from "./components/header.js";
 import { MessageList } from "./components/message-list.js";
 import { BottomBar } from "./components/bottom-bar.js";
@@ -58,6 +58,25 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
     return () => clearInterval(timer);
   }, [state.main.isRunning]);
 
+  // Track the last running tool name to avoid scanning timeline in the title effect
+  const runningToolRef = useRef<string | null>(null);
+
+  // Update running tool ref cheaply — only look at the last timeline entry
+  useEffect(() => {
+    const tl = activeView.timeline;
+    let toolName: string | null = null;
+    for (let i = tl.length - 1; i >= 0; i--) {
+      const e = tl[i];
+      if (e.kind === "tool" && e.task.status === "running") {
+        toolName = e.task.tool;
+        break;
+      }
+      // Stop early — once we hit a non-tool entry, no running tool is visible
+      if (e.kind === "message") break;
+    }
+    runningToolRef.current = toolName;
+  });
+
   // Update terminal tab title based on current activity
   useEffect(() => {
     let status: string;
@@ -68,25 +87,12 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
     } else if (activeView.thinking !== null) {
       status = "thinking…";
     } else if (activeView.isRunning) {
-      // Check for active tool execution
-      const runningTool = [...activeView.timeline]
-        .reverse()
-        .find(
-          (e): e is { kind: "tool"; task: Task } =>
-            e.kind === "tool" && e.task.status === "running",
-        );
-      status = runningTool ? runningTool.task.tool : "responding…";
+      status = runningToolRef.current ?? "responding…";
     } else {
       status = "idle";
     }
     process.stdout.write(`\x1b]0;✦ opal · ${status}\x07`);
-  }, [
-    state.sessionReady,
-    activeView.isRunning,
-    activeView.thinking,
-    activeView.statusMessage,
-    activeView.timeline,
-  ]);
+  }, [state.sessionReady, activeView.isRunning, activeView.thinking, activeView.statusMessage]);
 
   // Restore terminal title on unmount
   useEffect(() => {
@@ -167,6 +173,12 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
   return (
     <Box flexDirection="column" width="100%" minHeight={initialFill ? rows : undefined}>
       <Header workingDir={state.workingDir} nodeName={state.nodeName} />
+
+      {state.error && (
+        <Box paddingX={1}>
+          <Text color="red">⚠ {state.error}</Text>
+        </Box>
+      )}
 
       <MessageList
         view={activeView}

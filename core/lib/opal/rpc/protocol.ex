@@ -544,6 +544,13 @@ defmodule Opal.RPC.Protocol do
           description: "Tool availability for the session."
         }
       ]
+    },
+    %{
+      method: "opal/ping",
+      direction: :client_to_server,
+      description: "Liveness check. Returns immediately.",
+      params: [],
+      result: []
     }
   ]
 
@@ -787,6 +794,12 @@ defmodule Opal.RPC.Protocol do
       fields: [
         %{name: "message", type: :string, description: "Brief human-readable status."}
       ]
+    },
+    %{
+      type: "agent_recovered",
+      description:
+        "Agent process crashed and was restarted by the supervisor. Conversation history was reloaded from the surviving session.",
+      fields: []
     }
   ]
 

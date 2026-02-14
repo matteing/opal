@@ -269,6 +269,10 @@ export interface OpalConfigSetResult {
   tools: { all: string[]; disabled: string[]; enabled: string[] };
 }
 
+export type OpalPingParams = Record<string, never>;
+
+export type OpalPingResult = Record<string, never>;
+
 export interface ClientConfirmParams {
   /** Session this confirmation belongs to. */
   sessionId: string;
@@ -431,6 +435,10 @@ export interface StatusUpdateEvent {
   message: string;
 }
 
+export interface AgentRecoveredEvent {
+  type: "agentRecovered";
+}
+
 export type AgentEvent =
   | AgentStartEvent
   | AgentEndEvent
@@ -447,7 +455,8 @@ export type AgentEvent =
   | SkillLoadedEvent
   | SubAgentEventEvent
   | UsageUpdateEvent
-  | StatusUpdateEvent;
+  | StatusUpdateEvent
+  | AgentRecoveredEvent;
 
 // --- Method constants ---
 
@@ -472,6 +481,7 @@ export const Methods = {
   SETTINGS_SAVE: "settings/save" as const,
   OPAL_CONFIG_GET: "opal/config/get" as const,
   OPAL_CONFIG_SET: "opal/config/set" as const,
+  OPAL_PING: "opal/ping" as const,
   CLIENT_CONFIRM: "client/confirm" as const,
   CLIENT_INPUT: "client/input" as const,
   CLIENT_ASK_USER: "client/ask_user" as const,
@@ -541,6 +551,7 @@ export interface MethodTypes {
     params: OpalConfigSetParams;
     result: OpalConfigSetResult;
   };
+  "opal/ping": { params: OpalPingParams; result: OpalPingResult };
   "client/confirm": {
     params: ClientConfirmParams;
     result: ClientConfirmResult;

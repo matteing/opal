@@ -188,6 +188,26 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
   const pendingEventsRef = useRef<AgentEvent[]>([]);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Periodic liveness check — ping every 15s when idle
+  useEffect(() => {
+    if (!state.sessionReady || state.main.isRunning) return;
+    let failCount = 0;
+    const timer = setInterval(() => {
+      const session = sessionRef.current;
+      if (!session) return;
+      session.ping().catch(() => {
+        failCount++;
+        if (failCount >= 2) {
+          setState((s) => ({
+            ...s,
+            error: "Server is unresponsive",
+          }));
+        }
+      });
+    }, 15_000);
+    return () => clearInterval(timer);
+  }, [state.sessionReady, state.main.isRunning]);
+
   useEffect(() => {
     let mounted = true;
 
@@ -791,10 +811,10 @@ function applyAgentEvent(view: AgentView, event: Record<string, unknown>): Agent
     case "message_start":
       return {
         ...view,
-        timeline: [
-          ...view.timeline,
-          { kind: "message", message: { role: "assistant", content: "" } },
-        ],
+        timeline: view.timeline.concat({
+          kind: "message",
+          message: { role: "assistant", content: "" },
+        }),
       };
 
     case "messageDelta":
@@ -809,7 +829,7 @@ function applyAgentEvent(view: AgentView, event: Record<string, unknown>): Agent
       return {
         ...view,
         thinking: "",
-        timeline: [...view.timeline, { kind: "thinking", text: "" }],
+        timeline: view.timeline.concat({ kind: "thinking", text: "" }),
       };
 
     case "thinkingDelta":
@@ -826,19 +846,16 @@ function applyAgentEvent(view: AgentView, event: Record<string, unknown>): Agent
     case "tool_execution_start":
       return {
         ...view,
-        timeline: [
-          ...view.timeline,
-          {
-            kind: "tool",
-            task: {
-              tool: (event.tool as string) ?? "",
-              callId: ((event.callId ?? event.call_id) as string) ?? "",
-              args: (event.args as Record<string, unknown>) ?? {},
-              meta: (event.meta as string) ?? "",
-              status: "running",
-            },
+        timeline: view.timeline.concat({
+          kind: "tool",
+          task: {
+            tool: (event.tool as string) ?? "",
+            callId: ((event.callId ?? event.call_id) as string) ?? "",
+            args: (event.args as Record<string, unknown>) ?? {},
+            meta: (event.meta as string) ?? "",
+            status: "running",
           },
-        ],
+        }),
       };
 
     case "toolExecutionEnd":
@@ -975,18 +992,45 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
       return { ...state, main: { ...state.main, isRunning: false }, error: event.reason };
 
     case "skillLoaded":
-      state.main.timeline.push({
-        kind: "skill",
-        skill: { name: event.name, description: event.description, status: "loaded" },
-      });
-      return { ...state, main: { ...state.main } };
+      return {
+        ...state,
+        main: {
+          ...state.main,
+          timeline: state.main.timeline.concat({
+            kind: "skill",
+            skill: { name: event.name, description: event.description, status: "loaded" },
+          }),
+        },
+      };
 
     case "contextDiscovered":
-      state.main.timeline.push({
-        kind: "context",
-        context: { files: event.files, skills: [], mcpServers: [], status: "discovered" },
-      });
-      return { ...state, main: { ...state.main } };
+      return {
+        ...state,
+        main: {
+          ...state.main,
+          timeline: state.main.timeline.concat({
+            kind: "context",
+            context: { files: event.files, skills: [], mcpServers: [], status: "discovered" },
+          }),
+        },
+      };
+
+    case "agentRecovered":
+      return {
+        ...state,
+        main: {
+          ...state.main,
+          isRunning: false,
+          timeline: state.main.timeline.concat({
+            kind: "message",
+            message: {
+              role: "assistant",
+              content: "⚠ Agent crashed and recovered — conversation history preserved.",
+            },
+          }),
+        },
+        error: null,
+      };
 
     case "usageUpdate":
       return {
@@ -1010,25 +1054,24 @@ function applyEvent(state: OpalState, event: AgentEvent): OpalState {
 function appendMessageDelta(timeline: TimelineEntry[], delta: string): TimelineEntry[] {
   const last = timeline[timeline.length - 1];
   if (last?.kind === "message" && last.message.role === "assistant") {
-    // Replace with a new entry object so React detects the change via memo
-    timeline[timeline.length - 1] = {
+    const updated = timeline.slice();
+    updated[timeline.length - 1] = {
       kind: "message",
       message: { role: "assistant", content: last.message.content + delta },
     };
-    return timeline;
+    return updated;
   }
-  timeline.push({ kind: "message", message: { role: "assistant", content: delta } });
-  return timeline;
+  return [...timeline, { kind: "message", message: { role: "assistant", content: delta } }];
 }
 
 function appendThinkingDelta(timeline: TimelineEntry[], delta: string): TimelineEntry[] {
   const last = timeline[timeline.length - 1];
   if (last?.kind === "thinking") {
-    timeline[timeline.length - 1] = { kind: "thinking", text: last.text + delta };
-    return timeline;
+    const updated = timeline.slice();
+    updated[timeline.length - 1] = { kind: "thinking", text: last.text + delta };
+    return updated;
   }
-  timeline.push({ kind: "thinking", text: delta });
-  return timeline;
+  return [...timeline, { kind: "thinking", text: delta }];
 }
 
 /**

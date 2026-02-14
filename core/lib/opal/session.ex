@@ -369,7 +369,17 @@ defmodule Opal.Session do
   end
 
   @impl true
-  def terminate(_reason, state) do
+  def terminate(reason, state) do
+    # Best-effort save before losing the ETS table
+    if reason != :normal do
+      try do
+        dir = Opal.Config.sessions_dir(Opal.Config.new())
+        do_save(state, dir)
+      rescue
+        _ -> :ok
+      end
+    end
+
     :ets.delete(state.table)
     :ok
   end

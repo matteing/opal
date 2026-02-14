@@ -280,7 +280,7 @@ defmodule Opal.Config do
               Opal.Tool.Debug
             ],
             provider: Opal.Provider.Copilot,
-            auto_save: false,
+            auto_save: true,
             auto_title: true,
             features: %Opal.Config.Features{},
             copilot: %Opal.Config.Copilot{}

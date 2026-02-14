@@ -411,6 +411,10 @@ defmodule Opal.RPC.Handler do
     {:error, Opal.RPC.invalid_params(), "Missing required param: session_id", nil}
   end
 
+  def handle("opal/ping", _params) do
+    {:ok, %{}}
+  end
+
   # Catch-all for unknown methods
   def handle(method, _params) do
     {:error, Opal.RPC.method_not_found(), "Method not found: #{method}", nil}

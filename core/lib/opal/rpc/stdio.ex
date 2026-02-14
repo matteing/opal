@@ -344,6 +344,9 @@ defmodule Opal.RPC.Stdio do
   defp serialize_event({:error, reason}),
     do: {"error", %{reason: inspect(reason)}}
 
+  defp serialize_event({:agent_recovered}),
+    do: {"agent_recovered", %{}}
+
   defp serialize_event(other),
     do: {"unknown", %{raw: inspect(other)}}
 

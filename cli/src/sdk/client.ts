@@ -134,6 +134,7 @@ export class OpalClient extends EventEmitter {
   async request<M extends keyof MethodTypes>(
     method: M,
     params: MethodTypes[M]["params"],
+    timeoutMs?: number,
   ): Promise<MethodTypes[M]["result"]> {
     if (this.closed) throw new Error("Client is closed");
 
@@ -150,10 +151,28 @@ export class OpalClient extends EventEmitter {
     this.send(msg);
 
     return new Promise<MethodTypes[M]["result"]>((resolve, reject) => {
-      this.pending.set(id, {
-        resolve: resolve as (v: unknown) => void,
-        reject,
-      });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+
+      const pending: PendingRequest = {
+        resolve: (v) => {
+          if (timer) clearTimeout(timer);
+          (resolve as (v: unknown) => void)(v);
+        },
+        reject: (e) => {
+          if (timer) clearTimeout(timer);
+          reject(e);
+        },
+      };
+
+      this.pending.set(id, pending);
+
+      if (timeoutMs != null && timeoutMs > 0) {
+        timer = setTimeout(() => {
+          if (this.pending.delete(id)) {
+            reject(new Error(`Request "${method}" timed out after ${timeoutMs}ms`));
+          }
+        }, timeoutMs);
+      }
     });
   }
 
@@ -180,6 +199,13 @@ export class OpalClient extends EventEmitter {
     this.rl.close();
     this.process.kill();
     this.rejectAll(new Error("Client closed"));
+  }
+
+  /**
+   * Liveness check. Resolves if the server responds within the timeout.
+   */
+  async ping(timeoutMs = 5000): Promise<void> {
+    await this.request("opal/ping", {} as Record<string, never>, timeoutMs);
   }
 
   // --- Private ---

@@ -102,6 +102,7 @@ defmodule Opal.Inspect do
   defp format_event({:error, reason}), do: {"error", inspect(reason)}
   defp format_event({:request_start, info}), do: {"request_start", inspect(info)}
   defp format_event({:request_end}), do: {"request_end", ""}
+  defp format_event({:agent_recovered}), do: {"agent_recovered", "session reloaded"}
   defp format_event(other), do: {"unknown", inspect(other, limit: 3, printable_limit: 80)}
 
   defp event_color("agent_start"), do: IO.ANSI.green()

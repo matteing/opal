@@ -59,6 +59,7 @@ graph LR
 | **Compaction** | Summarizes old messages to stay within context window | [compaction.md](compaction.md) |
 | **OTP Patterns** | State-machine/GenServer patterns, Registry, ETS/DETS, message passing | [otp.md](otp.md) |
 | **Supervision** | Per-session process trees, fault isolation, message passing | [supervision.md](supervision.md) |
+| **Resilience** | Crash recovery gaps, failure modes, and improvement roadmap | [resilience.md](resilience.md) |
 | **Tools** | Built-in tool implementations (read, edit, write, shell, sub-agent) | [tools.md](tools.md) |
 | **RPC** | JSON-RPC 2.0 protocol over stdio between CLI and server | [rpc.md](rpc.md) |
 | **Providers** | LLM integration (streaming, SSE parsing, model discovery) | [providers.md](providers.md) |

@@ -1,4 +1,4 @@
-import React, { type FC, useRef, memo } from "react";
+import React, { type FC, useRef, useMemo, memo } from "react";
 import { Box, Text, useStdout } from "ink";
 import { Marked, type MarkedExtension } from "marked";
 import { markedTerminal } from "marked-terminal";
@@ -38,126 +38,129 @@ export interface MessageListProps {
   sessionReady?: boolean;
 }
 
-export const MessageList: FC<MessageListProps> = ({
-  view,
-  subAgents,
-  showToolOutput = false,
-  sessionReady: _sessionReady = true,
-}) => {
-  const { stdout } = useStdout();
-  const width = stdout?.columns ?? 80;
-  const timeline = view.timeline;
-  const startIndex = Math.max(0, timeline.length - MAX_RENDERED_ENTRIES);
-  const visibleTimeline = startIndex > 0 ? timeline.slice(startIndex) : timeline;
-  const hiddenCount = startIndex;
-  const subAgentByCallId = new Map<string, SubAgent>(
-    Object.values(subAgents).map((sub) => [sub.parentCallId, sub]),
-  );
+export const MessageList: FC<MessageListProps> = memo(
+  ({ view, subAgents, showToolOutput = false, sessionReady: _sessionReady = true }) => {
+    const { stdout } = useStdout();
+    const width = stdout?.columns ?? 80;
+    const timeline = view.timeline;
+    const startIndex = Math.max(0, timeline.length - MAX_RENDERED_ENTRIES);
+    const visibleTimeline = startIndex > 0 ? timeline.slice(startIndex) : timeline;
+    const hiddenCount = startIndex;
+    const subAgentByCallId = useMemo(
+      () =>
+        new Map<string, SubAgent>(Object.values(subAgents).map((sub) => [sub.parentCallId, sub])),
+      [subAgents],
+    );
 
-  const hasMessages = timeline.some((e: TimelineEntry) => e.kind === "message");
+    const hasMessages = timeline.some((e: TimelineEntry) => e.kind === "message");
 
-  return (
-    <Box flexDirection="column">
-      <Welcome dimmed={hasMessages} />
-      {hiddenCount > 0 && (
-        <Box paddingX={1} marginBottom={1}>
-          <Text dimColor>
-            Showing last {MAX_RENDERED_ENTRIES} of {timeline.length} timeline entries (use /compact{" "}
-            to trim history).
-          </Text>
-        </Box>
-      )}
+    return (
+      <Box flexDirection="column">
+        <Welcome dimmed={hasMessages} />
+        {hiddenCount > 0 && (
+          <Box paddingX={1} marginBottom={1}>
+            <Text dimColor>
+              Showing last {MAX_RENDERED_ENTRIES} of {timeline.length} timeline entries (use
+              /compact to trim history).
+            </Text>
+          </Box>
+        )}
 
-      {!hasMessages && visibleTimeline.length > 0 && (
-        <Box flexDirection="column" paddingX={1}>
-          {visibleTimeline.map((entry: TimelineEntry, i: number) => {
-            const timelineIndex = startIndex + i;
-            if (entry.kind === "context") {
-              return <ContextLines key={timelineIndex} context={entry.context} />;
-            }
-            return null;
-          })}
-        </Box>
-      )}
-
-      {hasMessages && (
-        <Box flexDirection="column" paddingX={1}>
-          {(() => {
-            let lastMessageRole: Message["role"] | null = null;
-            return visibleTimeline.map((entry: TimelineEntry, i: number) => {
+        {!hasMessages && visibleTimeline.length > 0 && (
+          <Box flexDirection="column" paddingX={1}>
+            {visibleTimeline.map((entry: TimelineEntry, i: number) => {
               const timelineIndex = startIndex + i;
-              if (entry.kind === "message") {
-                const showBadge =
-                  entry.message.role === "assistant" ? lastMessageRole !== "assistant" : true;
-                lastMessageRole = entry.message.role;
-                const isStreaming =
-                  view.isRunning &&
-                  entry.message.role === "assistant" &&
-                  timelineIndex === timeline.length - 1;
-                return (
-                  <MessageBlock
-                    key={timelineIndex}
-                    message={entry.message}
-                    width={width}
-                    showBadge={showBadge}
-                    isStreaming={isStreaming}
-                  />
-                );
-              }
-              if (entry.kind === "tool") {
-                // Sub-agent tool: show collapsed summary
-                const subAgent =
-                  entry.task.tool === "sub_agent"
-                    ? (subAgentByCallId.get(entry.task.callId) ?? null)
-                    : null;
-                if (subAgent) {
-                  return (
-                    <SubAgentSummary
-                      key={entry.task.callId}
-                      task={entry.task}
-                      subAgent={subAgent}
-                    />
-                  );
-                }
-                return (
-                  <ToolBlock
-                    key={entry.task.callId}
-                    task={entry.task}
-                    width={width}
-                    showOutput={showToolOutput}
-                  />
-                );
-              }
-              if (entry.kind === "skill") {
-                return (
-                  <Box key={timelineIndex}>
-                    <Text>
-                      <Text color="green">●</Text>{" "}
-                      <Text dimColor>Loaded skill: {entry.skill.name}</Text>
-                    </Text>
-                  </Box>
-                );
-              }
-              if (entry.kind === "thinking" && showToolOutput) {
-                return (
-                  <ThinkingBlock
-                    key={`thinking-${timelineIndex}`}
-                    text={entry.text}
-                    width={width}
-                  />
-                );
-              }
               if (entry.kind === "context") {
                 return <ContextLines key={timelineIndex} context={entry.context} />;
               }
               return null;
-            });
-          })()}
-        </Box>
-      )}
-    </Box>
-  );
-};
+            })}
+          </Box>
+        )}
+
+        {hasMessages && (
+          <Box flexDirection="column" paddingX={1}>
+            {(() => {
+              let lastMessageRole: Message["role"] | null = null;
+              return visibleTimeline.map((entry: TimelineEntry, i: number) => {
+                const timelineIndex = startIndex + i;
+                if (entry.kind === "message") {
+                  const showBadge =
+                    entry.message.role === "assistant" ? lastMessageRole !== "assistant" : true;
+                  lastMessageRole = entry.message.role;
+                  const isStreaming =
+                    view.isRunning &&
+                    entry.message.role === "assistant" &&
+                    timelineIndex === timeline.length - 1;
+                  return (
+                    <MessageBlock
+                      key={timelineIndex}
+                      message={entry.message}
+                      width={width}
+                      showBadge={showBadge}
+                      isStreaming={isStreaming}
+                    />
+                  );
+                }
+                if (entry.kind === "tool") {
+                  // Sub-agent tool: show collapsed summary
+                  const subAgent =
+                    entry.task.tool === "sub_agent"
+                      ? (subAgentByCallId.get(entry.task.callId) ?? null)
+                      : null;
+                  if (subAgent) {
+                    return (
+                      <SubAgentSummary
+                        key={entry.task.callId}
+                        task={entry.task}
+                        subAgent={subAgent}
+                      />
+                    );
+                  }
+                  return (
+                    <ToolBlock
+                      key={entry.task.callId}
+                      task={entry.task}
+                      width={width}
+                      showOutput={showToolOutput}
+                    />
+                  );
+                }
+                if (entry.kind === "skill") {
+                  return (
+                    <Box key={timelineIndex}>
+                      <Text>
+                        <Text color="green">●</Text>{" "}
+                        <Text dimColor>Loaded skill: {entry.skill.name}</Text>
+                      </Text>
+                    </Box>
+                  );
+                }
+                if (entry.kind === "thinking" && showToolOutput) {
+                  return (
+                    <ThinkingBlock
+                      key={`thinking-${timelineIndex}`}
+                      text={entry.text}
+                      width={width}
+                    />
+                  );
+                }
+                if (entry.kind === "context") {
+                  return <ContextLines key={timelineIndex} context={entry.context} />;
+                }
+                return null;
+              });
+            })()}
+          </Box>
+        )}
+      </Box>
+    );
+  },
+  (prev, next) =>
+    prev.view === next.view &&
+    prev.subAgents === next.subAgents &&
+    prev.showToolOutput === next.showToolOutput,
+);
 
 const MessageBlock: FC<{
   message: Message;

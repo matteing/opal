@@ -255,6 +255,17 @@ defmodule Opal.Agent do
       }
     }
 
+    # On restart, reload conversation history from the surviving Session process
+    state =
+      if session_pid && Opal.Session.current_id(session_pid) do
+        messages = Opal.Session.get_path(session_pid)
+        Logger.info("Agent recovered session=#{session_id} messages=#{length(messages)}")
+        broadcast(state, {:agent_recovered})
+        %{state | messages: Enum.reverse(messages)}
+      else
+        state
+      end
+
     Opal.Agent.EventLog.clear(session_id)
 
     tools_str = base_tools |> Enum.map(& &1.name()) |> Enum.join(", ")
@@ -563,6 +574,8 @@ defmodule Opal.Agent do
   # Auto-compacts if context usage exceeds threshold.
   defp run_turn_internal(%State{} = state) do
     state = maybe_auto_compact(state)
+    # Defense-in-depth: repair any orphaned tool_calls before sending
+    state = repair_orphaned_tool_calls(state)
 
     provider = state.provider
     all_messages = build_messages(state)
@@ -860,8 +873,11 @@ defmodule Opal.Agent do
   # --- Tool Execution ---
 
   # Cancels all in-progress tool executions if present.
+  # Injects synthetic tool_result messages for any orphaned tool_calls
+  # so the message history stays valid for the provider.
   defp cancel_tool_execution(%State{} = state) do
-    Opal.Agent.Tools.cancel_all_tasks(state)
+    state = Opal.Agent.Tools.cancel_all_tasks(state)
+    repair_orphaned_tool_calls(state)
   end
 
   # Cancels an in-progress streaming response if present.
@@ -918,6 +934,48 @@ defmodule Opal.Agent do
   defp append_message(%State{session: session} = state, msg) do
     Opal.Session.append(session, msg)
     %{state | messages: [msg | state.messages]}
+  end
+
+  # Finds the most recent assistant message with tool_calls that lack
+  # matching tool_result messages and injects synthetic "[Aborted]" results.
+  defp repair_orphaned_tool_calls(%State{messages: messages} = state) do
+    # Messages are stored newest-first. Walk until we find an assistant
+    # with tool_calls, then check if results exist after it.
+    case find_orphaned_calls(messages) do
+      [] ->
+        state
+
+      orphaned_ids ->
+        Logger.debug("Repairing #{length(orphaned_ids)} orphaned tool_calls after abort")
+
+        Enum.reduce(orphaned_ids, state, fn call_id, acc ->
+          append_message(acc, Opal.Message.tool_result(call_id, "[Aborted by user]", true))
+        end)
+    end
+  end
+
+  # Returns call_ids from the most recent assistant message's tool_calls
+  # that have no corresponding tool_result in the messages above it.
+  defp find_orphaned_calls(messages) do
+    find_orphaned_calls(messages, MapSet.new())
+  end
+
+  defp find_orphaned_calls([], _result_ids), do: []
+
+  defp find_orphaned_calls([%{role: :tool_result, call_id: cid} | rest], result_ids) do
+    find_orphaned_calls(rest, MapSet.put(result_ids, cid))
+  end
+
+  defp find_orphaned_calls([%{role: :assistant, tool_calls: tcs} | _], result_ids)
+       when is_list(tcs) and tcs != [] do
+    tcs
+    |> Enum.map(& &1["id"])
+    |> Enum.filter(&(&1 != nil))
+    |> Enum.reject(&MapSet.member?(result_ids, &1))
+  end
+
+  defp find_orphaned_calls([_ | rest], result_ids) do
+    find_orphaned_calls(rest, result_ids)
   end
 
   # Auto-saves the session when the agent goes idle, if a Session process
