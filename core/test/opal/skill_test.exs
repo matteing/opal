@@ -228,6 +228,36 @@ defmodule Opal.SkillTest do
       skill = %Skill{name: "skill-v2", description: "Desc.", instructions: ""}
       assert :ok = Skill.validate(skill)
     end
+
+    test "validates non-binary name" do
+      skill = %Skill{name: 123, description: "Desc.", instructions: ""}
+      assert {:error, errors} = Skill.validate(skill)
+      assert "name must be a string" in errors
+    end
+
+    test "validates non-binary description" do
+      skill = %Skill{name: "ok", description: 123, instructions: ""}
+      assert {:error, errors} = Skill.validate(skill)
+      assert "description must be a string" in errors
+    end
+
+    test "validates non-binary compatibility" do
+      skill = %Skill{name: "ok", description: "Desc.", compatibility: 42, instructions: ""}
+      assert {:error, errors} = Skill.validate(skill)
+      assert "compatibility must be a string" in errors
+    end
+
+    test "validates empty description" do
+      skill = %Skill{name: "ok", description: "", instructions: ""}
+      assert {:error, errors} = Skill.validate(skill)
+      assert Enum.any?(errors, &String.contains?(&1, "empty"))
+    end
+
+    test "collects multiple validation errors" do
+      skill = %Skill{name: nil, description: nil, instructions: ""}
+      assert {:error, errors} = Skill.validate(skill)
+      assert length(errors) >= 2
+    end
   end
 
   describe "summary/1" do
@@ -320,6 +350,51 @@ defmodule Opal.SkillTest do
       skill = %Skill{name: "q", globs: ["doc?.md"], description: "", instructions: ""}
       assert Skill.matches_path?(skill, "docs.md")
       refute Skill.matches_path?(skill, "documentation.md")
+    end
+  end
+
+  describe "parse/1 — frontmatter edge cases" do
+    test "returns error for non-map YAML" do
+      content = """
+      ---
+      - item1
+      - item2
+      ---
+
+      Body.
+      """
+
+      assert {:error, :invalid_frontmatter} = Skill.parse(content)
+    end
+
+    test "handles allowed-tools as non-string" do
+      content = """
+      ---
+      name: test
+      description: Test skill.
+      allowed-tools: 42
+      ---
+
+      Body.
+      """
+
+      assert {:ok, skill} = Skill.parse(content)
+      assert skill.allowed_tools == nil
+    end
+
+    test "handles globs as non-string non-list" do
+      content = """
+      ---
+      name: test
+      description: Test skill.
+      globs: 42
+      ---
+
+      Body.
+      """
+
+      assert {:ok, skill} = Skill.parse(content)
+      assert skill.globs == nil
     end
   end
 end

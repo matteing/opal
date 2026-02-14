@@ -505,6 +505,77 @@ defmodule Opal.Provider.CopilotTest do
       assert result.content == ""
       assert length(result.tool_calls) == 1
     end
+
+    test "assistant with tool calls and no text content (responses)" do
+      model = responses_model()
+      tool_calls = [%{call_id: "call_3", name: "shell", arguments: %{"command" => "ls"}}]
+      messages = [Message.assistant(nil, tool_calls)]
+
+      results = Copilot.convert_messages(model, messages)
+      # Should only have the function_call item (no text_item when content is nil)
+      assert Enum.all?(results, &(&1.type == "function_call"))
+    end
+
+    test "assistant with thinking and tool calls (responses)" do
+      model = responses_model(thinking_level: :high)
+      tool_calls = [%{call_id: "call_4", name: "read_file", arguments: %{"path" => "x"}}]
+
+      msg = %Message{
+        id: "a1",
+        role: :assistant,
+        content: "Let me read that.",
+        thinking: "I need to check the file first.",
+        tool_calls: tool_calls
+      }
+
+      results = Copilot.convert_messages(model, [msg])
+      # Should have reasoning item + message item + function_call item
+      types = Enum.map(results, & &1.type)
+      assert "reasoning" in types
+      assert "message" in types
+      assert "function_call" in types
+    end
+
+    test "assistant with thinking but no tool calls (responses)" do
+      model = responses_model(thinking_level: :high)
+
+      msg = %Message{
+        id: "a2",
+        role: :assistant,
+        content: "The answer is 42.",
+        thinking: "Let me think about this..."
+      }
+
+      results = Copilot.convert_messages(model, [msg])
+      types = Enum.map(results, & &1.type)
+      assert "reasoning" in types
+      assert "message" in types
+    end
+
+    test "assistant without thinking (responses)" do
+      model = responses_model()
+      messages = [Message.assistant("Simple response")]
+
+      results = Copilot.convert_messages(model, messages)
+      assert length(results) == 1
+      assert hd(results).type == "message"
+      assert hd(results).role == "assistant"
+    end
+
+    test "user message (responses)" do
+      model = responses_model()
+      messages = [Message.user("Hello")]
+
+      [result] = Copilot.convert_messages(model, messages)
+      assert result.role == "user"
+      assert [%{type: "input_text", text: "Hello"}] = result.content
+    end
+
+    test "unknown message role returns empty list" do
+      model = responses_model()
+      msg = %Message{id: "unknown", role: :unknown_role, content: "wat"}
+      assert [] = Copilot.convert_messages(model, [msg])
+    end
   end
 
   describe "convert_messages/2 — tool_result messages" do
@@ -626,6 +697,135 @@ defmodule Opal.Provider.CopilotTest do
 
       assert result.function.name == "empty_tool"
       assert result.function.parameters == %{"type" => "object", "properties" => %{}}
+    end
+  end
+
+  # ============================================================
+  # parse_stream_event/1 — additional Responses API events
+  # ============================================================
+
+  describe "parse_stream_event/1 — additional events" do
+    test "reasoning_summary_text.delta returns thinking_delta" do
+      data = sse_event("response.reasoning_summary_text.delta", %{"delta" => "reasoning step"})
+      assert [{:thinking_delta, "reasoning step"}] = Copilot.parse_stream_event(data)
+    end
+
+    test "function_call_arguments.delta returns tool_call_delta" do
+      data =
+        sse_event("response.function_call_arguments.delta", %{
+          "delta" => "{\"pa",
+          "item_id" => "item_1",
+          "call_id" => "call_1",
+          "name" => "read_file"
+        })
+
+      assert [{:tool_call_delta, info}] = Copilot.parse_stream_event(data)
+      assert info.delta == "{\"pa"
+      assert info.call_id == "call_1"
+    end
+
+    test "function_call_arguments.delta with nil delta returns empty" do
+      data =
+        sse_event("response.function_call_arguments.delta", %{
+          "delta" => nil,
+          "item_id" => "item_1"
+        })
+
+      assert [] = Copilot.parse_stream_event(data)
+    end
+
+    test "function_call_arguments.done returns tool_call_done with parsed args" do
+      data =
+        sse_event("response.function_call_arguments.done", %{
+          "arguments" => Jason.encode!(%{"path" => "/tmp/x"}),
+          "item_id" => "item_1",
+          "call_id" => "call_1",
+          "name" => "read_file"
+        })
+
+      assert [{:tool_call_done, info}] = Copilot.parse_stream_event(data)
+      assert info.arguments == %{"path" => "/tmp/x"}
+      assert info.call_id == "call_1"
+    end
+
+    test "function_call_arguments.done with invalid JSON returns raw" do
+      data =
+        sse_event("response.function_call_arguments.done", %{
+          "arguments" => "not json {{{",
+          "item_id" => "item_1"
+        })
+
+      assert [{:tool_call_done, info}] = Copilot.parse_stream_event(data)
+      assert info.arguments_raw == "not json {{{"
+    end
+
+    test "output_item.done with function_call returns tool_call_done" do
+      data =
+        sse_event("response.output_item.done", %{
+          "item" => %{
+            "type" => "function_call",
+            "id" => "item_1",
+            "call_id" => "call_1",
+            "name" => "shell",
+            "arguments" => Jason.encode!(%{"command" => "ls"})
+          }
+        })
+
+      assert [{:tool_call_done, info}] = Copilot.parse_stream_event(data)
+      assert info.name == "shell"
+      assert info.arguments == %{"command" => "ls"}
+    end
+
+    test "response.completed returns response_done with usage" do
+      data =
+        sse_event("response.completed", %{
+          "response" => %{
+            "id" => "resp_1",
+            "status" => "completed",
+            "usage" => %{"input_tokens" => 100, "output_tokens" => 50}
+          }
+        })
+
+      assert [{:response_done, info}] = Copilot.parse_stream_event(data)
+      assert info.status == "completed"
+      assert info.usage == %{"input_tokens" => 100, "output_tokens" => 50}
+    end
+
+    test "error type returns error event" do
+      data = sse_event("error", %{"error" => %{"message" => "rate limited"}})
+      assert [{:error, %{"message" => "rate limited"}}] = Copilot.parse_stream_event(data)
+    end
+
+    test "response.failed returns error event" do
+      data =
+        sse_event("response.failed", %{
+          "response" => %{"error" => %{"message" => "overloaded"}}
+        })
+
+      assert [{:error, %{"message" => "overloaded"}}] = Copilot.parse_stream_event(data)
+    end
+
+    test "map with error key returns error event" do
+      data = Jason.encode!(%{"error" => %{"message" => "bad request"}})
+      assert [{:error, %{"message" => "bad request"}}] = Copilot.parse_stream_event(data)
+    end
+
+    test "unknown event type returns empty list" do
+      data = sse_event("response.some_unknown_type", %{})
+      assert [] = Copilot.parse_stream_event(data)
+    end
+
+    test "invalid JSON returns empty list" do
+      assert [] = Copilot.parse_stream_event("not json {{{")
+    end
+
+    test "output_item.added with unknown item type returns empty" do
+      data =
+        sse_event("response.output_item.added", %{
+          "item" => %{"type" => "unknown_type", "id" => "item_x"}
+        })
+
+      assert [] = Copilot.parse_stream_event(data)
     end
   end
 end

@@ -119,4 +119,43 @@ defmodule Opal.Provider.LLMTest do
       assert [] = LLM.convert_tools([])
     end
   end
+
+  # ============================================================
+  # convert_messages/2 — additional edge cases
+  # ============================================================
+
+  describe "convert_messages/2 edge cases" do
+    test "converts tool_result with nil content to empty string" do
+      model = Model.new(:anthropic, "claude-sonnet-4-5")
+      # Construct directly since tool_result/2 requires binary content
+      msg = %Message{id: "tr1", role: :tool_result, call_id: "call_x", content: nil}
+      messages = [msg]
+
+      [result] = LLM.convert_messages(model, messages)
+      assert result.content == ""
+    end
+
+    test "handles mixed message list" do
+      model = Model.new(:anthropic, "claude-sonnet-4-5")
+
+      messages = [
+        %Message{id: "s", role: :system, content: "system"},
+        Message.user("hello"),
+        Message.assistant("hi"),
+        Message.tool_result("call_1", "output")
+      ]
+
+      results = LLM.convert_messages(model, messages)
+      assert length(results) == 4
+      assert Enum.map(results, & &1.role) == ["system", "user", "assistant", "tool"]
+    end
+
+    test "returns empty map for unknown message roles" do
+      model = Model.new(:anthropic, "claude-sonnet-4-5")
+      messages = [%Message{id: "x", role: :unknown, content: "wat"}]
+
+      [result] = LLM.convert_messages(model, messages)
+      assert result == %{}
+    end
+  end
 end

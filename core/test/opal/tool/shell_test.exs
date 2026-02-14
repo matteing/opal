@@ -66,6 +66,83 @@ defmodule Opal.Tool.ShellTest do
     end
   end
 
+  describe "name/1 and description/1" do
+    test "returns correct name per shell type" do
+      assert Shell.name(:sh) == "shell"
+      assert Shell.name(:bash) == "bash"
+      assert Shell.name(:zsh) == "zsh"
+      assert Shell.name(:cmd) == "cmd"
+      assert Shell.name(:powershell) == "powershell"
+    end
+
+    test "returns non-empty description per shell type" do
+      for shell <- [:sh, :bash, :zsh, :cmd, :powershell] do
+        desc = Shell.description(shell)
+        assert is_binary(desc) and String.length(desc) > 0
+      end
+    end
+  end
+
+  describe "meta/1" do
+    test "truncates long commands" do
+      long_cmd = String.duplicate("x", 100)
+      meta = Shell.meta(%{"command" => long_cmd})
+      assert meta =~ "Run `"
+      assert meta =~ "..."
+      assert String.length(meta) < 100
+    end
+
+    test "keeps short commands intact" do
+      assert Shell.meta(%{"command" => "ls"}) == "Run `ls`"
+    end
+
+    test "returns fallback for missing command" do
+      assert Shell.meta(%{}) == "Run command"
+    end
+  end
+
+  describe "default_shell/0" do
+    test "returns :sh or :cmd based on platform" do
+      shell = Shell.default_shell()
+      assert shell in [:sh, :cmd]
+    end
+  end
+
+  describe "execute/2 with shell config" do
+    test "uses shell from context config", %{tmp_dir: tmp_dir} do
+      ctx = %{working_dir: tmp_dir, config: %{shell: :sh}}
+      assert {:ok, output} = Shell.execute(%{"command" => "echo configured"}, ctx)
+      assert String.trim(output) == "configured"
+    end
+
+    test "uses default shell when config.shell is nil", %{tmp_dir: tmp_dir} do
+      ctx = %{working_dir: tmp_dir, config: %{shell: nil}}
+      assert {:ok, output} = Shell.execute(%{"command" => "echo default"}, ctx)
+      assert String.trim(output) == "default"
+    end
+  end
+
+  describe "execute/2 with timeout" do
+    test "returns timeout error for long-running command", %{tmp_dir: tmp_dir} do
+      ctx = %{working_dir: tmp_dir}
+      # sleep for 10 seconds with a 100ms timeout
+      assert {:error, msg} = Shell.execute(%{"command" => "sleep 10", "timeout" => 100}, ctx)
+      assert msg =~ "timed out"
+    end
+  end
+
+  describe "execute/2 with streaming" do
+    test "emits chunks via emit function", %{tmp_dir: tmp_dir} do
+      parent = self()
+      emit = fn chunk -> send(parent, {:chunk, chunk}) end
+      ctx = %{working_dir: tmp_dir, emit: emit}
+
+      assert {:ok, output} = Shell.execute(%{"command" => "echo streamed"}, ctx)
+      assert String.trim(output) =~ "streamed"
+      assert_receive {:chunk, _}, 1_000
+    end
+  end
+
   # -- Plan 08: Output truncation ---------------------------------------------
 
   describe "truncation" do

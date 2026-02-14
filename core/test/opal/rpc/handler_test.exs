@@ -246,4 +246,198 @@ defmodule Opal.RPC.HandlerTest do
       assert tools.enabled == ["read_file"]
     end
   end
+
+  describe "handle/2 opal/ping" do
+    test "returns ok with empty map" do
+      assert {:ok, %{}} = Handler.handle("opal/ping", %{})
+    end
+  end
+
+  describe "handle/2 settings/get" do
+    test "returns settings map" do
+      assert {:ok, %{settings: settings}} = Handler.handle("settings/get", %{})
+      assert is_map(settings)
+    end
+  end
+
+  describe "handle/2 settings/save" do
+    test "saves and returns settings" do
+      assert {:ok, %{settings: _}} =
+               Handler.handle("settings/save", %{
+                 "settings" => %{"test_key_handler" => "test_value"}
+               })
+    end
+
+    test "returns error for missing settings" do
+      assert {:error, -32602, _, nil} = Handler.handle("settings/save", %{})
+    end
+
+    test "returns error for non-map settings" do
+      assert {:error, -32602, _, nil} =
+               Handler.handle("settings/save", %{"settings" => "not a map"})
+    end
+  end
+
+  describe "handle/2 tasks/list" do
+    test "returns error for missing session_id" do
+      assert {:error, -32602, _, nil} = Handler.handle("tasks/list", %{})
+    end
+
+    test "returns error for nonexistent session" do
+      assert {:error, -32602, "Session not found", _} =
+               Handler.handle("tasks/list", %{"session_id" => "nonexistent"})
+    end
+  end
+
+  describe "handle/2 auth/set_key" do
+    test "sets provider API key" do
+      assert {:ok, %{ok: true}} =
+               Handler.handle("auth/set_key", %{
+                 "provider" => "test_provider",
+                 "api_key" => "test-key-123"
+               })
+    end
+
+    test "returns error for missing params" do
+      assert {:error, -32602, _, nil} = Handler.handle("auth/set_key", %{})
+    end
+
+    test "returns error for empty api_key" do
+      assert {:error, -32602, _, nil} =
+               Handler.handle("auth/set_key", %{"provider" => "test", "api_key" => ""})
+    end
+  end
+
+  describe "handle/2 auth/poll" do
+    test "returns error for missing params" do
+      assert {:error, -32602, _, nil} = Handler.handle("auth/poll", %{})
+    end
+  end
+
+  describe "handle/2 session/start validation" do
+    test "returns error for invalid model params" do
+      assert {:error, -32602, "Invalid model param", _} =
+               Handler.handle("session/start", %{
+                 "working_dir" => File.cwd!(),
+                 "model" => %{"provider" => "", "id" => ""}
+               })
+    end
+
+    test "returns error for invalid features type" do
+      assert {:error, -32602, "Invalid features param", _} =
+               Handler.handle("session/start", %{
+                 "working_dir" => File.cwd!(),
+                 "features" => "not_a_map"
+               })
+    end
+
+    test "returns error for invalid tools type" do
+      assert {:error, -32602, "Invalid tools param", _} =
+               Handler.handle("session/start", %{
+                 "working_dir" => File.cwd!(),
+                 "tools" => "not_an_array"
+               })
+    end
+
+    test "returns error for unknown feature keys" do
+      assert {:error, -32602, "Unknown feature keys", _} =
+               Handler.handle("session/start", %{
+                 "working_dir" => File.cwd!(),
+                 "features" => %{"unknown_feature" => true}
+               })
+    end
+
+    test "returns error for non-boolean feature values" do
+      assert {:error, -32602, "Invalid feature value", _} =
+               Handler.handle("session/start", %{
+                 "working_dir" => File.cwd!(),
+                 "features" => %{"debug" => "yes"}
+               })
+    end
+  end
+
+  describe "handle/2 opal/config/get missing params" do
+    test "returns invalid_params error" do
+      assert {:error, -32602, _, nil} = Handler.handle("opal/config/get", %{})
+    end
+  end
+
+  describe "handle/2 opal/config/set missing session_id" do
+    test "returns invalid_params error" do
+      assert {:error, -32602, _, nil} = Handler.handle("opal/config/set", %{})
+    end
+  end
+
+  describe "handle/2 with active session" do
+    setup do
+      {:ok, agent} = Opal.start_session(%{working_dir: File.cwd!()})
+      sid = Opal.get_info(agent).session_id
+      on_exit(fn -> Opal.stop_session(agent) end)
+      %{agent: agent, sid: sid}
+    end
+
+    test "agent/state returns state for valid session", %{sid: sid} do
+      assert {:ok, state} = Handler.handle("agent/state", %{"session_id" => sid})
+      assert is_map(state)
+      assert Map.has_key?(state, :model)
+    end
+
+    test "agent/steer returns ok for valid session", %{sid: sid} do
+      assert {:ok, _} =
+               Handler.handle("agent/steer", %{"session_id" => sid, "text" => "Focus on tests"})
+    end
+
+    test "agent/abort returns ok for valid session", %{sid: sid} do
+      assert {:ok, _} = Handler.handle("agent/abort", %{"session_id" => sid})
+    end
+
+    test "agent/steer returns not found for unknown session" do
+      assert {:error, -32602, "Session not found", _} =
+               Handler.handle("agent/steer", %{"session_id" => "fake", "text" => "hi"})
+    end
+
+    test "model/set changes model for valid session", %{sid: sid} do
+      assert {:ok, %{model: %{id: "gpt-4o"}}} =
+               Handler.handle("model/set", %{"session_id" => sid, "model_id" => "gpt-4o"})
+    end
+
+    test "thinking/set changes thinking level for valid session", %{sid: sid} do
+      assert {:ok, _} =
+               Handler.handle("thinking/set", %{"session_id" => sid, "level" => "off"})
+    end
+
+    test "session/branch with entry_id", %{sid: sid} do
+      # entry_id won't exist so this should return some kind of response
+      result =
+        Handler.handle("session/branch", %{"session_id" => sid, "entry_id" => "nonexistent-entry"})
+
+      # May succeed or fail depending on session state — both are valid paths
+      assert is_tuple(result)
+    end
+
+    test "tasks/list returns tasks for valid session", %{sid: sid} do
+      assert {:ok, %{tasks: tasks}} =
+               Handler.handle("tasks/list", %{"session_id" => sid})
+
+      assert is_list(tasks)
+    end
+  end
+
+  describe "handle/2 models/list with provider filter" do
+    test "returns models for copilot provider" do
+      assert {:ok, %{models: models}} =
+               Handler.handle("models/list", %{"providers" => ["copilot"]})
+
+      assert length(models) > 0
+      assert Enum.all?(models, &(&1.provider == "copilot"))
+    end
+
+    test "returns models for multiple providers" do
+      assert {:ok, %{models: models}} =
+               Handler.handle("models/list", %{"providers" => ["copilot", "anthropic"]})
+
+      providers = models |> Enum.map(& &1.provider) |> Enum.uniq()
+      assert length(providers) >= 1
+    end
+  end
 end

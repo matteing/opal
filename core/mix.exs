@@ -19,7 +19,25 @@ defmodule Opal.MixProject do
       package: package(),
       docs: docs(),
       source_url: @source_url,
-      homepage_url: @source_url
+      homepage_url: @source_url,
+      test_coverage: [
+        ignore_modules: [
+          # Application bootstrap — no unit-testable logic
+          Opal.Application,
+          # Mix task — tested via CLI integration, not unit tests
+          Mix.Tasks.Opal.Gen.JsonSchema,
+          # I/O-bound stdio transport — tested via RPC integration tests
+          Opal.RPC.Stdio,
+          # MCP runtime discovery — requires live MCP servers
+          Opal.MCP.Resources,
+          # MCP client/bridge — requires live MCP servers to test
+          Opal.MCP.Client,
+          Opal.MCP.Bridge,
+          # ReqLLM provider — stream/4 and private helpers require ReqLLM
+          # mocking; convert_messages tested in llm_test.exs
+          Opal.Provider.LLM
+        ]
+      ]
     ]
   end
 

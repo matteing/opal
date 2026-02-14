@@ -193,6 +193,22 @@ defmodule Opal.Tool.SubAgentTest do
       assert Map.has_key?(params["properties"], "model")
       assert Map.has_key?(params["properties"], "system_prompt")
     end
+
+    test "meta/1 truncates long prompts" do
+      long = String.duplicate("x", 100)
+      meta = SubAgentTool.meta(%{"prompt" => long})
+      assert meta =~ "Sub-agent:"
+      assert meta =~ "..."
+      assert String.length(meta) < 80
+    end
+
+    test "meta/1 keeps short prompts intact" do
+      assert SubAgentTool.meta(%{"prompt" => "Do something"}) == "Sub-agent: Do something"
+    end
+
+    test "meta/1 returns fallback for missing prompt" do
+      assert SubAgentTool.meta(%{}) == "Sub-agent"
+    end
   end
 
   # ============================================================

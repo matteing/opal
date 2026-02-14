@@ -191,4 +191,65 @@ defmodule OpalTest do
       Opal.stop_session(pid)
     end
   end
+
+  describe "get_info/1" do
+    test "returns session info map" do
+      {:ok, pid} = start_test_session()
+      info = Opal.get_info(pid)
+      assert is_binary(info.session_id)
+      assert info.model.id == "test-model"
+      assert is_binary(info.working_dir)
+      Opal.stop_session(pid)
+    end
+  end
+
+  describe "get_context/1" do
+    test "returns context files list" do
+      {:ok, pid} = start_test_session()
+      ctx = Opal.get_context(pid)
+      assert is_list(ctx)
+      Opal.stop_session(pid)
+    end
+  end
+
+  describe "set_model/2" do
+    test "changes the model" do
+      {:ok, pid} = start_test_session()
+      Opal.set_model(pid, {:test, "new-model"})
+      state = Opal.Agent.get_state(pid)
+      assert state.model.id == "new-model"
+      Opal.stop_session(pid)
+    end
+  end
+
+  describe "set_thinking_level/2" do
+    test "changes thinking level" do
+      {:ok, pid} = start_test_session()
+      Opal.set_thinking_level(pid, :high)
+      state = Opal.Agent.get_state(pid)
+      assert state.model.thinking_level == :high
+      Opal.stop_session(pid)
+    end
+  end
+
+  describe "sync_messages/2" do
+    test "syncs messages to agent" do
+      {:ok, pid} = start_test_session()
+      messages = [Opal.Message.user("synced message")]
+      Opal.sync_messages(pid, messages)
+      state = Opal.Agent.get_state(pid)
+      assert Enum.any?(state.messages, &(&1.content == "synced message"))
+      Opal.stop_session(pid)
+    end
+  end
+
+  describe "configure_session/2" do
+    test "updates session features" do
+      {:ok, pid} = start_test_session()
+      Opal.configure_session(pid, %{features: %{debug: true}})
+      state = Opal.Agent.get_state(pid)
+      assert state.config.features.debug.enabled
+      Opal.stop_session(pid)
+    end
+  end
 end
