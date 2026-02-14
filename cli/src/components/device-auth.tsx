@@ -1,6 +1,6 @@
-import React, { useState, type FC } from "react";
-import { Box, Text, useInput } from "ink";
-import TextInput from "ink-text-input";
+import React, { useState, useCallback, useRef, type FC } from "react";
+import { Box, Text, useInput, type Key } from "ink";
+import { StableTextInput } from "./stable-text-input.js";
 import type { AuthFlow, AuthProvider, OpalActions } from "../hooks/use-opal.js";
 import { openUrl, copyToClipboard } from "../open-url.js";
 
@@ -30,17 +30,23 @@ export const SetupWizard: FC<SetupWizardProps> = ({ flow, actions, error }) => {
 const DeviceCodeScreen: FC<{ flow: AuthFlow }> = ({ flow }) => {
   const [opened, setOpened] = useState(false);
 
-  useInput((_input, key) => {
-    if (key.return && !opened && flow.deviceCode) {
-      const copied = copyToClipboard(flow.deviceCode.userCode);
-      openUrl(flow.deviceCode.verificationUri);
+  const openedRef = useRef(opened);
+  openedRef.current = opened;
+  const flowRef = useRef(flow);
+  flowRef.current = flow;
+
+  const deviceCodeHandler = useCallback((_input: string, key: Key) => {
+    if (key.return && !openedRef.current && flowRef.current.deviceCode) {
+      const copied = copyToClipboard(flowRef.current.deviceCode.userCode);
+      openUrl(flowRef.current.deviceCode.verificationUri);
       setOpened(true);
       if (!copied) {
-        // Clipboard failed — user will need to copy manually
         process.stderr.write("Could not copy to clipboard.\n");
       }
     }
-  });
+  }, []);
+
+  useInput(deviceCodeHandler);
 
   return (
     <Box flexDirection="column" padding={1} gap={1}>
@@ -74,22 +80,28 @@ const ProviderPicker: FC<{
 }> = ({ providers, actions, error }) => {
   const [selected, setSelected] = useState(0);
 
-  useInput((_input, key) => {
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const actionsRef = useRef(actions);
+  actionsRef.current = actions;
+  const providersRef = useRef(providers);
+  providersRef.current = providers;
+
+  const pickerHandler = useCallback((_input: string, key: Key) => {
     if (key.upArrow) setSelected((i) => Math.max(0, i - 1));
-    if (key.downArrow) setSelected((i) => Math.min(providers.length - 1, i + 1));
+    if (key.downArrow) setSelected((i) => Math.min(providersRef.current.length - 1, i + 1));
     if (key.return) {
-      const provider = providers[selected];
+      const provider = providersRef.current[selectedRef.current];
       if (!provider) return;
       if (provider.method === "device_code") {
-        actions.authStartDeviceFlow();
+        actionsRef.current.authStartDeviceFlow();
       } else if (provider.method === "api_key") {
-        // Trigger API key input by updating authFlow state — not ideal,
-        // but the action just needs the provider info for the input screen.
-        // We'll pass this through the action which updates state.
-        actions.authSubmitKey(provider.id, "");
+        actionsRef.current.authSubmitKey(provider.id, "");
       }
     }
-  });
+  }, []);
+
+  useInput(pickerHandler);
 
   return (
     <Box flexDirection="column" padding={1} gap={1}>
@@ -126,6 +138,16 @@ const ApiKeyInput: FC<{
   error: string | null;
 }> = ({ provider, actions, error }) => {
   const [value, setValue] = useState("");
+  const actionsRef = useRef(actions);
+  actionsRef.current = actions;
+  const providerRef = useRef(provider);
+  providerRef.current = provider;
+
+  const handleSubmit = useCallback((key: string) => {
+    if (key.trim()) {
+      actionsRef.current.authSubmitKey(providerRef.current.providerId, key.trim());
+    }
+  }, []);
 
   return (
     <Box flexDirection="column" padding={1} gap={1}>
@@ -134,16 +156,7 @@ const ApiKeyInput: FC<{
       </Text>
       <Box>
         <Text>API Key: </Text>
-        <TextInput
-          value={value}
-          onChange={setValue}
-          onSubmit={(key) => {
-            if (key.trim()) {
-              actions.authSubmitKey(provider.providerId, key.trim());
-            }
-          }}
-          mask="*"
-        />
+        <StableTextInput value={value} onChange={setValue} onSubmit={handleSubmit} mask="*" />
       </Box>
       {error && (
         <Text color="red" bold>

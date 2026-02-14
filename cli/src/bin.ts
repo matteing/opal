@@ -34,6 +34,12 @@ for (let i = 0; i < args.length; i++) {
     case "--auto-confirm":
       opts.autoConfirm = true;
       break;
+    case "--debug":
+      opts.features = {
+        ...(opts.features ?? {}),
+        debug: true,
+      } as SessionOptions["features"];
+      break;
     case "--help":
     case "-h":
       console.log(`Usage: opal [options]
@@ -42,6 +48,7 @@ Options:
   --model <provider/id>   Model to use (e.g. anthropic/claude-sonnet-4-20250514)
   --working-dir, -C <dir> Working directory
   --auto-confirm          Auto-confirm all tool executions
+  --debug                 Enable debug feature/tools for this session
   --verbose, -v           Verbose output
   --help, -h              Show help`);
       process.exit(0);

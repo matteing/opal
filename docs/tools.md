@@ -27,6 +27,7 @@ The agent converts tool modules to JSON Schema for the LLM. When the LLM request
 | `tasks` | `Opal.Tool.Tasks` | DETS-backed task tracker |
 | `use_skill` | `Opal.Tool.UseSkill` | Load agent skills dynamically |
 | `ask_user` | `Opal.Tool.AskUser` | Ask the user a question (top-level agents) |
+| `debug_state` | `Opal.Tool.Debug` | Introspect agent runtime state and recent events (disabled by default) |
 
 Each tool has a detailed doc in `docs/tools/`:
 
@@ -38,6 +39,7 @@ Each tool has a detailed doc in `docs/tools/`:
 - [**tasks**](tools/tasks.md) — DETS-backed persistent task tracker
 - [**use_skill**](tools/use-skill.md) — Progressive skill loading
 - [**ask_user**](tools/user-input.md) — User input with question escalation for sub-agents
+- [**debug_state**](tools/debug.md) — Runtime self-introspection snapshot for troubleshooting
 
 ## MCP Tools
 

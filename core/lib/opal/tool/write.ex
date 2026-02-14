@@ -46,8 +46,10 @@ defmodule Opal.Tool.Write do
 
   @impl true
   @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
-  def execute(%{"path" => path, "content" => content}, %{working_dir: working_dir}) do
-    with {:ok, resolved} <- FileHelper.resolve_path(path, working_dir) do
+  def execute(%{"path" => path, "content" => content}, %{working_dir: working_dir} = context) do
+    allow_bases = FileHelper.allowed_bases(context)
+
+    with {:ok, resolved} <- FileHelper.resolve_path(path, working_dir, allow_bases: allow_bases) do
       write_file(resolved, content)
     end
   end

@@ -3,6 +3,7 @@ defmodule Opal.Tool.ReadTest do
 
   @moduletag :tmp_dir
 
+  alias Opal.Config
   alias Opal.Tool.Read
 
   # Strips hashline tags from output for content comparison
@@ -69,6 +70,19 @@ defmodule Opal.Tool.ReadTest do
       assert String.starts_with?(Enum.at(lines, 0), "1:")
       assert String.starts_with?(Enum.at(lines, 1), "2:")
     end
+
+    test "allows reading absolute path in Opal data_dir", %{tmp_dir: tmp_dir} do
+      working_dir = Path.join(tmp_dir, "project")
+      data_dir = Path.join(tmp_dir, ".opal")
+      path = Path.join(data_dir, "plans/plan.md")
+      File.mkdir_p!(Path.dirname(path))
+      File.write!(path, "plan")
+
+      ctx = %{working_dir: working_dir, config: Config.new(%{data_dir: data_dir})}
+      {:ok, result} = Read.execute(%{"path" => path}, ctx)
+
+      assert strip_tags(result) == "plan"
+    end
   end
 
   describe "execute/2 errors" do
@@ -92,6 +106,19 @@ defmodule Opal.Tool.ReadTest do
     test "returns error when path param missing", %{tmp_dir: tmp_dir} do
       assert {:error, "Missing required parameter: path"} =
                Read.execute(%{}, %{working_dir: tmp_dir})
+    end
+
+    test "rejects path outside both working_dir and Opal data_dir", %{tmp_dir: tmp_dir} do
+      working_dir = Path.join(tmp_dir, "project")
+      data_dir = Path.join(tmp_dir, ".opal")
+      path = Path.join(tmp_dir, "outside/secret.txt")
+      File.mkdir_p!(Path.dirname(path))
+      File.write!(path, "secret")
+
+      ctx = %{working_dir: working_dir, config: Config.new(%{data_dir: data_dir})}
+
+      assert {:error, msg} = Read.execute(%{"path" => path}, ctx)
+      assert msg =~ "escapes working directory"
     end
   end
 

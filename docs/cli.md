@@ -149,6 +149,7 @@ State uses a nested `AgentView` shape. The `main` field holds the primary agent'
 | `/compact` | Trigger conversation compaction |
 | `/agents` | List active sub-agents |
 | `/agents <n\|main>` | Switch view to a sub-agent or back to main |
+| `/opal` | Open runtime configuration menu (toggle `sub_agents`, `skills`, `mcp`, `debug`, and tools) |
 
 ## Keyboard Shortcuts
 

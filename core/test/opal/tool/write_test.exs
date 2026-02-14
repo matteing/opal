@@ -3,6 +3,7 @@ defmodule Opal.Tool.WriteTest do
 
   @moduletag :tmp_dir
 
+  alias Opal.Config
   alias Opal.Tool.Write
 
   describe "behaviour" do
@@ -64,6 +65,18 @@ defmodule Opal.Tool.WriteTest do
       assert {:ok, _} = Write.execute(%{"path" => "empty.txt", "content" => ""}, ctx)
       assert File.read!(Path.join(tmp_dir, "empty.txt")) == ""
     end
+
+    test "allows writing absolute path in Opal data_dir", %{tmp_dir: tmp_dir} do
+      working_dir = Path.join(tmp_dir, "project")
+      data_dir = Path.join(tmp_dir, ".opal")
+      path = Path.join(data_dir, "plans/plan.md")
+      File.mkdir_p!(working_dir)
+
+      ctx = %{working_dir: working_dir, config: Config.new(%{data_dir: data_dir})}
+
+      assert {:ok, _msg} = Write.execute(%{"path" => path, "content" => "plan"}, ctx)
+      assert File.read!(path) == "plan"
+    end
   end
 
   describe "execute/2 errors" do
@@ -84,6 +97,18 @@ defmodule Opal.Tool.WriteTest do
     test "returns error when required params missing", %{tmp_dir: tmp_dir} do
       assert {:error, msg} = Write.execute(%{}, %{working_dir: tmp_dir})
       assert msg =~ "Missing required parameters"
+    end
+
+    test "rejects path outside both working_dir and Opal data_dir", %{tmp_dir: tmp_dir} do
+      working_dir = Path.join(tmp_dir, "project")
+      data_dir = Path.join(tmp_dir, ".opal")
+      path = Path.join(tmp_dir, "outside/evil.txt")
+      File.mkdir_p!(working_dir)
+
+      ctx = %{working_dir: working_dir, config: Config.new(%{data_dir: data_dir})}
+
+      assert {:error, msg} = Write.execute(%{"path" => path, "content" => "x"}, ctx)
+      assert msg =~ "escapes working directory"
     end
   end
 

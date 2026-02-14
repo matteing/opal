@@ -1,6 +1,6 @@
-import React, { useState, useCallback, memo, type FC } from "react";
+import React, { useState, useCallback, useRef, memo, type FC } from "react";
 import { Box, Text, useStdout } from "ink";
-import TextInput from "ink-text-input";
+import { StableTextInput } from "./stable-text-input.js";
 import type { OpalActions, OpalState } from "../hooks/use-opal.js";
 
 export interface BottomBarProps {
@@ -10,10 +10,8 @@ export interface BottomBarProps {
 
 /**
  * Memoised so that high-frequency streaming events (messageDelta, etc.) do NOT
- * cascade into TextInput re-renders.  ink-text-input creates an inline
- * useInput callback every render, and Ink's useInput tears down / re-adds the
- * stdin listener whenever that reference changes – causing dropped keystrokes
- * and input lag during streaming.
+ * cascade into re-renders.  Uses StableTextInput which keeps its `useInput`
+ * handler reference-stable, so Ink never tears down the stdin listener.
  */
 export const BottomBar: FC<BottomBarProps> = memo(
   ({ state, actions }) => {
@@ -25,24 +23,27 @@ export const BottomBar: FC<BottomBarProps> = memo(
 
     const placeholder = isRunning ? "Steer the response…" : "Send a message…";
 
-    const handleSubmit = useCallback(
-      (text: string) => {
-        if (!text.trim()) return;
-        setValue("");
+    // Refs so handleSubmit never changes identity
+    const isRunningRef = useRef(isRunning);
+    isRunningRef.current = isRunning;
+    const actionsRef = useRef(actions);
+    actionsRef.current = actions;
 
-        if (text.trim().startsWith("/")) {
-          actions.runCommand(text.trim());
-          return;
-        }
+    const handleSubmit = useCallback((text: string) => {
+      if (!text.trim()) return;
+      setValue("");
 
-        if (isRunning) {
-          actions.submitSteer(text.trim());
-        } else {
-          actions.submitPrompt(text.trim());
-        }
-      },
-      [isRunning, actions],
-    );
+      if (text.trim().startsWith("/")) {
+        actionsRef.current.runCommand(text.trim());
+        return;
+      }
+
+      if (isRunningRef.current) {
+        actionsRef.current.submitSteer(text.trim());
+      } else {
+        actionsRef.current.submitPrompt(text.trim());
+      }
+    }, []);
 
     const formatTokens = (tokens: number | undefined): string => {
       if (tokens == null) return "0";
@@ -80,7 +81,7 @@ export const BottomBar: FC<BottomBarProps> = memo(
           <Text color="magenta" bold>
             ❯{" "}
           </Text>
-          <TextInput
+          <StableTextInput
             value={value}
             onChange={setValue}
             placeholder={placeholder}

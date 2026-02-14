@@ -123,6 +123,11 @@ defmodule Opal.Agent do
     :gen_statem.call(agent, {:sync_messages, messages})
   end
 
+  @spec configure(GenServer.server(), map()) :: :ok
+  def configure(agent, attrs) when is_map(attrs) do
+    :gen_statem.call(agent, {:configure, attrs})
+  end
+
   @doc """
   Loads a skill by name into the agent's active context.
 
@@ -227,6 +232,7 @@ defmodule Opal.Agent do
       system_prompt: Keyword.get(opts, :system_prompt, ""),
       model: model,
       tools: base_tools ++ mcp_tools,
+      disabled_tools: Keyword.get(opts, :disabled_tools, []),
       working_dir: working_dir,
       config: config,
       provider: provider,
@@ -248,6 +254,8 @@ defmodule Opal.Agent do
         current_context_tokens: 0
       }
     }
+
+    Opal.Agent.EventLog.clear(session_id)
 
     tools_str = base_tools |> Enum.map(& &1.name()) |> Enum.join(", ")
 
@@ -371,6 +379,18 @@ defmodule Opal.Agent do
   def handle_call({:sync_messages, messages}, _from, state) do
     Logger.debug("Messages synced session=#{state.session_id} count=#{length(messages)}")
     {:reply, :ok, %{state | messages: Enum.reverse(messages)}}
+  end
+
+  def handle_call({:configure, attrs}, _from, %State{} = state) do
+    state =
+      state
+      |> maybe_update_feature(:sub_agents, get_in(attrs, [:features, :sub_agents]))
+      |> maybe_update_feature(:skills, get_in(attrs, [:features, :skills]))
+      |> maybe_update_feature(:mcp, get_in(attrs, [:features, :mcp]))
+      |> maybe_update_feature(:debug, get_in(attrs, [:features, :debug]))
+      |> maybe_update_enabled_tools(Map.get(attrs, :enabled_tools))
+
+    {:reply, :ok, state}
   end
 
   def handle_call({:load_skill, skill_name}, _from, %State{} = state) do
@@ -683,13 +703,14 @@ defmodule Opal.Agent do
            system_prompt: prompt,
            context: context,
            messages: messages,
+           config: config,
            available_skills: skills
          } = state
        )
        when (prompt != "" and prompt != nil) or (context != "" and context != nil) do
     # Build skill menu if skills are available
     skill_menu =
-      if skills != [] do
+      if config.features.skills.enabled and skills != [] do
         summaries = Enum.map_join(skills, "\n", &Opal.Skill.summary/1)
 
         "\n\n## Available Skills\n\nUse the `use_skill` tool to load a skill's full instructions when relevant.\n\n#{summaries}"
@@ -739,6 +760,29 @@ defmodule Opal.Agent do
     else
       ""
     end
+  end
+
+  defp maybe_update_feature(%State{} = state, _key, nil), do: state
+
+  defp maybe_update_feature(%State{config: config} = state, key, enabled)
+       when is_boolean(enabled) do
+    current = Map.fetch!(config.features, key)
+    features = Map.put(config.features, key, Map.put(current, :enabled, enabled))
+    state = %{state | config: %{config | features: features}}
+    if key == :debug and not enabled, do: Opal.Agent.EventLog.clear(state.session_id)
+    state
+  end
+
+  defp maybe_update_feature(%State{} = state, _key, _invalid), do: state
+
+  defp maybe_update_enabled_tools(%State{} = state, nil), do: state
+
+  defp maybe_update_enabled_tools(%State{tools: tools} = state, enabled_tools)
+       when is_list(enabled_tools) do
+    enabled = MapSet.new(enabled_tools)
+    all_tool_names = Enum.map(tools, & &1.name())
+    disabled = Enum.reject(all_tool_names, &MapSet.member?(enabled, &1))
+    %{state | disabled_tools: disabled}
   end
 
   # --- Response Finalization ---
@@ -887,9 +931,7 @@ defmodule Opal.Agent do
   defp cancel_watchdog(_), do: :ok
 
   # Broadcasts an event to all subscribers of this session.
-  defp broadcast(%State{session_id: session_id}, event) do
-    Opal.Events.broadcast(session_id, event)
-  end
+  defp broadcast(%State{} = state, event), do: Opal.Agent.EventLog.broadcast(state, event)
 
   # Appends a single message. When a Session process is attached, the message
   # is also stored in the session tree. The local messages list is always

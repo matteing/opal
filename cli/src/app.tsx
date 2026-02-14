@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, type FC } from "react";
-import { Box, Text, useApp, useInput, useStdout } from "ink";
+import React, { useState, useEffect, useRef, useCallback, type FC } from "react";
+import { Box, Text, useApp, useInput, useStdout, type Key } from "ink";
 import { useOpal, type Task } from "./hooks/use-opal.js";
 import { Header } from "./components/header.js";
 import { MessageList } from "./components/message-list.js";
@@ -8,6 +8,7 @@ import { ThinkingIndicator } from "./components/thinking.js";
 import { ConfirmDialog } from "./components/confirm-dialog.js";
 import { AskUserDialog } from "./components/ask-user-dialog.js";
 import { ModelPicker } from "./components/model-picker.js";
+import { OpalMenu } from "./components/opal-menu.js";
 import { ShimmerText } from "./components/shimmer-text.js";
 import { SetupWizard } from "./components/device-auth.js";
 import { openPlanInEditor } from "./open-editor.js";
@@ -94,21 +95,35 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
     };
   }, []);
 
-  useInput((input, key) => {
-    if (input === "c" && key.ctrl) {
-      if (state.main.isRunning) {
-        actions.abort();
-      } else {
-        exit();
+  // Keep mutable refs so the useInput handler is reference-stable and Ink
+  // never tears down / re-adds the stdin listener during streaming.
+  const isRunningRef = useRef(state.main.isRunning);
+  isRunningRef.current = state.main.isRunning;
+  const actionsRef = useRef(actions);
+  actionsRef.current = actions;
+  const sessionDirRef = useRef(state.sessionDir);
+  sessionDirRef.current = state.sessionDir;
+
+  const appInputHandler = useCallback(
+    (input: string, key: Key) => {
+      if (input === "c" && key.ctrl) {
+        if (isRunningRef.current) {
+          actionsRef.current.abort();
+        } else {
+          exit();
+        }
       }
-    }
-    if (input === "o" && key.ctrl) {
-      setShowToolOutput((v) => !v);
-    }
-    if (input === "y" && key.ctrl) {
-      openPlanInEditor(state.sessionDir);
-    }
-  });
+      if (input === "o" && key.ctrl) {
+        setShowToolOutput((v) => !v);
+      }
+      if (input === "y" && key.ctrl) {
+        openPlanInEditor(sessionDirRef.current);
+      }
+    },
+    [exit],
+  );
+
+  useInput(appInputHandler);
 
   const rows = stdout?.rows ?? 24;
 
@@ -192,6 +207,15 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
           currentThinkingLevel={state.modelPicker.currentThinkingLevel}
           onSelect={actions.selectModel}
           onDismiss={actions.dismissModelPicker}
+        />
+      )}
+
+      {state.opalMenu && (
+        <OpalMenu
+          config={state.opalMenu}
+          onToggleFeature={actions.toggleOpalFeature}
+          onToggleTool={actions.toggleOpalTool}
+          onDismiss={actions.dismissOpalMenu}
         />
       )}
 

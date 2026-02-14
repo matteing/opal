@@ -38,6 +38,13 @@ Client → Server requests:
 | `tasks/list` | List tracked tasks for a session |
 | `settings/get` | Get persistent user settings |
 | `settings/save` | Save user settings (merged) |
+| `opal/config/get` | Get runtime feature/tool configuration for a session |
+| `opal/config/set` | Update runtime feature/tool configuration for a session |
+
+`session/start` also accepts optional boot-time controls:
+
+- `features`: `{ sub_agents?: boolean, skills?: boolean, mcp?: boolean, debug?: boolean }`
+- `tools`: explicit enabled tool names for the session
 
 Server → Client requests:
 

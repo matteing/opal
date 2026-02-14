@@ -144,7 +144,9 @@ defmodule Opal.LiveThinkingTest do
       RecordingProvider.start_recording()
 
       # Create a temporary file to read
-      tmp_file = Path.join(System.tmp_dir!(), "opal_live_test_#{System.unique_integer([:positive])}.txt")
+      tmp_file =
+        Path.join(System.tmp_dir!(), "opal_live_test_#{System.unique_integer([:positive])}.txt")
+
       File.write!(tmp_file, "Hello from the live thinking test!")
 
       {:ok, pid} =
@@ -201,7 +203,9 @@ defmodule Opal.LiveThinkingTest do
     test "GPT-5 thinking + tool call" do
       RecordingProvider.start_recording()
 
-      tmp_file = Path.join(System.tmp_dir!(), "opal_live_test_#{System.unique_integer([:positive])}.txt")
+      tmp_file =
+        Path.join(System.tmp_dir!(), "opal_live_test_#{System.unique_integer([:positive])}.txt")
+
       File.write!(tmp_file, "Hello from the live thinking test!")
 
       {:ok, pid} =

@@ -6,6 +6,9 @@ import type {
   AgentStateResult,
   ModelsListResult,
   ModelSetResult,
+  OpalConfigGetResult,
+  OpalConfigSetParams,
+  OpalConfigSetResult,
   SettingsGetResult,
   SettingsSaveResult,
   ConfirmRequest,
@@ -272,6 +275,25 @@ export class Session {
    */
   async saveSettings(settings: Record<string, unknown>): Promise<SettingsSaveResult> {
     return this.client.request("settings/save", { settings });
+  }
+
+  /**
+   * Get runtime Opal feature/tool configuration for this session.
+   */
+  async getOpalConfig(): Promise<OpalConfigGetResult> {
+    return this.client.request("opal/config/get", { sessionId: this.sessionId });
+  }
+
+  /**
+   * Update runtime Opal feature/tool configuration for this session.
+   */
+  async setOpalConfig(
+    params: Omit<OpalConfigSetParams, "sessionId">,
+  ): Promise<OpalConfigSetResult> {
+    return this.client.request("opal/config/set", {
+      sessionId: this.sessionId,
+      ...params,
+    });
   }
 
   /**

@@ -175,15 +175,33 @@ defmodule Opal.Agent.ToolRunner do
   Returns the list of active tools based on config and available skills.
   """
   @spec active_tools(State.t()) :: [module()]
-  def active_tools(%State{tools: tools, config: config, available_skills: skills}) do
+  def active_tools(%State{
+        tools: tools,
+        disabled_tools: disabled_tools,
+        config: config,
+        available_skills: skills
+      }) do
+    disabled = MapSet.new(disabled_tools)
+
     tools
+    |> Enum.reject(&MapSet.member?(disabled, &1.name()))
     |> then(fn t ->
       if config.features.sub_agents.enabled,
         do: t,
         else: Enum.reject(t, &(&1 == Opal.Tool.SubAgent))
     end)
     |> then(fn t ->
-      if skills != [], do: t, else: Enum.reject(t, &(&1 == Opal.Tool.UseSkill))
+      if config.features.mcp.enabled, do: t, else: Enum.reject(t, &mcp_tool_module?/1)
+    end)
+    |> then(fn t ->
+      if config.features.debug.enabled,
+        do: t,
+        else: Enum.reject(t, &(&1 == Opal.Tool.Debug))
+    end)
+    |> then(fn t ->
+      if config.features.skills.enabled and skills != [],
+        do: t,
+        else: Enum.reject(t, &(&1 == Opal.Tool.UseSkill))
     end)
   end
 
@@ -227,6 +245,12 @@ defmodule Opal.Agent.ToolRunner do
   @spec maybe_auto_load_skills([{map(), term()}], State.t()) :: State.t()
   def maybe_auto_load_skills(_results, %State{available_skills: []} = state), do: state
 
+  def maybe_auto_load_skills(
+        _results,
+        %State{config: %{features: %{skills: %{enabled: false}}}} = state
+      ),
+      do: state
+
   def maybe_auto_load_skills(results, %State{} = state) do
     # Collect relative paths from successful file-modifying tool calls
     touched_paths =
@@ -269,9 +293,7 @@ defmodule Opal.Agent.ToolRunner do
   end
 
   # Private helper functions
-  defp broadcast(%State{session_id: session_id}, event) do
-    Opal.Events.broadcast(session_id, event)
-  end
+  defp broadcast(%State{} = state, event), do: Opal.Agent.EventLog.broadcast(state, event)
 
   defp append_message(%State{session: nil} = state, msg) do
     %{state | messages: [msg | state.messages]}
@@ -289,5 +311,11 @@ defmodule Opal.Agent.ToolRunner do
   defp append_messages(%State{session: session} = state, msgs) do
     Opal.Session.append_many(session, msgs)
     %{state | messages: Enum.reverse(msgs) ++ state.messages}
+  end
+
+  defp mcp_tool_module?(tool_mod) when is_atom(tool_mod) do
+    tool_mod
+    |> Atom.to_string()
+    |> String.starts_with?("Elixir.Opal.MCP.Tool.")
   end
 end

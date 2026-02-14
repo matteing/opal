@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { AgentEvent, TokenUsage, ConfirmRequest } from "../sdk/protocol.js";
 import { Session, type SessionOptions } from "../sdk/session.js";
 
@@ -10,6 +10,20 @@ interface ModelEntry {
   provider?: string;
   supportsThinking?: boolean;
   thinkingLevels?: string[];
+}
+
+interface OpalRuntimeConfig {
+  features: {
+    subAgents: boolean;
+    skills: boolean;
+    mcp: boolean;
+    debug: boolean;
+  };
+  tools: {
+    all: string[];
+    enabled: string[];
+    disabled: string[];
+  };
 }
 
 function errorMessage(e: unknown): string {
@@ -104,6 +118,7 @@ export interface OpalState {
     current: string;
     currentThinkingLevel?: string;
   } | null;
+  opalMenu: OpalRuntimeConfig | null;
   currentModel: string | null;
   tokenUsage: TokenUsage | null;
   sessionReady: boolean;
@@ -128,6 +143,9 @@ export interface OpalActions {
   runCommand: (input: string) => void;
   selectModel: (modelId: string, thinkingLevel?: string) => void;
   dismissModelPicker: () => void;
+  dismissOpalMenu: () => void;
+  toggleOpalFeature: (key: "subAgents" | "skills" | "mcp" | "debug", enabled: boolean) => void;
+  toggleOpalTool: (name: string, enabled: boolean) => void;
   switchTab: (tabId: string) => void;
   authStartDeviceFlow: () => void;
   authSubmitKey: (providerId: string, apiKey: string) => void;
@@ -150,6 +168,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     confirmation: null,
     askUser: null,
     modelPicker: null,
+    opalMenu: null,
     currentModel: null,
     tokenUsage: null,
     sessionReady: false,
@@ -288,7 +307,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     const combined = combineDeltas(batch);
 
     setState((s) => {
-      let next: OpalState = { ...s, main: { ...s.main, timeline: [...s.main.timeline] } };
+      let next: OpalState = s;
       for (const event of combined) {
         next = applyEvent(next, event);
       }
@@ -505,6 +524,15 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
           });
           break;
         }
+        case "opal": {
+          session
+            .getOpalConfig()
+            .then((cfg) => {
+              setState((s) => ({ ...s, opalMenu: cfg }));
+            })
+            .catch((e: unknown) => addSystemMessage(`Error: ${errorMessage(e)}`));
+          break;
+        }
         case "help": {
           addSystemMessage(
             "**Commands:**\n" +
@@ -513,6 +541,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
               "  `/models`                 — select model interactively\n" +
               "  `/agents`                 — list active sub-agents\n" +
               "  `/agents <n|main>`        — switch view to sub-agent or main\n" +
+              "  `/opal`                   — open configuration menu\n" +
               "  `/compact`                — compact conversation history\n" +
               "  `/help`                   — show this help",
           );
@@ -556,6 +585,80 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
   const dismissModelPicker = useCallback(() => {
     setState((s) => ({ ...s, modelPicker: null }));
   }, []);
+
+  const dismissOpalMenu = useCallback(() => {
+    setState((s) => ({ ...s, opalMenu: null }));
+  }, []);
+
+  const toggleOpalFeature = useCallback(
+    (key: "subAgents" | "skills" | "mcp" | "debug", enabled: boolean) => {
+      const session = sessionRef.current;
+      if (!session) return;
+
+      // Optimistic update
+      setState((s) => {
+        if (!s.opalMenu) return s;
+        return {
+          ...s,
+          opalMenu: {
+            ...s.opalMenu,
+            features: { ...s.opalMenu.features, [key]: enabled },
+          },
+        };
+      });
+
+      session
+        .getOpalConfig()
+        .then((cfg) =>
+          session.setOpalConfig({
+            features: { ...cfg.features, [key]: enabled },
+          }),
+        )
+        .then((cfg) => setState((s) => ({ ...s, opalMenu: cfg })))
+        .catch((e: unknown) => addSystemMessage(`Error: ${errorMessage(e)}`));
+    },
+    [addSystemMessage],
+  );
+
+  const toggleOpalTool = useCallback(
+    (name: string, enabled: boolean) => {
+      const session = sessionRef.current;
+      if (!session) return;
+
+      // Optimistic update
+      setState((s) => {
+        if (!s.opalMenu) return s;
+        const next = new Set(s.opalMenu.tools.enabled);
+        if (enabled) next.add(name);
+        else next.delete(name);
+        const ordered = s.opalMenu.tools.all.filter((t) => next.has(t));
+        return {
+          ...s,
+          opalMenu: {
+            ...s.opalMenu,
+            tools: {
+              ...s.opalMenu.tools,
+              enabled: ordered,
+              disabled: s.opalMenu.tools.all.filter((t) => !next.has(t)),
+            },
+          },
+        };
+      });
+
+      session
+        .getOpalConfig()
+        .then((cfg) => {
+          const next = new Set(cfg.tools.enabled);
+          if (enabled) next.add(name);
+          else next.delete(name);
+          const ordered = cfg.tools.all.filter((t) => next.has(t));
+          return session.setOpalConfig({ tools: ordered });
+        })
+        .then((cfg) => setState((s) => ({ ...s, opalMenu: cfg })))
+        .catch((e: unknown) => addSystemMessage(`Error: ${errorMessage(e)}`));
+    },
+    [addSystemMessage],
+  );
 
   const switchTab = useCallback((tabId: string) => {
     setState((s) => ({ ...s, activeTab: tabId }));
@@ -626,9 +729,8 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     [markSessionReady, state.authFlow],
   );
 
-  return [
-    state,
-    {
+  const actions = useMemo(
+    () => ({
       submitPrompt,
       submitSteer,
       abort,
@@ -638,11 +740,33 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       runCommand,
       selectModel,
       dismissModelPicker,
+      dismissOpalMenu,
+      toggleOpalFeature,
+      toggleOpalTool,
       switchTab,
       authStartDeviceFlow,
       authSubmitKey,
-    },
-  ];
+    }),
+    [
+      submitPrompt,
+      submitSteer,
+      abort,
+      compact,
+      resolveConfirmation,
+      resolveAskUser,
+      runCommand,
+      selectModel,
+      dismissModelPicker,
+      dismissOpalMenu,
+      toggleOpalFeature,
+      toggleOpalTool,
+      switchTab,
+      authStartDeviceFlow,
+      authSubmitKey,
+    ],
+  );
+
+  return [state, actions];
 }
 
 // --- Event reducer ---
@@ -665,8 +789,13 @@ function applyAgentEvent(view: AgentView, event: Record<string, unknown>): Agent
 
     case "messageStart":
     case "message_start":
-      view.timeline.push({ kind: "message", message: { role: "assistant", content: "" } });
-      return { ...view };
+      return {
+        ...view,
+        timeline: [
+          ...view.timeline,
+          { kind: "message", message: { role: "assistant", content: "" } },
+        ],
+      };
 
     case "messageDelta":
     case "message_delta":
@@ -677,8 +806,11 @@ function applyAgentEvent(view: AgentView, event: Record<string, unknown>): Agent
 
     case "thinkingStart":
     case "thinking_start":
-      view.timeline.push({ kind: "thinking", text: "" });
-      return { ...view, thinking: "" };
+      return {
+        ...view,
+        thinking: "",
+        timeline: [...view.timeline, { kind: "thinking", text: "" }],
+      };
 
     case "thinkingDelta":
     case "thinking_delta": {
@@ -692,27 +824,32 @@ function applyAgentEvent(view: AgentView, event: Record<string, unknown>): Agent
 
     case "toolExecutionStart":
     case "tool_execution_start":
-      view.timeline.push({
-        kind: "tool",
-        task: {
-          tool: (event.tool as string) ?? "",
-          callId: ((event.callId ?? event.call_id) as string) ?? "",
-          args: (event.args as Record<string, unknown>) ?? {},
-          meta: (event.meta as string) ?? "",
-          status: "running",
-        },
-      });
-      return { ...view };
+      return {
+        ...view,
+        timeline: [
+          ...view.timeline,
+          {
+            kind: "tool",
+            task: {
+              tool: (event.tool as string) ?? "",
+              callId: ((event.callId ?? event.call_id) as string) ?? "",
+              args: (event.args as Record<string, unknown>) ?? {},
+              meta: (event.meta as string) ?? "",
+              status: "running",
+            },
+          },
+        ],
+      };
 
     case "toolExecutionEnd":
     case "tool_execution_end": {
       const callId = ((event.callId ?? event.call_id) as string) ?? "";
       const result = event.result as { ok: boolean; output?: string; error?: string };
-      // Mutate in place — timeline was already copied at batch start
       const idx = view.timeline.findIndex((e) => e.kind === "tool" && e.task.callId === callId);
       if (idx >= 0) {
         const entry = view.timeline[idx] as { kind: "tool"; task: Task };
-        view.timeline[idx] = {
+        const updated = view.timeline.slice();
+        updated[idx] = {
           kind: "tool",
           task: {
             ...entry.task,
@@ -720,8 +857,9 @@ function applyAgentEvent(view: AgentView, event: Record<string, unknown>): Agent
             result,
           },
         };
+        return { ...view, timeline: updated };
       }
-      return { ...view, timeline: view.timeline };
+      return view;
     }
 
     case "statusUpdate":

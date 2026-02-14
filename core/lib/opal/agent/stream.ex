@@ -256,7 +256,5 @@ defmodule Opal.Agent.Stream do
 
   # Helper functions
 
-  defp broadcast(%State{session_id: session_id}, event) do
-    Opal.Events.broadcast(session_id, event)
-  end
+  defp broadcast(%State{} = state, event), do: Opal.Agent.EventLog.broadcast(state, event)
 end
