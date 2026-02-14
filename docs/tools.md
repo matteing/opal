@@ -40,7 +40,6 @@ Each tool has a detailed doc in `docs/tools/`:
 - [**use_skill**](tools/use-skill.md) — Progressive skill loading
 - [**ask_user**](tools/user-input.md) — User input with question escalation for sub-agents
 - [**debug_state**](tools/debug.md) — Runtime self-introspection snapshot for troubleshooting
-- [**Tool naming conventions**](tools/naming-conventions.md) — Cross-model naming contract and core coding-agent toolset
 
 ## MCP Tools
 
