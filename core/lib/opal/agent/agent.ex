@@ -969,7 +969,7 @@ defmodule Opal.Agent do
   defp find_orphaned_calls([%{role: :assistant, tool_calls: tcs} | _], result_ids)
        when is_list(tcs) and tcs != [] do
     tcs
-    |> Enum.map(& &1["id"])
+    |> Enum.map(& &1[:call_id])
     |> Enum.filter(&(&1 != nil))
     |> Enum.reject(&MapSet.member?(result_ids, &1))
   end
