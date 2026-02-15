@@ -283,6 +283,148 @@ defmodule Opal.Agent.ConversationIntegrityTest do
       assert Enum.at(result, 2).call_id == "toolu_1"
       assert Enum.at(result, 3).call_id == "toolu_2"
     end
+
+    test "orders relocated tool_results by tool_call order and preserves payload" do
+      messages = [
+        %Message{id: "1", role: :user, content: "run tools"},
+        %Message{
+          id: "2",
+          role: :assistant,
+          content: "",
+          tool_calls: [
+            %{call_id: "a", name: "t1", arguments: %{}},
+            %{call_id: "b", name: "t2", arguments: %{}}
+          ]
+        },
+        %Message{id: "3", role: :tool_result, call_id: "b", content: "second ok"},
+        %Message{
+          id: "4",
+          role: :tool_result,
+          call_id: "a",
+          content: "first failed",
+          is_error: true
+        },
+        %Message{id: "5", role: :assistant, content: "done"}
+      ]
+
+      result = Agent.ensure_tool_results(messages)
+      [result_a, result_b] = Enum.slice(result, 2, 2)
+
+      assert Enum.map(result, & &1.role) == [
+               :user,
+               :assistant,
+               :tool_result,
+               :tool_result,
+               :assistant
+             ]
+
+      assert result_a.call_id == "a"
+      assert result_a.content == "first failed"
+      assert result_a.is_error == true
+      assert result_b.call_id == "b"
+      assert result_b.content == "second ok"
+      assert result_b.is_error == false
+    end
+
+    test "handles string-key tool_call maps without injecting synthetic results" do
+      messages = [
+        %Message{id: "1", role: :user, content: "continue"},
+        %Message{
+          id: "2",
+          role: :assistant,
+          content: "",
+          tool_calls: [
+            %{
+              "call_id" => "str_1",
+              "name" => "use_skill",
+              "arguments" => %{"skill_name" => "git"}
+            },
+            %{
+              "call_id" => "str_2",
+              "name" => "use_skill",
+              "arguments" => %{"skill_name" => "docs"}
+            }
+          ]
+        },
+        %Message{id: "3", role: :user, content: "[System] skill load"},
+        %Message{id: "4", role: :tool_result, call_id: "str_1", content: "git loaded"},
+        %Message{id: "5", role: :tool_result, call_id: "str_2", content: "docs loaded"}
+      ]
+
+      result = Agent.ensure_tool_results(messages)
+
+      tool_results =
+        result
+        |> Enum.filter(&(&1.role == :tool_result))
+
+      assert Enum.map(tool_results, & &1.call_id) == ["str_1", "str_2"]
+
+      refute Enum.any?(
+               tool_results,
+               &String.contains?(&1.content, "[Error: tool result missing]")
+             )
+    end
+
+    test "drops duplicate tool_results after relocating the first match" do
+      messages = [
+        %Message{id: "1", role: :user, content: "run once"},
+        %Message{
+          id: "2",
+          role: :assistant,
+          content: "",
+          tool_calls: [%{call_id: "dup", name: "tool", arguments: %{}}]
+        },
+        %Message{id: "3", role: :tool_result, call_id: "dup", content: "first"},
+        %Message{id: "4", role: :user, content: "interleaved"},
+        %Message{id: "5", role: :tool_result, call_id: "dup", content: "second"},
+        %Message{id: "6", role: :assistant, content: "done"}
+      ]
+
+      result = Agent.ensure_tool_results(messages)
+
+      assert Enum.map(result, & &1.role) == [:user, :assistant, :tool_result, :user, :assistant]
+
+      dup_results = Enum.filter(result, &(&1.role == :tool_result and &1.call_id == "dup"))
+      assert length(dup_results) == 1
+      assert hd(dup_results).content == "first"
+    end
+
+    test "relocates each assistant's results independently across turns" do
+      messages = [
+        %Message{id: "1", role: :user, content: "start"},
+        %Message{
+          id: "2",
+          role: :assistant,
+          content: "",
+          tool_calls: [%{call_id: "a", name: "t1", arguments: %{}}]
+        },
+        %Message{id: "3", role: :user, content: "[System] interleaved note"},
+        %Message{
+          id: "4",
+          role: :assistant,
+          content: "",
+          tool_calls: [%{call_id: "b", name: "t2", arguments: %{}}]
+        },
+        %Message{id: "5", role: :tool_result, call_id: "b", content: "b result"},
+        %Message{id: "6", role: :tool_result, call_id: "a", content: "a result"},
+        %Message{id: "7", role: :assistant, content: "done"}
+      ]
+
+      result = Agent.ensure_tool_results(messages)
+
+      assert Enum.map(result, & &1.role) == [
+               :user,
+               :assistant,
+               :tool_result,
+               :user,
+               :assistant,
+               :tool_result,
+               :assistant
+             ]
+
+      assert Enum.at(result, 2).call_id == "a"
+      assert Enum.at(result, 5).call_id == "b"
+    end
   end
 
   # ── Integration tests with the agent ───────────────────────────────

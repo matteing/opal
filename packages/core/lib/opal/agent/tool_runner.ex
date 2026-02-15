@@ -85,7 +85,6 @@ defmodule Opal.Agent.ToolRunner do
 
     state = append_messages(state, tool_result_messages)
     state = maybe_auto_load_skills(results, state)
-    state = check_for_steering(state)
     state = %{state | pending_tool_tasks: %{}, tool_context: nil, tool_results: []}
 
     Opal.Agent.run_turn(state)
