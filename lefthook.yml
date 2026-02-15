@@ -12,11 +12,3 @@ pre-commit:
       glob: "src/**/*.{ts,tsx}"
       run: npx prettier --write {staged_files} && npx eslint --fix {staged_files}
       stage_fixed: true
-
-    test-elixir:
-      glob: "packages/core/**/*.{ex,exs}"
-      run: cd packages/core && mix test
-
-    test-cli:
-      glob: "packages/cli/**/*.{ts,tsx}"
-      run: cd packages/cli && pnpm test

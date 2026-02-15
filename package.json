@@ -11,7 +11,7 @@
     "test": "nx run-many -t test",
     "lint": "nx run-many -t lint",
     "format": "nx run-many -t format",
-    "precommit": "pnpm format && pnpm lint && pnpm build",
+    "precommit": "nx affected -t format && nx affected -t lint && nx affected -t build",
     "deps": "nx run-many -t deps",
     "dev": "cross-env NX_TUI=false nx run cli:build && cd packages/cli && node dist/bin.js",
     "codegen": "nx run cli:codegen",
