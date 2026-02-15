@@ -45,6 +45,7 @@
     "@types/node": "^25.2.3",
     "@types/react": "^19.2.14",
     "@vitest/coverage-v8": "^4.0.18",
+    "ink-testing-library": "^4.0.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   }

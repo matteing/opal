@@ -1,7 +1,8 @@
 # Elixir (per-project build artifacts)
 _build/
 deps/
-/cover/
+cover/
+coverage/
 doc/
 erl_crash.dump
 *.ez

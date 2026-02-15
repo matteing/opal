@@ -2,6 +2,24 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { AgentEvent, TokenUsage, ConfirmRequest } from "../sdk/protocol.js";
 import { Session, type SessionOptions } from "../sdk/session.js";
 import { applyEvent, combineDeltas, emptyAgentView } from "../lib/reducers.js";
+import {
+  errorMessage,
+  parseCommand,
+  buildDisplaySpec,
+  normalizeModelSpec,
+  buildHelpMessage,
+  buildAgentListMessage,
+} from "../lib/commands.js";
+import {
+  buildAuthFlowState,
+  applyDeviceCode,
+  applyApiKeyInput,
+  type AuthProvider,
+  type AuthFlow,
+} from "../lib/auth.js";
+import { toggleFeature, toggleTool, type OpalRuntimeConfig } from "../lib/opal-menu.js";
+
+export type { AuthProvider, AuthFlow };
 
 // --- State types ---
 
@@ -13,23 +31,9 @@ interface ModelEntry {
   thinkingLevels?: string[];
 }
 
-interface OpalRuntimeConfig {
-  features: {
-    subAgents: boolean;
-    skills: boolean;
-    mcp: boolean;
-    debug: boolean;
-  };
-  tools: {
-    all: string[];
-    enabled: string[];
-    disabled: string[];
-  };
-}
+// OpalRuntimeConfig is imported from lib/opal-menu.ts
 
-function errorMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
+// errorMessage is now imported from lib/commands.ts
 
 export interface Message {
   role: "user" | "assistant";
@@ -83,21 +87,7 @@ export interface SubAgent extends AgentView {
   toolCount: number;
 }
 
-export interface AuthProvider {
-  id: string;
-  name: string;
-  method: "device_code" | "api_key";
-  envVar?: string;
-  ready: boolean;
-}
-
-export interface AuthFlow {
-  providers: AuthProvider[];
-  // Active device-code flow (set after user picks Copilot)
-  deviceCode?: { userCode: string; verificationUri: string };
-  // Active API key input (set after user picks a key-based provider)
-  apiKeyInput?: { providerId: string; providerName: string };
-}
+// AuthProvider and AuthFlow are imported from lib/auth.ts and re-exported above
 
 export interface OpalState {
   // Main agent view
@@ -249,10 +239,10 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
 
         // Server-driven auth: check probe result from session/start
         if (session.auth.status === "setup_required") {
-          const providers = (session.auth.providers as unknown as AuthProvider[]).filter(
-            (p) => !p.ready,
-          );
-          setState((s) => ({ ...s, authFlow: { providers } }));
+          setState((s) => ({
+            ...s,
+            authFlow: buildAuthFlowState(session.auth.providers as unknown as AuthProvider[]),
+          }));
           return;
         }
 
@@ -304,9 +294,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     session
       .getState()
       .then((res) => {
-        const displaySpec =
-          res.model.provider !== "copilot" ? `${res.model.provider}:${res.model.id}` : res.model.id;
-        setState((s) => ({ ...s, currentModel: displaySpec }));
+        setState((s) => ({ ...s, currentModel: buildDisplaySpec(res.model) }));
       })
       .catch(() => {});
   }, []);
@@ -432,9 +420,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       const session = sessionRef.current;
       if (!session) return;
 
-      const parts = input.trim().slice(1).split(/\s+/);
-      const cmd = parts[0]?.toLowerCase();
-      const arg = parts.slice(1).join(" ");
+      const { cmd, arg } = parseCommand(input);
 
       switch (cmd) {
         case "models": {
@@ -478,18 +464,13 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
               })
               .catch((e: unknown) => addSystemMessage(`Error: ${errorMessage(e)}`));
           } else {
-            // Normalize provider/model to provider:model for the backend
-            const modelSpec = arg.includes("/") ? arg.replace("/", ":") : arg;
+            const modelSpec = normalizeModelSpec(arg);
             session
               .setModel(modelSpec)
               .then((res) => {
-                const displaySpec =
-                  res.model.provider !== "copilot"
-                    ? `${res.model.provider}:${res.model.id}`
-                    : res.model.id;
+                const displaySpec = buildDisplaySpec(res.model);
                 addSystemMessage(`Model changed to **${displaySpec}** (${res.model.provider})`);
                 setState((s) => ({ ...s, currentModel: displaySpec }));
-                // Persist choice
                 session
                   .saveSettings({ default_model: `${res.model.provider}:${res.model.id}` })
                   .catch(() => {});
@@ -511,21 +492,10 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
               return s;
             }
             if (!arg) {
-              // List active sub-agents
-              const lines = subs.map(
-                (sub, i) =>
-                  `  ${i + 1}. **${sub.label || sub.sessionId.slice(0, 8)}** — ${sub.model} · ${sub.toolCount} tools · ${sub.isRunning ? "running" : "done"}`,
-              );
-              const viewing =
-                s.activeTab !== "main"
-                  ? `\nCurrently viewing: **${s.subAgents[s.activeTab]?.label || s.activeTab}**. Use \`/agents main\` to return.`
-                  : "";
-              addSystemMessage(
-                `**Active sub-agents:**\n${lines.join("\n")}${viewing}\n\nUse \`/agents <number>\` to view, \`/agents main\` to return.`,
-              );
+              const msg = buildAgentListMessage(subs, s.activeTab);
+              if (msg) addSystemMessage(msg);
               return s;
             }
-            // Switch to a specific agent
             if (arg === "main") return { ...s, activeTab: "main" };
             const idx = parseInt(arg, 10);
             if (!isNaN(idx) && idx >= 1 && idx <= subs.length) {
@@ -548,17 +518,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
           break;
         }
         case "help": {
-          addSystemMessage(
-            "**Commands:**\n" +
-              "  `/model`                  — show current model\n" +
-              "  `/model <provider:id>`    — switch model (e.g. `anthropic:claude-sonnet-4`)\n" +
-              "  `/models`                 — select model interactively\n" +
-              "  `/agents`                 — list active sub-agents\n" +
-              "  `/agents <n|main>`        — switch view to sub-agent or main\n" +
-              "  `/opal`                   — open configuration menu\n" +
-              "  `/compact`                — compact conversation history\n" +
-              "  `/help`                   — show this help",
-          );
+          addSystemMessage(buildHelpMessage());
           break;
         }
         default:
@@ -576,17 +536,13 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       session
         .setModel(modelId, thinkingLevel)
         .then((res) => {
-          const displaySpec =
-            res.model.provider !== "copilot"
-              ? `${res.model.provider}:${res.model.id}`
-              : res.model.id;
+          const displaySpec = buildDisplaySpec(res.model);
           const thinking =
             res.model.thinkingLevel && res.model.thinkingLevel !== "off"
               ? ` (thinking: ${res.model.thinkingLevel})`
               : "";
           addSystemMessage(`Model changed to **${displaySpec}**${thinking}`);
           setState((s) => ({ ...s, currentModel: displaySpec }));
-          // Persist choice
           session
             .saveSettings({ default_model: `${res.model.provider}:${res.model.id}` })
             .catch(() => {});
@@ -612,13 +568,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       // Optimistic update
       setState((s) => {
         if (!s.opalMenu) return s;
-        return {
-          ...s,
-          opalMenu: {
-            ...s.opalMenu,
-            features: { ...s.opalMenu.features, [key]: enabled },
-          },
-        };
+        return { ...s, opalMenu: toggleFeature(s.opalMenu, key, enabled) };
       });
 
       session
@@ -642,21 +592,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       // Optimistic update
       setState((s) => {
         if (!s.opalMenu) return s;
-        const next = new Set(s.opalMenu.tools.enabled);
-        if (enabled) next.add(name);
-        else next.delete(name);
-        const ordered = s.opalMenu.tools.all.filter((t) => next.has(t));
-        return {
-          ...s,
-          opalMenu: {
-            ...s.opalMenu,
-            tools: {
-              ...s.opalMenu.tools,
-              enabled: ordered,
-              disabled: s.opalMenu.tools.all.filter((t) => !next.has(t)),
-            },
-          },
-        };
+        return { ...s, opalMenu: toggleTool(s.opalMenu, name, enabled) };
       });
 
       session
@@ -686,15 +622,10 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       .then((flow) => {
         setState((s) => ({
           ...s,
-          authFlow: s.authFlow
-            ? {
-                ...s.authFlow,
-                deviceCode: {
-                  userCode: flow.userCode,
-                  verificationUri: flow.verificationUri,
-                },
-              }
-            : null,
+          authFlow: applyDeviceCode(s.authFlow, {
+            userCode: flow.userCode,
+            verificationUri: flow.verificationUri,
+          }),
         }));
         // Poll blocks server-side until user authorizes
         return session.authPoll(flow.deviceCode, flow.interval);
@@ -718,15 +649,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
         setState((s) => ({
           ...s,
           error: null,
-          authFlow: s.authFlow
-            ? {
-                ...s.authFlow,
-                apiKeyInput: {
-                  providerId,
-                  providerName: provider?.name ?? providerId,
-                },
-              }
-            : null,
+          authFlow: applyApiKeyInput(s.authFlow, providerId, provider?.name),
         }));
         return;
       }
