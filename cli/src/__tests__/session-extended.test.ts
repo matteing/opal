@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { EventEmitter, Readable, Writable } from "node:stream";
+import {
+  createMockProcess,
+  respond,
+  sendEvent,
+  capturingWrites,
+  tick,
+  SESSION_DEFAULTS,
+  type MockProcess,
+  type CapturedWrites,
+} from "./helpers/mock-process.js";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
 vi.mock("../sdk/resolve.js", () => ({
@@ -9,61 +18,14 @@ vi.mock("../sdk/resolve.js", () => ({
 import { spawn } from "node:child_process";
 import { Session } from "../sdk/session.js";
 
-function createMockProcess() {
-  const stdin = new Writable({
-    write(_chunk, _enc, cb) {
-      cb();
-    },
-  });
-  const stdout = new Readable({ read() {} });
-  const stderr = new Readable({ read() {} });
-  const proc = new EventEmitter() as EventEmitter & {
-    stdin: Writable;
-    stdout: Readable;
-    stderr: Readable;
-    kill: ReturnType<typeof vi.fn>;
-    pid: number;
-  };
-  proc.stdin = stdin;
-  proc.stdout = stdout;
-  proc.stderr = stderr;
-  proc.kill = vi.fn();
-  proc.pid = 12345;
-  return proc;
-}
-
-function respond(proc: ReturnType<typeof createMockProcess>, id: number, result: unknown) {
-  proc.stdout.push(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n");
-}
-
-function sendEvent(proc: ReturnType<typeof createMockProcess>, params: unknown) {
-  proc.stdout.push(JSON.stringify({ jsonrpc: "2.0", method: "agent/event", params }) + "\n");
-}
-
-const sessionResult = {
-  session_id: "s1",
-  session_dir: "/tmp/s1",
-  context_files: [],
-  available_skills: [],
-  mcp_servers: [],
-  node_name: "opal@test",
-  auth: { provider: "copilot", providers: [], status: "ready" },
-};
-
 describe("Session — extended coverage", () => {
-  let mockProc: ReturnType<typeof createMockProcess>;
-  const writes: string[] = [];
+  let proc: MockProcess;
+  let writes: CapturedWrites;
 
   beforeEach(() => {
-    mockProc = createMockProcess();
-    writes.length = 0;
-    mockProc.stdin.write = function (chunk: unknown, ...args: unknown[]) {
-      writes.push(String(chunk));
-      const cb = args.find((a) => typeof a === "function") as (() => void) | undefined;
-      cb?.();
-      return true;
-    } as never;
-    vi.mocked(spawn).mockReturnValue(mockProc as never);
+    proc = createMockProcess();
+    writes = capturingWrites(proc);
+    vi.mocked(spawn).mockReturnValue(proc as never);
   });
 
   afterEach(() => {
@@ -71,48 +33,46 @@ describe("Session — extended coverage", () => {
   });
 
   async function startSession() {
-    const p = Session.start({ session: true });
-    await new Promise((r) => setTimeout(r, 10));
-    respond(mockProc, 1, sessionResult);
-    return p;
+    const pending = Session.start({ session: true });
+    await tick();
+    respond(proc, 1, SESSION_DEFAULTS);
+    return pending;
   }
 
   // --- Uncovered method param paths ---
 
   it("setModel without thinkingLevel omits it from params", async () => {
     const session = await startSession();
-    const p = session.setModel("gpt-4");
-    await new Promise((r) => setTimeout(r, 10));
-    respond(mockProc, 2, { model: { id: "gpt-4", provider: "copilot" } });
-    await p;
+    const pending = session.setModel("gpt-4");
+    await tick();
+    respond(proc, 2, { model: { id: "gpt-4", provider: "copilot" } });
+    await pending;
 
-    const msg = JSON.parse(writes[writes.length - 1].replace("\n", ""));
-    expect(msg.params.thinking_level).toBeUndefined();
+    expect(writes.lastRequest().params).not.toHaveProperty("thinking_level");
     session.close();
   });
 
   it("compact without keepRecent omits it from params", async () => {
     const session = await startSession();
-    const p = session.compact();
-    await new Promise((r) => setTimeout(r, 10));
-    respond(mockProc, 2, {});
-    await p;
+    const pending = session.compact();
+    await tick();
+    respond(proc, 2, {});
+    await pending;
 
-    const msg = JSON.parse(writes[writes.length - 1].replace("\n", ""));
-    expect(msg.params.keep_recent).toBeUndefined();
+    expect(writes.lastRequest().params).not.toHaveProperty("keep_recent");
     session.close();
   });
 
   it("authPoll sends deviceCode and interval", async () => {
     const session = await startSession();
-    const p = session.authPoll("dc-123", 5);
-    await new Promise((r) => setTimeout(r, 10));
-    respond(mockProc, 2, { authenticated: true });
-    await p;
+    const pending = session.authPoll("dc-123", 5);
+    await tick();
+    respond(proc, 2, { authenticated: true });
+    await pending;
 
-    const msg = JSON.parse(writes[writes.length - 1].replace("\n", ""));
-    expect(msg.params.device_code).toBe("dc-123");
-    expect(msg.params.interval).toBe(5);
+    const params = writes.lastRequest().params as Record<string, unknown>;
+    expect(params.device_code).toBe("dc-123");
+    expect(params.interval).toBe(5);
     session.close();
   });
 
@@ -120,13 +80,13 @@ describe("Session — extended coverage", () => {
 
   it("dispatches thinkingStart event", async () => {
     const session = await startSession();
-    const starts: boolean[] = [];
-    session.on("thinkingStart", () => starts.push(true));
+    const received: boolean[] = [];
+    session.on("thinkingStart", () => received.push(true));
 
-    sendEvent(mockProc, { type: "thinking_start" });
-    await new Promise((r) => setTimeout(r, 10));
+    sendEvent(proc, { type: "thinking_start" });
+    await tick();
 
-    expect(starts).toHaveLength(1);
+    expect(received).toHaveLength(1);
     session.close();
   });
 
@@ -135,8 +95,8 @@ describe("Session — extended coverage", () => {
     const deltas: string[] = [];
     session.on("thinkingDelta", (delta) => deltas.push(delta));
 
-    sendEvent(mockProc, { type: "thinking_delta", delta: "I think..." });
-    await new Promise((r) => setTimeout(r, 10));
+    sendEvent(proc, { type: "thinking_delta", delta: "I think..." });
+    await tick();
 
     expect(deltas).toEqual(["I think..."]);
     session.close();
@@ -144,13 +104,13 @@ describe("Session — extended coverage", () => {
 
   it("dispatches agentAbort event", async () => {
     const session = await startSession();
-    const aborts: boolean[] = [];
-    session.on("agentAbort", () => aborts.push(true));
+    const received: boolean[] = [];
+    session.on("agentAbort", () => received.push(true));
 
-    sendEvent(mockProc, { type: "agent_abort" });
-    await new Promise((r) => setTimeout(r, 10));
+    sendEvent(proc, { type: "agent_abort" });
+    await tick();
 
-    expect(aborts).toHaveLength(1);
+    expect(received).toHaveLength(1);
     session.close();
   });
 
@@ -159,7 +119,7 @@ describe("Session — extended coverage", () => {
     const usages: unknown[] = [];
     session.on("agentEnd", (usage) => usages.push(usage));
 
-    sendEvent(mockProc, {
+    sendEvent(proc, {
       type: "agent_end",
       usage: {
         prompt_tokens: 100,
@@ -169,7 +129,7 @@ describe("Session — extended coverage", () => {
         current_context_tokens: 200,
       },
     });
-    await new Promise((r) => setTimeout(r, 10));
+    await tick();
 
     expect(usages).toHaveLength(1);
     expect(usages[0]).toBeDefined();
@@ -181,8 +141,8 @@ describe("Session — extended coverage", () => {
     const usages: unknown[] = [];
     session.on("agentEnd", (usage) => usages.push(usage));
 
-    sendEvent(mockProc, { type: "agent_end" });
-    await new Promise((r) => setTimeout(r, 10));
+    sendEvent(proc, { type: "agent_end" });
+    await tick();
 
     expect(usages).toHaveLength(1);
     expect(usages[0]).toBeUndefined();
@@ -191,24 +151,24 @@ describe("Session — extended coverage", () => {
 
   it("dispatches messageStart event", async () => {
     const session = await startSession();
-    const starts: boolean[] = [];
-    session.on("messageStart", () => starts.push(true));
+    const received: boolean[] = [];
+    session.on("messageStart", () => received.push(true));
 
-    sendEvent(mockProc, { type: "message_start" });
-    await new Promise((r) => setTimeout(r, 10));
+    sendEvent(proc, { type: "message_start" });
+    await tick();
 
-    expect(starts).toHaveLength(1);
+    expect(received).toHaveLength(1);
     session.close();
   });
 
-  it("multiple handlers on same event — all called", async () => {
+  it("multiple handlers on same event are all called", async () => {
     const session = await startSession();
     const calls: number[] = [];
     session.on("agentStart", () => calls.push(1));
     session.on("agentStart", () => calls.push(2));
 
-    sendEvent(mockProc, { type: "agent_start" });
-    await new Promise((r) => setTimeout(r, 10));
+    sendEvent(proc, { type: "agent_start" });
+    await tick();
 
     expect(calls).toEqual([1, 2]);
     session.close();
@@ -216,20 +176,16 @@ describe("Session — extended coverage", () => {
 
   it("event with no listeners does not crash", async () => {
     const session = await startSession();
-    // No listeners registered — just send event
-    sendEvent(mockProc, { type: "agent_start" });
-    sendEvent(mockProc, { type: "message_delta", delta: "hello" });
-    await new Promise((r) => setTimeout(r, 10));
-    // No crash
+    sendEvent(proc, { type: "agent_start" });
+    sendEvent(proc, { type: "message_delta", delta: "hello" });
+    await tick();
     session.close();
   });
 
   it("unknown event type does not crash dispatch", async () => {
     const session = await startSession();
-    // Send an event type that doesn't exist in the switch
-    sendEvent(mockProc, { type: "totally_unknown_event", data: "foo" });
-    await new Promise((r) => setTimeout(r, 10));
-    // Should not crash
+    sendEvent(proc, { type: "totally_unknown_event", data: "foo" });
+    await tick();
     session.close();
   });
 });

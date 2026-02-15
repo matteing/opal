@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { snakeToCamel, camelToSnake } from "../sdk/transforms.js";
 
+/** Traverse nested objects by key path, e.g. `dig(obj, "a", "b", "c")`. */
+function dig(obj: unknown, ...keys: string[]): unknown {
+  let current = obj;
+  for (const key of keys) {
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
 describe("transforms — edge cases", () => {
   describe("snakeToCamel edge cases", () => {
     it("handles deeply nested objects (5+ levels)", () => {
@@ -15,13 +24,10 @@ describe("transforms — edge cases", () => {
           },
         },
       };
-      const result = snakeToCamel(input) as Record<string, unknown>;
-      const l1 = result.levelOne as Record<string, unknown>;
-      const l2 = l1.levelTwo as Record<string, unknown>;
-      const l3 = l2.levelThree as Record<string, unknown>;
-      const l4 = l3.levelFour as Record<string, unknown>;
-      const l5 = l4.levelFive as Record<string, unknown>;
-      expect(l5.deepKey).toBe("value");
+      const result = snakeToCamel(input);
+      expect(
+        dig(result, "levelOne", "levelTwo", "levelThree", "levelFour", "levelFive", "deepKey"),
+      ).toBe("value");
     });
 
     it("handles arrays with mixed types", () => {
@@ -36,7 +42,6 @@ describe("transforms — edge cases", () => {
 
     it("handles keys with leading underscore", () => {
       const result = snakeToCamel({ _private_key: "val" }) as Record<string, unknown>;
-      // Leading underscore should be handled (implementation-dependent)
       const keys = Object.keys(result);
       expect(keys).toHaveLength(1);
       expect(result[keys[0]]).toBe("val");
@@ -50,20 +55,15 @@ describe("transforms — edge cases", () => {
     });
 
     it("leaves already-camelCase keys unchanged", () => {
-      const result = snakeToCamel({ someKey: "val" }) as Record<string, unknown>;
-      expect(result.someKey).toBe("val");
+      expect(dig(snakeToCamel({ someKey: "val" }), "someKey")).toBe("val");
     });
 
     it("handles empty string key", () => {
-      const result = snakeToCamel({ "": "val" }) as Record<string, unknown>;
-      expect(result[""]).toBe("val");
+      expect(dig(snakeToCamel({ "": "val" }), "")).toBe("val");
     });
 
-    it("handles large objects without stack overflow", () => {
-      const input: Record<string, number> = {};
-      for (let i = 0; i < 1000; i++) {
-        input[`key_${i}`] = i;
-      }
+    it("handles 1 000 keys without stack overflow", () => {
+      const input = Object.fromEntries(Array.from({ length: 1000 }, (_, i) => [`key_${i}`, i]));
       const result = snakeToCamel(input) as Record<string, number>;
       expect(Object.keys(result)).toHaveLength(1000);
     });
@@ -72,20 +72,15 @@ describe("transforms — edge cases", () => {
   describe("camelToSnake edge cases", () => {
     it("handles deeply nested objects", () => {
       const input = { levelOne: { levelTwo: { deepKey: "value" } } };
-      const result = camelToSnake(input) as Record<string, unknown>;
-      const l1 = result.level_one as Record<string, unknown>;
-      const l2 = l1.level_two as Record<string, unknown>;
-      expect(l2.deep_key).toBe("value");
+      expect(dig(camelToSnake(input), "level_one", "level_two", "deep_key")).toBe("value");
     });
 
     it("leaves already-snake_case keys unchanged", () => {
-      const result = camelToSnake({ some_key: "val" }) as Record<string, unknown>;
-      expect(result.some_key).toBe("val");
+      expect(dig(camelToSnake({ some_key: "val" }), "some_key")).toBe("val");
     });
 
     it("handles arrays with mixed types", () => {
-      const input = [{ someKey: 1 }, "plain", null];
-      const result = camelToSnake(input) as unknown[];
+      const result = camelToSnake([{ someKey: 1 }, "plain", null]) as unknown[];
       expect(result[0]).toEqual({ some_key: 1 });
       expect(result[1]).toBe("plain");
       expect(result[2]).toBeNull();
@@ -97,15 +92,11 @@ describe("transforms — edge cases", () => {
         context_files: ["a.md"],
         nested: { deep_val: 42 },
       };
-      const roundtripped = camelToSnake(snakeToCamel(original));
-      expect(roundtripped).toEqual(original);
+      expect(camelToSnake(snakeToCamel(original))).toEqual(original);
     });
 
-    it("handles large objects without stack overflow", () => {
-      const input: Record<string, number> = {};
-      for (let i = 0; i < 1000; i++) {
-        input[`key${i}`] = i;
-      }
+    it("handles 1 000 keys without stack overflow", () => {
+      const input = Object.fromEntries(Array.from({ length: 1000 }, (_, i) => [`key${i}`, i]));
       const result = camelToSnake(input) as Record<string, number>;
       expect(Object.keys(result)).toHaveLength(1000);
     });

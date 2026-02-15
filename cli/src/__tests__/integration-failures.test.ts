@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { EventEmitter, Readable, Writable } from "node:stream";
+import {
+  createMockProcess,
+  respond,
+  respondError,
+  sendEvent,
+  capturingWrites,
+  tick,
+  SESSION_DEFAULTS,
+  type MockProcess,
+  type CapturedWrites,
+} from "./helpers/mock-process.js";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
 vi.mock("../sdk/resolve.js", () => ({
@@ -9,66 +19,14 @@ vi.mock("../sdk/resolve.js", () => ({
 import { spawn } from "node:child_process";
 import { Session } from "../sdk/session.js";
 
-function createMockProcess() {
-  const stdin = new Writable({
-    write(_chunk, _enc, cb) {
-      cb();
-    },
-  });
-  const stdout = new Readable({ read() {} });
-  const stderr = new Readable({ read() {} });
-  const proc = new EventEmitter() as EventEmitter & {
-    stdin: Writable;
-    stdout: Readable;
-    stderr: Readable;
-    kill: ReturnType<typeof vi.fn>;
-    pid: number;
-  };
-  proc.stdin = stdin;
-  proc.stdout = stdout;
-  proc.stderr = stderr;
-  proc.kill = vi.fn();
-  proc.pid = 12345;
-  return proc;
-}
-
-function respond(proc: ReturnType<typeof createMockProcess>, id: number, result: unknown) {
-  proc.stdout.push(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n");
-}
-
-function respondError(
-  proc: ReturnType<typeof createMockProcess>,
-  id: number,
-  code: number,
-  msg: string,
-) {
-  proc.stdout.push(JSON.stringify({ jsonrpc: "2.0", id, error: { code, message: msg } }) + "\n");
-}
-
-const sessionResult = {
-  session_id: "s1",
-  session_dir: "/tmp/s1",
-  context_files: [],
-  available_skills: [],
-  mcp_servers: [],
-  node_name: "opal@test",
-  auth: { provider: "copilot", providers: [], status: "ready" },
-};
-
 describe("Integration failures", () => {
-  let mockProc: ReturnType<typeof createMockProcess>;
-  const writes: string[] = [];
+  let proc: MockProcess;
+  let writes: CapturedWrites;
 
   beforeEach(() => {
-    mockProc = createMockProcess();
-    writes.length = 0;
-    mockProc.stdin.write = function (chunk: unknown, ...args: unknown[]) {
-      writes.push(String(chunk));
-      const cb = args.find((a) => typeof a === "function") as (() => void) | undefined;
-      cb?.();
-      return true;
-    } as never;
-    vi.mocked(spawn).mockReturnValue(mockProc as never);
+    proc = createMockProcess();
+    writes = capturingWrites(proc);
+    vi.mocked(spawn).mockReturnValue(proc as never);
   });
 
   afterEach(() => {
@@ -76,10 +34,10 @@ describe("Integration failures", () => {
   });
 
   async function startSession() {
-    const p = Session.start({ session: true });
-    await new Promise((r) => setTimeout(r, 10));
-    respond(mockProc, 1, sessionResult);
-    return p;
+    const pending = Session.start({ session: true });
+    await tick();
+    respond(proc, 1, SESSION_DEFAULTS);
+    return pending;
   }
 
   // --- Auth flow failures ---
@@ -87,20 +45,19 @@ describe("Integration failures", () => {
   describe("auth flow failures", () => {
     it("authPoll timeout rejects", async () => {
       const session = await startSession();
-      const p = session.authPoll("dc-123", 5);
-      await new Promise((r) => setTimeout(r, 10));
-      // Server returns error
-      respondError(mockProc, 2, -32000, "Authorization expired");
-      await expect(p).rejects.toThrow("Authorization expired");
+      const pending = session.authPoll("dc-123", 5);
+      await tick();
+      respondError(proc, 2, -32000, "Authorization expired");
+      await expect(pending).rejects.toThrow("Authorization expired");
       session.close();
     });
 
     it("authSetKey with invalid key returns error", async () => {
       const session = await startSession();
-      const p = session.authSetKey("anthropic", "bad-key");
-      await new Promise((r) => setTimeout(r, 10));
-      respondError(mockProc, 2, -32000, "Invalid API key");
-      await expect(p).rejects.toThrow("Invalid API key");
+      const pending = session.authSetKey("anthropic", "bad-key");
+      await tick();
+      respondError(proc, 2, -32000, "Invalid API key");
+      await expect(pending).rejects.toThrow("Invalid API key");
       session.close();
     });
   });
@@ -110,19 +67,19 @@ describe("Integration failures", () => {
   describe("model switching failures", () => {
     it("setModel with unknown model returns error", async () => {
       const session = await startSession();
-      const p = session.setModel("nonexistent-model");
-      await new Promise((r) => setTimeout(r, 10));
-      respondError(mockProc, 2, -32000, "Unknown model: nonexistent-model");
-      await expect(p).rejects.toThrow("Unknown model");
+      const pending = session.setModel("nonexistent-model");
+      await tick();
+      respondError(proc, 2, -32000, "Unknown model: nonexistent-model");
+      await expect(pending).rejects.toThrow("Unknown model");
       session.close();
     });
 
     it("listModels returns empty array", async () => {
       const session = await startSession();
-      const p = session.listModels();
-      await new Promise((r) => setTimeout(r, 10));
-      respond(mockProc, 2, { models: [] });
-      const result = await p;
+      const pending = session.listModels();
+      await tick();
+      respond(proc, 2, { models: [] });
+      const result = await pending;
       expect(result.models).toEqual([]);
       session.close();
     });
@@ -130,56 +87,36 @@ describe("Integration failures", () => {
     it("setModel during active prompt — both resolve independently", async () => {
       const session = await startSession();
 
-      // prompt() is an async generator — body runs lazily on iteration
-      // Start iterating in background to trigger the request
+      // prompt() is an async generator — its body runs lazily on iteration.
+      // Start iterating in the background to trigger the agent/prompt request.
       const events: Array<{ type: string }> = [];
       const promptDone = (async () => {
         for await (const event of session.prompt("test")) {
           events.push(event);
         }
       })();
-      await new Promise((r) => setTimeout(r, 20));
+      await tick(20);
 
-      // Find and respond to the prompt request
-      const parsed = writes.map((w) => {
-        try {
-          return JSON.parse(w.trim());
-        } catch {
-          return null;
-        }
-      });
-      const promptReq = parsed.find((m) => m?.method === "agent/prompt");
+      // Respond to the prompt request
+      const promptReq = writes.findByMethod("agent/prompt");
       expect(promptReq).toBeDefined();
-      respond(mockProc, promptReq!.id, {});
-      await new Promise((r) => setTimeout(r, 10));
+      respond(proc, promptReq!.id as number, {});
+      await tick();
 
-      // Now setModel concurrently
-      const modelP = session.setModel("gpt-4o");
-      await new Promise((r) => setTimeout(r, 10));
-      const parsed2 = writes.map((w) => {
-        try {
-          return JSON.parse(w.trim());
-        } catch {
-          return null;
-        }
-      });
-      const modelReq = parsed2.find((m) => m?.method === "model/set");
+      // Fire a concurrent setModel while the prompt stream is open
+      const modelPending = session.setModel("gpt-4o");
+      await tick();
+      const modelReq = writes.findByMethod("model/set");
       expect(modelReq).toBeDefined();
-      respond(mockProc, modelReq!.id, {
+      respond(proc, modelReq!.id as number, {
         model: { id: "gpt-4o", provider: "copilot", thinking_level: "off" },
       });
 
-      const modelResult = await modelP;
+      const modelResult = await modelPending;
       expect(modelResult.model.id).toBe("gpt-4o");
 
       // End the prompt stream
-      mockProc.stdout.push(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          method: "agent/event",
-          params: { type: "agent_end" },
-        }) + "\n",
-      );
+      sendEvent(proc, { type: "agent_end" });
 
       await promptDone;
       expect(events.some((e) => e.type === "agentEnd")).toBe(true);
@@ -190,12 +127,12 @@ describe("Integration failures", () => {
   // --- Compaction failures ---
 
   describe("compaction failures", () => {
-    it("compact returns error — surfaced to caller", async () => {
+    it("compact error is surfaced to caller", async () => {
       const session = await startSession();
-      const p = session.compact();
-      await new Promise((r) => setTimeout(r, 10));
-      respondError(mockProc, 2, -32000, "Compaction failed: no messages");
-      await expect(p).rejects.toThrow("Compaction failed");
+      const pending = session.compact();
+      await tick();
+      respondError(proc, 2, -32000, "Compaction failed: no messages");
+      await expect(pending).rejects.toThrow("Compaction failed");
       session.close();
     });
   });
@@ -203,21 +140,21 @@ describe("Integration failures", () => {
   // --- Settings failures ---
 
   describe("settings failures", () => {
-    it("saveSettings failure is surfaced", async () => {
+    it("saveSettings error is surfaced", async () => {
       const session = await startSession();
-      const p = session.saveSettings({ model: "test" });
-      await new Promise((r) => setTimeout(r, 10));
-      respondError(mockProc, 2, -32000, "Disk full");
-      await expect(p).rejects.toThrow("Disk full");
+      const pending = session.saveSettings({ model: "test" });
+      await tick();
+      respondError(proc, 2, -32000, "Disk full");
+      await expect(pending).rejects.toThrow("Disk full");
       session.close();
     });
 
     it("getSettings with empty result", async () => {
       const session = await startSession();
-      const p = session.getSettings();
-      await new Promise((r) => setTimeout(r, 10));
-      respond(mockProc, 2, { settings: {} });
-      const result = await p;
+      const pending = session.getSettings();
+      await tick();
+      respond(proc, 2, { settings: {} });
+      const result = await pending;
       expect(result.settings).toEqual({});
       session.close();
     });
@@ -226,23 +163,23 @@ describe("Integration failures", () => {
   // --- Opal config failures ---
 
   describe("opal config failures", () => {
-    it("getOpalConfig failure is surfaced", async () => {
+    it("getOpalConfig error is surfaced", async () => {
       const session = await startSession();
-      const p = session.getOpalConfig();
-      await new Promise((r) => setTimeout(r, 10));
-      respondError(mockProc, 2, -32000, "Session not found");
-      await expect(p).rejects.toThrow("Session not found");
+      const pending = session.getOpalConfig();
+      await tick();
+      respondError(proc, 2, -32000, "Session not found");
+      await expect(pending).rejects.toThrow("Session not found");
       session.close();
     });
 
-    it("setOpalConfig failure is surfaced", async () => {
+    it("setOpalConfig error is surfaced", async () => {
       const session = await startSession();
-      const p = session.setOpalConfig({
+      const pending = session.setOpalConfig({
         features: { debug: true, mcp: true, skills: true, subAgents: true },
       });
-      await new Promise((r) => setTimeout(r, 10));
-      respondError(mockProc, 2, -32000, "Invalid config");
-      await expect(p).rejects.toThrow("Invalid config");
+      await tick();
+      respondError(proc, 2, -32000, "Invalid config");
+      await expect(pending).rejects.toThrow("Invalid config");
       session.close();
     });
   });
@@ -250,55 +187,41 @@ describe("Integration failures", () => {
   // --- Concurrent operations ---
 
   describe("concurrent operations", () => {
-    it("multiple concurrent requests resolve independently", async () => {
+    it("out-of-order responses resolve to correct callers", async () => {
       const session = await startSession();
-      const p1 = session.getState();
-      const p2 = session.listModels();
-      const p3 = session.getSettings();
+      const stateP = session.getState();
+      const modelsP = session.listModels();
+      const settingsP = session.getSettings();
+      await tick();
 
-      await new Promise((r) => setTimeout(r, 10));
+      // Respond out of order: settings, state, models
+      respond(proc, 4, { settings: { key: "val" } });
+      respond(proc, 2, { status: "idle", model: { id: "gpt-4" } });
+      respond(proc, 3, { models: [{ id: "gpt-4" }] });
 
-      // Respond out of order
-      respond(mockProc, 4, { settings: { key: "val" } }); // id 4 = getSettings
-      respond(mockProc, 2, { status: "idle", model: { id: "gpt-4" } }); // id 2 = getState
-      respond(mockProc, 3, { models: [{ id: "gpt-4" }] }); // id 3 = listModels
-
-      const [state, models, settings] = await Promise.all([p1, p2, p3]);
+      const [state, models, settings] = await Promise.all([stateP, modelsP, settingsP]);
       expect(state.status).toBe("idle");
       expect(models.models).toHaveLength(1);
       expect(settings.settings.key).toBe("val");
       session.close();
     });
 
-    it("request during event processing doesn't lose events", async () => {
+    it("events interleaved with requests are not lost", async () => {
       const session = await startSession();
-      const events: unknown[] = [];
-      session.on("messageDelta", (delta: string) => events.push(delta));
+      const received: unknown[] = [];
+      session.on("messageDelta", (delta: string) => received.push(delta));
 
-      // Send events while making a request
-      mockProc.stdout.push(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          method: "agent/event",
-          params: { type: "message_delta", delta: "hello" },
-        }) + "\n",
-      );
+      sendEvent(proc, { type: "message_delta", delta: "hello" });
 
-      const p = session.getState();
-      await new Promise((r) => setTimeout(r, 10));
-      respond(mockProc, 2, { status: "running" });
-      await p;
+      const pending = session.getState();
+      await tick();
+      respond(proc, 2, { status: "running" });
+      await pending;
 
-      mockProc.stdout.push(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          method: "agent/event",
-          params: { type: "message_delta", delta: " world" },
-        }) + "\n",
-      );
-      await new Promise((r) => setTimeout(r, 10));
+      sendEvent(proc, { type: "message_delta", delta: " world" });
+      await tick();
 
-      expect(events).toEqual(["hello", " world"]);
+      expect(received).toEqual(["hello", " world"]);
       session.close();
     });
   });

@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { applyEvent, emptyState, combineDeltas } from "../lib/reducers.js";
 import type { AgentEvent } from "../sdk/protocol.js";
 
-function applyAll(events: AgentEvent[]) {
+/** Apply a sequence of events to a fresh state, returning the final result. */
+function applySequence(events: AgentEvent[]) {
   let state = emptyState();
   for (const event of events) {
     state = applyEvent(state, event);
@@ -12,7 +13,7 @@ function applyAll(events: AgentEvent[]) {
 
 describe("event ordering — canonical sequences", () => {
   it("normal flow: agentStart → messageStart → messageDelta* → agentEnd", () => {
-    const state = applyAll([
+    const state = applySequence([
       { type: "agentStart" },
       { type: "messageStart" },
       { type: "messageDelta", delta: "Hello " },
@@ -37,7 +38,7 @@ describe("event ordering — canonical sequences", () => {
   });
 
   it("tool flow: agentStart → messageStart → toolStart → toolEnd → messageDelta → agentEnd", () => {
-    const state = applyAll([
+    const state = applySequence([
       { type: "agentStart" },
       { type: "messageStart" },
       {
@@ -64,7 +65,7 @@ describe("event ordering — canonical sequences", () => {
   });
 
   it("abort flow: agentStart → messageDelta → agentAbort (no agentEnd)", () => {
-    const state = applyAll([
+    const state = applySequence([
       { type: "agentStart" },
       { type: "messageStart" },
       { type: "messageDelta", delta: "partial" },
@@ -76,7 +77,7 @@ describe("event ordering — canonical sequences", () => {
   });
 
   it("error mid-stream: agentStart → messageDelta → error", () => {
-    const state = applyAll([
+    const state = applySequence([
       { type: "agentStart" },
       { type: "messageStart" },
       { type: "messageDelta", delta: "partial" },
@@ -88,7 +89,7 @@ describe("event ordering — canonical sequences", () => {
   });
 
   it("thinking flow: agentStart → thinkingStart → thinkingDelta → messageStart → messageDelta → agentEnd", () => {
-    const state = applyAll([
+    const state = applySequence([
       { type: "agentStart" },
       { type: "thinkingStart" },
       { type: "thinkingDelta", delta: "Let me think..." },
@@ -106,7 +107,7 @@ describe("event ordering — canonical sequences", () => {
   });
 
   it("sub-agent flow: toolStart(sub_agent) → subAgentEvent* → toolEnd → agentEnd", () => {
-    const state = applyAll([
+    const state = applySequence([
       { type: "agentStart" },
       { type: "messageStart" },
       {
@@ -184,7 +185,7 @@ describe("event ordering — canonical sequences", () => {
   });
 
   it("context + skills before first prompt", () => {
-    const state = applyAll([
+    const state = applySequence([
       { type: "contextDiscovered", files: ["AGENTS.md", "README.md"] } as AgentEvent,
       { type: "skillLoaded", name: "git", description: "Git operations" } as AgentEvent,
     ]);
@@ -207,7 +208,7 @@ describe("event ordering — canonical sequences", () => {
   });
 
   it("statusUpdate during tools, cleared on agentEnd", () => {
-    const state = applyAll([
+    const state = applySequence([
       { type: "agentStart" },
       {
         type: "toolExecutionStart",
@@ -231,7 +232,7 @@ describe("event ordering — canonical sequences", () => {
   });
 
   it("usageUpdate between tool calls", () => {
-    const state = applyAll([
+    const state = applySequence([
       { type: "agentStart" },
       {
         type: "usageUpdate",

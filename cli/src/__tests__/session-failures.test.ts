@@ -1,5 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { EventEmitter, Readable, Writable } from "node:stream";
+import {
+  createMockProcess,
+  respond,
+  respondError,
+  sendEvent,
+  sendRequest,
+  capturingWrites,
+  tick,
+  SESSION_DEFAULTS,
+  type MockProcess,
+  type CapturedWrites,
+} from "./helpers/mock-process.js";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
 vi.mock("../sdk/resolve.js", () => ({
@@ -10,70 +21,41 @@ import { spawn } from "node:child_process";
 import { Session } from "../sdk/session.js";
 import type { AgentEvent } from "../sdk/protocol.js";
 
-function createMockProcess() {
-  const stdin = new Writable({
-    write(_chunk, _enc, cb) {
-      cb();
-    },
-  });
-  const stdout = new Readable({ read() {} });
-  const stderr = new Readable({ read() {} });
-  const proc = new EventEmitter() as EventEmitter & {
-    stdin: Writable;
-    stdout: Readable;
-    stderr: Readable;
-    kill: ReturnType<typeof vi.fn>;
-    pid: number;
-  };
-  proc.stdin = stdin;
-  proc.stdout = stdout;
-  proc.stderr = stderr;
-  proc.kill = vi.fn();
-  proc.pid = 12345;
-  return proc;
-}
+// ---------------------------------------------------------------------------
+// Helpers for the "prompt handler" pattern used in event stream tests.
+// Instead of duplicating the stdin.write override + JSON parse + method check
+// in every test, we register a responder that fires when a given method is sent.
+// ---------------------------------------------------------------------------
 
-function respond(proc: ReturnType<typeof createMockProcess>, id: number, result: unknown) {
-  proc.stdout.push(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n");
-}
+type PromptResponder = (proc: MockProcess, requestId: number) => void;
 
-function respondError(
-  proc: ReturnType<typeof createMockProcess>,
-  id: number,
-  code: number,
-  message: string,
+function onMethod(
+  proc: MockProcess,
+  writes: CapturedWrites,
+  method: string,
+  handler: PromptResponder,
 ) {
-  proc.stdout.push(JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } }) + "\n");
+  proc.stdin.write = function (chunk: unknown, ...args: unknown[]) {
+    const str = String(chunk);
+    writes.raw.push(str);
+    const msg = JSON.parse(str.trim());
+    if (msg.method === method) {
+      setTimeout(() => handler(proc, msg.id), 5);
+    }
+    const cb = args.find((a) => typeof a === "function") as (() => void) | undefined;
+    cb?.();
+    return true;
+  } as never;
 }
-
-function sendEvent(proc: ReturnType<typeof createMockProcess>, params: unknown) {
-  proc.stdout.push(JSON.stringify({ jsonrpc: "2.0", method: "agent/event", params }) + "\n");
-}
-
-const sessionResult = {
-  session_id: "s1",
-  session_dir: "/tmp/s1",
-  context_files: [],
-  available_skills: [],
-  mcp_servers: [],
-  node_name: "opal@test",
-  auth: { provider: "copilot", providers: [], status: "ready" },
-};
 
 describe("Session — failure modes", () => {
-  let mockProc: ReturnType<typeof createMockProcess>;
-  const writes: string[] = [];
+  let proc: MockProcess;
+  let writes: CapturedWrites;
 
   beforeEach(() => {
-    mockProc = createMockProcess();
-    writes.length = 0;
-    mockProc.stdin.write = function (chunk: unknown, ...args: unknown[]) {
-      writes.push(String(chunk));
-      const cb = args.find((a) => typeof a === "function") as (() => void) | undefined;
-      cb?.();
-      return true;
-    } as never;
-    vi.mocked(spawn).mockReturnValue(mockProc as never);
+    proc = createMockProcess();
+    writes = capturingWrites(proc);
+    vi.mocked(spawn).mockReturnValue(proc as never);
   });
 
   afterEach(() => {
@@ -81,158 +63,112 @@ describe("Session — failure modes", () => {
   });
 
   async function startSession() {
-    const p = Session.start({ session: true });
-    await new Promise((r) => setTimeout(r, 10));
-    respond(mockProc, 1, sessionResult);
-    return p;
+    const pending = Session.start({ session: true });
+    await tick();
+    respond(proc, 1, SESSION_DEFAULTS);
+    return pending;
   }
 
   // --- Session.start failures ---
 
   describe("start failures", () => {
     it("rejects when server exits before response", async () => {
-      const p = Session.start({});
-      await new Promise((r) => setTimeout(r, 10));
-      mockProc.stderr.push("CRASH: OTP boot failed\n");
-      await new Promise((r) => setTimeout(r, 10));
-      mockProc.emit("exit", 1, null);
-      await expect(p).rejects.toThrow("exited");
+      const pending = Session.start({});
+      await tick();
+      proc.stderr.push("CRASH: OTP boot failed\n");
+      await tick();
+      proc.emit("exit", 1, null);
+      await expect(pending).rejects.toThrow("exited");
     });
 
     it("rejects when session/start returns RPC error", async () => {
-      const p = Session.start({});
-      await new Promise((r) => setTimeout(r, 10));
-      respondError(mockProc, 1, -32600, "Invalid session params");
-      await expect(p).rejects.toThrow("Invalid session params");
+      const pending = Session.start({});
+      await tick();
+      respondError(proc, 1, -32600, "Invalid session params");
+      await expect(pending).rejects.toThrow("Invalid session params");
     });
   });
 
   // --- Event stream failures ---
 
   describe("prompt event stream", () => {
-    it("terminates when server crashes mid-stream", async () => {
+    it("terminates on server error event mid-stream", async () => {
       const session = await startSession();
+
+      onMethod(proc, writes, "agent/prompt", (p, id) => {
+        respond(p, id, {});
+        sendEvent(p, { type: "agent_start" });
+        sendEvent(p, { type: "message_delta", delta: "Hello" });
+        sendEvent(p, { type: "error", reason: "Server crashed" });
+      });
+
       const events: AgentEvent[] = [];
-
-      mockProc.stdin.write = function (chunk: unknown, ...args: unknown[]) {
-        const str = String(chunk);
-        writes.push(str);
-        const msg = JSON.parse(str.replace("\n", ""));
-        if (msg.method === "agent/prompt") {
-          setTimeout(() => {
-            respond(mockProc, msg.id, {});
-            sendEvent(mockProc, { type: "agent_start" });
-            sendEvent(mockProc, { type: "message_delta", delta: "Hello" });
-            // Send an error event to terminate the stream, then crash
-            sendEvent(mockProc, { type: "error", reason: "Server crashed" });
-          }, 5);
-        }
-        const cb = args.find((a) => typeof a === "function") as (() => void) | undefined;
-        cb?.();
-        return true;
-      } as never;
-
       for await (const event of session.prompt("test")) {
         events.push(event);
       }
 
       expect(events.length).toBeGreaterThanOrEqual(1);
-      // The error event should have been received
-      const errorEvent = events.find((e) => e.type === "error");
-      expect(errorEvent).toBeDefined();
+      expect(events.find((e) => e.type === "error")).toBeDefined();
     });
 
-    it("handles duplicate agentEnd — stops at first", async () => {
+    it("stops iteration at first agentEnd (ignoring duplicates)", async () => {
       const session = await startSession();
+
+      onMethod(proc, writes, "agent/prompt", (p, id) => {
+        respond(p, id, {});
+        sendEvent(p, { type: "agent_start" });
+        sendEvent(p, { type: "agent_end" });
+        sendEvent(p, { type: "agent_end" }); // duplicate
+      });
+
       const events: AgentEvent[] = [];
-
-      mockProc.stdin.write = function (chunk: unknown, ...args: unknown[]) {
-        const str = String(chunk);
-        writes.push(str);
-        const msg = JSON.parse(str.replace("\n", ""));
-        if (msg.method === "agent/prompt") {
-          setTimeout(() => {
-            respond(mockProc, msg.id, {});
-            sendEvent(mockProc, { type: "agent_start" });
-            sendEvent(mockProc, { type: "agent_end" });
-            sendEvent(mockProc, { type: "agent_end" }); // duplicate
-          }, 5);
-        }
-        const cb = args.find((a) => typeof a === "function") as (() => void) | undefined;
-        cb?.();
-        return true;
-      } as never;
-
       for await (const event of session.prompt("test")) {
         events.push(event);
       }
 
-      // Should stop at the first agentEnd
-      const endCount = events.filter((e) => e.type === "agentEnd").length;
-      expect(endCount).toBe(1);
+      expect(events.filter((e) => e.type === "agentEnd")).toHaveLength(1);
       session.close();
     });
 
     it("cleans up listener on early break from for-await", async () => {
       const session = await startSession();
 
-      mockProc.stdin.write = function (chunk: unknown, ...args: unknown[]) {
-        const str = String(chunk);
-        writes.push(str);
-        const msg = JSON.parse(str.replace("\n", ""));
-        if (msg.method === "agent/prompt") {
-          setTimeout(() => {
-            respond(mockProc, msg.id, {});
-            sendEvent(mockProc, { type: "agent_start" });
-            sendEvent(mockProc, { type: "message_delta", delta: "a" });
-            sendEvent(mockProc, { type: "message_delta", delta: "b" });
-            sendEvent(mockProc, { type: "agent_end" });
-          }, 5);
-        }
-        const cb = args.find((a) => typeof a === "function") as (() => void) | undefined;
-        cb?.();
-        return true;
-      } as never;
+      onMethod(proc, writes, "agent/prompt", (p, id) => {
+        respond(p, id, {});
+        sendEvent(p, { type: "agent_start" });
+        sendEvent(p, { type: "message_delta", delta: "a" });
+        sendEvent(p, { type: "message_delta", delta: "b" });
+        sendEvent(p, { type: "agent_end" });
+      });
 
       let count = 0;
       for await (const _event of session.prompt("test")) {
         count++;
-        if (count >= 1) break; // break early
+        if (count >= 1) break;
       }
 
       expect(count).toBe(1);
-      // Client should still function after break
       session.close();
     });
 
-    it("handles rapid events without loss", async () => {
+    it("handles 100 rapid events without loss", async () => {
       const session = await startSession();
-      const events: AgentEvent[] = [];
 
-      mockProc.stdin.write = function (chunk: unknown, ...args: unknown[]) {
-        const str = String(chunk);
-        writes.push(str);
-        const msg = JSON.parse(str.replace("\n", ""));
-        if (msg.method === "agent/prompt") {
-          setTimeout(() => {
-            respond(mockProc, msg.id, {});
-            sendEvent(mockProc, { type: "agent_start" });
-            for (let i = 0; i < 100; i++) {
-              sendEvent(mockProc, { type: "message_delta", delta: `chunk${i}` });
-            }
-            sendEvent(mockProc, { type: "agent_end" });
-          }, 5);
+      onMethod(proc, writes, "agent/prompt", (p, id) => {
+        respond(p, id, {});
+        sendEvent(p, { type: "agent_start" });
+        for (let i = 0; i < 100; i++) {
+          sendEvent(p, { type: "message_delta", delta: `chunk${i}` });
         }
-        const cb = args.find((a) => typeof a === "function") as (() => void) | undefined;
-        cb?.();
-        return true;
-      } as never;
+        sendEvent(p, { type: "agent_end" });
+      });
 
+      const events: AgentEvent[] = [];
       for await (const event of session.prompt("test")) {
         events.push(event);
       }
 
-      // 1 agentStart + 100 messageDelta + 1 agentEnd = 102
+      // agentStart + 100 × messageDelta + agentEnd = 102
       expect(events).toHaveLength(102);
       session.close();
     });
@@ -241,96 +177,77 @@ describe("Session — failure modes", () => {
   // --- Callback handler failures ---
 
   describe("callback handler failures", () => {
-    it("onConfirm throwing sends error response", async () => {
+    it("onConfirm error sends JSON-RPC error response", async () => {
       const onConfirm = vi.fn().mockRejectedValue(new Error("handler crash"));
-      const p = Session.start({ onConfirm });
-      await new Promise((r) => setTimeout(r, 10));
+      const pending = Session.start({ onConfirm });
+      await tick();
 
-      mockProc.stdout.push(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: 50,
-          method: "client/confirm",
-          params: { session_id: "s1", title: "Run?", message: "", actions: ["allow"] },
-        }) + "\n",
-      );
-      await new Promise((r) => setTimeout(r, 20));
+      sendRequest(proc, 50, "client/confirm", {
+        session_id: "s1",
+        title: "Run?",
+        message: "",
+        actions: ["allow"],
+      });
+      await tick(20);
 
-      const response = JSON.parse(writes[writes.length - 1].replace("\n", ""));
-      expect(response.error.code).toBe(-32000);
-      expect(response.error.message).toBe("handler crash");
+      const response = writes.lastRequest();
+      expect(response.error).toMatchObject({ code: -32000, message: "handler crash" });
 
-      respond(mockProc, 1, sessionResult);
-      const session = await p;
+      respond(proc, 1, SESSION_DEFAULTS);
+      const session = await pending;
       session.close();
     });
 
     it("client/input without handler sends error response", async () => {
-      const p = Session.start({});
-      await new Promise((r) => setTimeout(r, 10));
+      const pending = Session.start({});
+      await tick();
 
-      mockProc.stdout.push(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: 51,
-          method: "client/input",
-          params: { session_id: "s1", prompt: "Enter key" },
-        }) + "\n",
-      );
-      await new Promise((r) => setTimeout(r, 20));
+      sendRequest(proc, 51, "client/input", {
+        session_id: "s1",
+        prompt: "Enter key",
+      });
+      await tick(20);
 
-      const response = JSON.parse(writes[writes.length - 1].replace("\n", ""));
-      expect(response.error.code).toBe(-32000);
-      expect(response.error.message).toContain("input handler");
+      const response = writes.lastRequest();
+      expect(response.error).toMatchObject({ code: -32000 });
+      expect((response.error as { message: string }).message).toContain("input handler");
 
-      respond(mockProc, 1, sessionResult);
-      const session = await p;
+      respond(proc, 1, SESSION_DEFAULTS);
+      const session = await pending;
       session.close();
     });
 
     it("client/ask_user without handler sends error response", async () => {
-      const p = Session.start({});
-      await new Promise((r) => setTimeout(r, 10));
+      const pending = Session.start({});
+      await tick();
 
-      mockProc.stdout.push(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: 52,
-          method: "client/ask_user",
-          params: { session_id: "s1", question: "Which?" },
-        }) + "\n",
-      );
-      await new Promise((r) => setTimeout(r, 20));
+      sendRequest(proc, 52, "client/ask_user", {
+        session_id: "s1",
+        question: "Which?",
+      });
+      await tick(20);
 
-      const response = JSON.parse(writes[writes.length - 1].replace("\n", ""));
-      expect(response.error.code).toBe(-32000);
-      expect(response.error.message).toContain("ask_user handler");
+      const response = writes.lastRequest();
+      expect(response.error).toMatchObject({ code: -32000 });
+      expect((response.error as { message: string }).message).toContain("ask_user handler");
 
-      respond(mockProc, 1, sessionResult);
-      const session = await p;
+      respond(proc, 1, SESSION_DEFAULTS);
+      const session = await pending;
       session.close();
     });
 
     it("unknown server request method sends -32601", async () => {
-      const p = Session.start({});
-      await new Promise((r) => setTimeout(r, 10));
+      const pending = Session.start({});
+      await tick();
 
-      mockProc.stdout.push(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: 53,
-          method: "unknown/method",
-          params: {},
-        }) + "\n",
-      );
-      await new Promise((r) => setTimeout(r, 20));
+      sendRequest(proc, 53, "unknown/method", {});
+      await tick(20);
 
-      // The onServerRequest catches unknown methods and throws
-      const response = JSON.parse(writes[writes.length - 1].replace("\n", ""));
+      const response = writes.lastRequest();
       expect(response.error).toBeDefined();
 
-      respond(mockProc, 1, sessionResult);
-      const session = await p;
+      respond(proc, 1, SESSION_DEFAULTS);
+      const session = await pending;
       session.close();
     });
   });
