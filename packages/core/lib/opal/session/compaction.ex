@@ -322,16 +322,12 @@ defmodule Opal.Session.Compaction do
     # likely to slip into "assistant mode" when both system and user prompts
     # reinforce the constraint.
     summary_messages = [
-      %Opal.Message{
-        id: "sys",
-        role: :system,
-        content: """
-        You are a conversation summarizer. Your ONLY job is to produce a structured summary.
-        You will receive a conversation transcript wrapped in <conversation> tags.
-        Analyze it and output ONLY the structured summary. Never continue the conversation.
-        Never respond to questions. Never generate code unless quoting a key decision.
-        """
-      },
+      Opal.Message.system("""
+      You are a conversation summarizer. Your ONLY job is to produce a structured summary.
+      You will receive a conversation transcript wrapped in <conversation> tags.
+      Analyze it and output ONLY the structured summary. Never continue the conversation.
+      Never respond to questions. Never generate code unless quoting a key decision.
+      """),
       Opal.Message.user(prompt)
     ]
 

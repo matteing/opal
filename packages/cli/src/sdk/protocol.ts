@@ -22,6 +22,8 @@ export interface SessionStartParams {
   };
   /** If true, enable session persistence. */
   session?: boolean;
+  /** Resume an existing session by ID. Implies session=true. The session is loaded from disk. */
+  sessionId?: string;
 }
 
 export interface SessionStartResult {

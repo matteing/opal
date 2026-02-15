@@ -113,6 +113,7 @@ export interface OpalState {
   currentModel: string | null;
   tokenUsage: TokenUsage | null;
   sessionReady: boolean;
+  sessionId: string;
   sessionDir: string;
   availableSkills: string[];
   error: string | null;
@@ -156,6 +157,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     currentModel: null,
     tokenUsage: null,
     sessionReady: false,
+    sessionId: "",
     sessionDir: "",
     availableSkills: [],
     error: null,
@@ -286,6 +288,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       ...s,
       sessionReady: true,
       authFlow: null,
+      sessionId: session.sessionId,
       sessionDir: session.sessionDir,
       nodeName: session.nodeName,
       availableSkills: session.availableSkills,

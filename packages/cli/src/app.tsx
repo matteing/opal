@@ -16,9 +16,10 @@ import type { SessionOptions } from "./sdk/session.js";
 
 export interface AppProps {
   sessionOpts: SessionOptions;
+  onSessionId?: (id: string) => void;
 }
 
-export const App: FC<AppProps> = ({ sessionOpts }) => {
+export const App: FC<AppProps> = ({ sessionOpts, onSessionId }) => {
   const [state, actions] = useOpal(sessionOpts);
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -35,6 +36,11 @@ export const App: FC<AppProps> = ({ sessionOpts }) => {
       setInitialFill(false);
     }
   }, [state.main.timeline.length]);
+
+  // Notify parent of the session ID for the exit resume hint.
+  useEffect(() => {
+    if (state.sessionId) onSessionId?.(state.sessionId);
+  }, [state.sessionId, onSessionId]);
 
   // Resolve the active agent view (main or a sub-agent tab)
   const activeView =

@@ -77,6 +77,8 @@ defmodule Opal.Provider do
           name: tool.name(),
           description: tool.description(),
           parameters: tool.parameters(),
+          # Strict mode requires all properties to be required and no
+          # additionalProperties — our tool schemas don't guarantee that.
           strict: false
         }
       }

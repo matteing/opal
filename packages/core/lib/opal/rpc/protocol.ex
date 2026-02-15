@@ -145,6 +145,13 @@ defmodule Opal.RPC.Protocol do
           type: :boolean,
           required: false,
           description: "If true, enable session persistence."
+        },
+        %{
+          name: "session_id",
+          type: :string,
+          required: false,
+          description:
+            "Resume an existing session by ID. Implies session=true. The session is loaded from disk."
         }
       ],
       result: [

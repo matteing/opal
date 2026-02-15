@@ -45,20 +45,19 @@ graph LR
 When Opal starts, `Opal.Application.start_distribution/0` activates Erlang distribution:
 
 1. Calls `Node.start(:"opal_#{pid}", :shortnames)` to make the BEAM addressable
-2. Sets the cookie to `:opal` for authentication
-3. Writes the node name and cookie to `~/.opal/node` for discovery
+2. Generates a random cookie (or reads from `config :opal, :distribution_cookie`)
+3. Writes the node name and cookie to `~/.opal/node` (permissions `0600`) for discovery
 
 If the node was already started with `--sname` (e.g. during development with `iex -S mix`), this is a no-op — it just records the existing node info.
 
 ### Inspector Connection
 
-The `pnpm inspect` command runs:
+The `pnpm inspect` command runs `scripts/inspect.sh`, which:
 
-```bash
-iex --sname inspector --cookie opal --remsh opal --dot-iex scripts/inspect.exs
-```
+1. Reads the node name and cookie from `~/.opal/node`
+2. Launches `iex --sname inspector_PID --cookie <cookie> --remsh <node> --dot-iex scripts/inspect.exs`
 
-This creates a remote IEx shell (`--remsh`) that connects to the `opal` node and automatically loads `scripts/inspect.exs`, which calls `Opal.Inspect.watch/0`.
+This creates a remote IEx shell (`--remsh`) that connects to the Opal node and automatically loads `scripts/inspect.exs`, which calls `Opal.Inspect.watch/0`.
 
 ### Event Subscription
 

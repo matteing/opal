@@ -129,45 +129,17 @@ Subscribers can then update their UI, flush pending state, and wait for the reco
 
 **What recovery looks like:** The client should catch backend exits and attempt to respawn the process, re-establish the session (loading from the last auto-saved state), and resume. The UI should show a brief "reconnecting..." status rather than silently dying.
 
-## Gap 7: Orphaned tool_use After Abort Causes Provider Rejection
+## Gap 7: Orphaned tool_use After Abort — Resolved
 
-**Problem:** When the user aborts during tool execution, the assistant message (containing `tool_calls`) is already in `state.messages` but the corresponding `tool_result` messages are never added. On the next prompt, the provider rejects the malformed history with `invalid_request_body` ("tool_use ids were found without tool_result blocks"). This error is classified as permanent (not retryable, not overflow), so the agent broadcasts the error and goes idle — effectively stalling.
+**Problem:** When the user aborts during tool execution (especially long-running tools like `sub_agent`), the assistant message containing `tool_calls` is already committed but the corresponding `tool_result` messages are never added. On the next prompt, the provider rejects the malformed history with `invalid_request_body`.
 
-**Where it happens:**
+**Status: Fixed** — see [Conversation Integrity](conversation-integrity.md) for the full design.
 
-```mermaid
-sequenceDiagram
-    participant Agent
-    participant State as state.messages
-    participant Tools as Tool Tasks
+Three defense layers prevent this class of error:
 
-    Agent->>State: append assistant msg (with tool_calls)
-    Agent->>Tools: start_tool_execution
-    Note over Tools: tools running concurrently...
-
-    Note over Agent: 🛑 user aborts
-
-    Agent->>Tools: cancel_all_tasks
-    Note over Tools: pending_tool_tasks cleared<br/>tool_results cleared
-    Note over State: ⚠️ assistant(tool_calls) still here<br/>no matching tool_results
-
-    Note over Agent: next prompt arrives
-    Agent->>State: append user msg
-    Agent->>Agent: build_messages → send to provider
-    Note over Agent: 💥 provider rejects:<br/>invalid_request_body
-    Note over Agent: permanent error → idle → stall
-```
-
-- `packages/core/lib/opal/agent/agent.ex` lines 804–805 — `finalize_response` appends the assistant message with `tool_calls` before tools start executing.
-- `packages/core/lib/opal/agent/tool_runner.ex` lines 98–113 — `cancel_all_tasks` clears `pending_tool_tasks` and `tool_results` but does not touch `state.messages`.
-- `packages/core/lib/opal/agent/agent.ex` lines 362–366 — `handle_cast(:abort, ...)` calls `cancel_tool_execution` then goes idle.
-- `packages/core/lib/opal/agent/retry.ex` — `invalid_request_body` matches neither transient nor overflow patterns, so the error is treated as permanent.
-
-**What recovery looks like:**
-
-1. **Abort repair (prevention):** ✅ When `cancel_tool_execution` runs, `repair_orphaned_tool_calls/1` injects synthetic `tool_result` messages (content: `"[Aborted by user]"`) for every `tool_call` in the most recent assistant message that doesn't already have a result. This keeps the history always valid.
-
-2. **Pre-send validation (defense-in-depth):** ✅ Before calling `provider.stream` in `run_turn_internal`, `repair_orphaned_tool_calls/1` scans the message list for any assistant `tool_calls` without matching `tool_result` messages after them. If found, injects synthetic results and logs a warning. This catches edge cases beyond abort (crashes, compaction bugs, etc.).
+1. **Full-scan orphan repair** — `repair_orphaned_tool_calls` scans ALL assistant messages (not just the most recent) on every turn start and abort.
+2. **Positional validation** — `ensure_tool_results` runs on the final message list in `build_messages`, injecting synthetic results at the correct position and stripping orphaned results.
+3. **Stream error guard** — a `stream_errored` flag prevents `finalize_response` from creating broken assistant messages when the provider sends an error event mid-stream.
 
 ## Summary
 
@@ -179,7 +151,7 @@ sequenceDiagram
 | No heartbeat | Medium | Low | Add `ping` RPC method + client timeout |
 | Auto-save not default | Medium | Low | Flip default, add terminate-save |
 | No CLI reconnection | Medium | High | Client respawn + session resume flow |
-| Orphaned tool_use on abort | High | Low | Inject synthetic tool_results on cancel + pre-send validation |
+| Orphaned tool_use on abort | ~~High~~ | ~~Low~~ | ✅ Resolved — three-layer defense (see [conversation-integrity.md](conversation-integrity.md)) |
 
 ## Source
 

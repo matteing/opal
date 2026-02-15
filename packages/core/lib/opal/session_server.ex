@@ -88,11 +88,22 @@ defmodule Opal.SessionServer do
   defp maybe_session_child(opts) do
     if Keyword.get(opts, :session) == true do
       session_id = Keyword.fetch!(opts, :session_id)
+      config = Keyword.get(opts, :config, Opal.Config.new())
+      sessions_dir = Opal.Config.sessions_dir(config)
+      session_file = Path.join(sessions_dir, "#{session_id}.jsonl")
 
-      [
-        {Opal.Session,
-         session_id: session_id, name: {:via, Registry, {Opal.Registry, {:session, session_id}}}}
+      session_opts = [
+        session_id: session_id,
+        name: {:via, Registry, {Opal.Registry, {:session, session_id}}}
       ]
+
+      # If a saved session file exists on disk, load it during init
+      session_opts =
+        if File.exists?(session_file),
+          do: Keyword.put(session_opts, :load_from, session_file),
+          else: session_opts
+
+      [{Opal.Session, session_opts}]
     else
       []
     end

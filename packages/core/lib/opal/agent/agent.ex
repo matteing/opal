@@ -475,7 +475,13 @@ defmodule Opal.Agent do
         Opal.Agent.Stream.handle_stream_event(event, acc)
       end)
 
-    {:noreply, state}
+    # If a stream error event was received, don't wait for :done
+    if state.stream_errored do
+      cancel_watchdog(state)
+      {:noreply, %{state | stream_errored: false}}
+    else
+      {:noreply, state}
+    end
   end
 
   def handle_info({ref, :done}, %State{status: :streaming, streaming_ref: ref} = state) do
@@ -498,11 +504,18 @@ defmodule Opal.Agent do
             _other, acc -> acc
           end)
 
-        # If :done was in the chunk list, finalize
-        if :done in chunks do
-          finalize_response(state)
-        else
-          {:noreply, state}
+        # If a stream error event was received, don't finalize — the response
+        # is invalid. Discard any partial content and go idle.
+        cond do
+          state.stream_errored ->
+            cancel_watchdog(state)
+            {:noreply, %{state | status: :idle, stream_errored: false, streaming_resp: nil}}
+
+          :done in chunks ->
+            finalize_response(state)
+
+          true ->
+            {:noreply, state}
         end
 
       :unknown ->
@@ -729,16 +742,12 @@ defmodule Opal.Agent do
       |> Enum.reject(&(&1 == ""))
       |> Enum.join("\n")
 
-    system_msg = %Opal.Message{
-      id: "system",
-      role: :system,
-      content: full_prompt
-    }
+    system_msg = Opal.Message.system(full_prompt)
 
-    [system_msg | Enum.reverse(messages)]
+    [system_msg | ensure_tool_results(Enum.reverse(messages))]
   end
 
-  defp build_messages(%State{messages: messages}), do: Enum.reverse(messages)
+  defp build_messages(%State{messages: messages}), do: ensure_tool_results(Enum.reverse(messages))
 
   # Returns planning instructions for the system prompt, or "" for sub-agents.
   defp planning_instructions(%State{config: config, session_id: session_id, session: session}) do
@@ -853,8 +862,10 @@ defmodule Opal.Agent do
   # Converts accumulated tool call maps into the message struct format.
   # Handles both pre-parsed arguments (from tool_call_done) and raw
   # accumulated JSON (from tool_call_delta, used by Chat Completions).
+  # Filters out tool calls with missing call_id or name (malformed stream).
   defp finalize_tool_calls(tool_calls) do
-    Enum.map(tool_calls, fn tc ->
+    tool_calls
+    |> Enum.map(fn tc ->
       arguments =
         tc[:arguments] ||
           case Jason.decode(tc[:arguments_json] || "{}") do
@@ -868,6 +879,7 @@ defmodule Opal.Agent do
         arguments: arguments
       }
     end)
+    |> Enum.reject(fn tc -> tc.call_id == "" or tc.name == "" end)
   end
 
   # --- Tool Execution ---
@@ -936,17 +948,96 @@ defmodule Opal.Agent do
     %{state | messages: [msg | state.messages]}
   end
 
-  # Finds the most recent assistant message with tool_calls that lack
-  # matching tool_result messages and injects synthetic "[Aborted]" results.
+  # Defense-in-depth: walks a chronological message list and ensures every
+  # assistant message with tool_calls has matching tool_results, AND every
+  # tool_result has a preceding assistant message with a matching tool_call.
+  # This runs on the final list sent to the provider, catching corruption
+  # regardless of source (compaction, abort, stream error, session reload).
+  @doc false
+  def ensure_tool_results(chronological_messages) do
+    # First pass: collect all valid tool_call IDs from assistant messages
+    valid_call_ids =
+      Enum.reduce(chronological_messages, MapSet.new(), fn
+        %{role: :assistant, tool_calls: tcs}, ids when is_list(tcs) and tcs != [] ->
+          tcs
+          |> Enum.map(& &1[:call_id])
+          |> Enum.filter(&is_binary/1)
+          |> Enum.reduce(ids, &MapSet.put(&2, &1))
+
+        _, ids ->
+          ids
+      end)
+
+    # Second pass: inject missing results and strip orphaned results
+    do_ensure(chronological_messages, valid_call_ids, [])
+  end
+
+  defp do_ensure([], _valid_ids, acc), do: Enum.reverse(acc)
+
+  # Strip tool_results whose call_id doesn't match any assistant's tool_calls
+  defp do_ensure([%{role: :tool_result, call_id: cid} = msg | rest], valid_ids, acc) do
+    if MapSet.member?(valid_ids, cid) do
+      do_ensure(rest, valid_ids, [msg | acc])
+    else
+      Logger.warning("Stripping orphaned tool_result with no matching tool_call: #{cid}")
+      do_ensure(rest, valid_ids, acc)
+    end
+  end
+
+  # For assistant messages with tool_calls, ensure all calls have results ahead
+  defp do_ensure(
+         [%{role: :assistant, tool_calls: tcs} = msg | rest],
+         valid_ids,
+         acc
+       )
+       when is_list(tcs) and tcs != [] do
+    expected_ids =
+      tcs
+      |> Enum.map(& &1[:call_id])
+      |> Enum.filter(&(&1 != nil))
+      |> MapSet.new()
+
+    result_ids_ahead = collect_result_ids(rest)
+    missing = MapSet.difference(expected_ids, result_ids_ahead)
+
+    if MapSet.size(missing) == 0 do
+      do_ensure(rest, valid_ids, [msg | acc])
+    else
+      Logger.warning(
+        "Injecting #{MapSet.size(missing)} synthetic tool_results for orphaned tool_calls"
+      )
+
+      synthetics =
+        Enum.map(missing, fn call_id ->
+          Opal.Message.tool_result(call_id, "[Error: tool result missing]", true)
+        end)
+
+      new_acc = Enum.reduce(synthetics, [msg | acc], fn s, a -> [s | a] end)
+      do_ensure(rest, valid_ids, new_acc)
+    end
+  end
+
+  defp do_ensure([msg | rest], valid_ids, acc) do
+    do_ensure(rest, valid_ids, [msg | acc])
+  end
+
+  # Collects all tool_result call_ids from a message list (for lookahead).
+  defp collect_result_ids(messages) do
+    Enum.reduce(messages, MapSet.new(), fn
+      %{role: :tool_result, call_id: cid}, ids when is_binary(cid) -> MapSet.put(ids, cid)
+      _, ids -> ids
+    end)
+  end
+
+  # Scans ALL assistant messages with tool_calls and injects synthetic
+  # "[Aborted]" results for any that lack matching tool_result messages.
   defp repair_orphaned_tool_calls(%State{messages: messages} = state) do
-    # Messages are stored newest-first. Walk until we find an assistant
-    # with tool_calls, then check if results exist after it.
     case find_orphaned_calls(messages) do
       [] ->
         state
 
       orphaned_ids ->
-        Logger.debug("Repairing #{length(orphaned_ids)} orphaned tool_calls after abort")
+        Logger.debug("Repairing #{length(orphaned_ids)} orphaned tool_calls")
 
         Enum.reduce(orphaned_ids, state, fn call_id, acc ->
           append_message(acc, Opal.Message.tool_result(call_id, "[Aborted by user]", true))
@@ -954,28 +1045,31 @@ defmodule Opal.Agent do
     end
   end
 
-  # Returns call_ids from the most recent assistant message's tool_calls
-  # that have no corresponding tool_result in the messages above it.
+  # Returns call_ids from ALL assistant messages whose tool_calls lack
+  # a corresponding tool_result anywhere after them (newest-first walk).
   defp find_orphaned_calls(messages) do
-    find_orphaned_calls(messages, MapSet.new())
+    find_orphaned_calls(messages, MapSet.new(), [])
   end
 
-  defp find_orphaned_calls([], _result_ids), do: []
+  defp find_orphaned_calls([], _result_ids, acc), do: acc
 
-  defp find_orphaned_calls([%{role: :tool_result, call_id: cid} | rest], result_ids) do
-    find_orphaned_calls(rest, MapSet.put(result_ids, cid))
+  defp find_orphaned_calls([%{role: :tool_result, call_id: cid} | rest], result_ids, acc) do
+    find_orphaned_calls(rest, MapSet.put(result_ids, cid), acc)
   end
 
-  defp find_orphaned_calls([%{role: :assistant, tool_calls: tcs} | _], result_ids)
+  defp find_orphaned_calls([%{role: :assistant, tool_calls: tcs} | rest], result_ids, acc)
        when is_list(tcs) and tcs != [] do
-    tcs
-    |> Enum.map(& &1[:call_id])
-    |> Enum.filter(&(&1 != nil))
-    |> Enum.reject(&MapSet.member?(result_ids, &1))
+    orphans =
+      tcs
+      |> Enum.map(& &1[:call_id])
+      |> Enum.filter(&(&1 != nil))
+      |> Enum.reject(&MapSet.member?(result_ids, &1))
+
+    find_orphaned_calls(rest, result_ids, acc ++ orphans)
   end
 
-  defp find_orphaned_calls([_ | rest], result_ids) do
-    find_orphaned_calls(rest, result_ids)
+  defp find_orphaned_calls([_ | rest], result_ids, acc) do
+    find_orphaned_calls(rest, result_ids, acc)
   end
 
   # Auto-saves the session when the agent goes idle, if a Session process
@@ -1015,12 +1109,9 @@ defmodule Opal.Agent do
     prompt_text = String.slice(user_text, 0, 500)
 
     title_messages = [
-      %Opal.Message{
-        id: "sys",
-        role: :system,
-        content:
-          "Generate a concise 3-6 word title for this conversation. Reply with ONLY the title, no quotes or punctuation."
-      },
+      Opal.Message.system(
+        "Generate a concise 3-6 word title for this conversation. Reply with ONLY the title, no quotes or punctuation."
+      ),
       Opal.Message.user(prompt_text)
     ]
 

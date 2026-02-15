@@ -15,7 +15,7 @@
     "deps": "nx run-many -t deps",
     "dev": "cross-env NX_TUI=false nx run cli:build && cd packages/cli && node dist/bin.js",
     "codegen": "nx run cli:codegen",
-    "inspect": "iex --sname inspector --cookie opal --remsh opal --dot-iex scripts/inspect.exs",
+    "inspect": "bash scripts/inspect.sh",
     "release": "nx release",
     "release:dry-run": "nx release --dry-run",
     "prepare": "lefthook install"

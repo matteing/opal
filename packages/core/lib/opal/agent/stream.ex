@@ -185,7 +185,7 @@ defmodule Opal.Agent.Stream do
   def handle_stream_event({:error, reason}, state) do
     Logger.error("Stream error: #{inspect(reason)}")
     broadcast(state, {:error, reason})
-    %{state | status: :idle, streaming_resp: nil}
+    %{state | status: :idle, streaming_resp: nil, stream_errored: true}
   end
 
   def handle_stream_event(_unknown, state), do: state

@@ -40,6 +40,23 @@ defmodule Opal.Context do
   when a skill is activated.
   """
 
+  # ── Centralized directory & filename constants ──────────────────────────
+  # Edit these to add/remove context files or skill search locations.
+
+  # Filenames looked for at every directory level during walk-up discovery.
+  @default_context_filenames ~w(AGENTS.md OPAL.md)
+
+  # Hidden-directory prefixes checked for context files (e.g. `.agents/AGENTS.md`).
+  @context_hidden_dirs ~w(.agents .opal)
+
+  # Hidden-directory prefixes under `working_dir` that may contain a `skills/` folder.
+  @project_skill_dirs ~w(.agents .github .claude)
+
+  # Hidden-directory prefixes under `$HOME` that may contain a `skills/` folder.
+  @home_skill_dirs ~w(.agents .opal .claude)
+
+  # ── Public API ──────────────────────────────────────────────────────────
+
   @doc """
   Discovers context files by walking up from `working_dir`.
 
@@ -49,30 +66,24 @@ defmodule Opal.Context do
   ## Options
 
     * `:filenames` — list of filenames to look for (default from config).
-      Also searches `.agents/<filename>` and `.opal/<filename>` variants.
+      Also searches hidden-directory variants defined in `@context_hidden_dirs`.
   """
   @spec discover_context(String.t(), keyword()) :: [%{path: String.t(), content: String.t()}]
   def discover_context(working_dir, opts \\ []) do
-    filenames = Keyword.get(opts, :filenames, ["AGENTS.md", "OPAL.md"])
+    filenames = Keyword.get(opts, :filenames, @default_context_filenames)
 
     working_dir
     |> Path.expand()
     |> walk_up()
     |> Enum.flat_map(fn dir ->
-      candidates =
-        Enum.flat_map(filenames, fn filename ->
-          [
-            Path.join(dir, filename),
-            Path.join([dir, ".agents", filename]),
-            Path.join([dir, ".opal", filename])
-          ]
-        end)
-
-      candidates
-      |> Enum.filter(&File.regular?/1)
-      |> Enum.map(fn path ->
-        %{path: path, content: File.read!(path)}
+      filenames
+      |> Enum.flat_map(fn filename ->
+        root = [Path.join(dir, filename)]
+        hidden = Enum.map(@context_hidden_dirs, &Path.join([dir, &1, filename]))
+        root ++ hidden
       end)
+      |> Enum.filter(&File.regular?/1)
+      |> Enum.map(&%{path: &1, content: File.read!(&1)})
     end)
   end
 
@@ -91,19 +102,14 @@ defmodule Opal.Context do
   @spec discover_skills(String.t(), keyword()) :: [Opal.Skill.t()]
   def discover_skills(working_dir, opts \\ []) do
     extra_dirs = Keyword.get(opts, :extra_dirs, [])
+    expanded = Path.expand(working_dir)
     home = System.user_home!()
 
-    search_dirs =
-      [
-        Path.join([Path.expand(working_dir), ".agents", "skills"]),
-        Path.join([Path.expand(working_dir), ".github", "skills"]),
-        Path.join([Path.expand(working_dir), ".claude", "skills"]),
-        Path.join([home, ".agents", "skills"]),
-        Path.join([home, ".opal", "skills"]),
-        Path.join([home, ".claude", "skills"])
-      ] ++ Enum.map(extra_dirs, &Path.expand/1)
+    project = Enum.map(@project_skill_dirs, &Path.join([expanded, &1, "skills"]))
+    user = Enum.map(@home_skill_dirs, &Path.join([home, &1, "skills"]))
+    extra = Enum.map(extra_dirs, &Path.expand/1)
 
-    search_dirs
+    (project ++ user ++ extra)
     |> Enum.uniq()
     |> Enum.flat_map(&scan_skills_dir/1)
     |> Enum.uniq_by(& &1.name)
@@ -117,60 +123,54 @@ defmodule Opal.Context do
 
   ## Options
 
-    * `:filenames` — context filenames (default: `["AGENTS.md", "OPAL.md"]`)
+    * `:filenames` — context filenames (default: `@default_context_filenames`)
     * `:extra_dirs` — additional skill directories (default: `[]`)
     * `:skip_skills` — if `true`, skip skill discovery entirely (default: `false`)
   """
   @spec build_context(String.t(), keyword()) :: String.t()
   def build_context(working_dir, opts \\ []) do
     context_files = discover_context(working_dir, opts)
-    skip_skills = Keyword.get(opts, :skip_skills, false)
 
     skills =
-      if skip_skills do
-        []
-      else
-        discover_skills(working_dir, opts)
-      end
+      if Keyword.get(opts, :skip_skills, false),
+        do: [],
+        else: discover_skills(working_dir, opts)
 
-    parts = []
-
-    # Context files
-    parts =
-      if context_files != [] do
-        file_blocks =
-          Enum.map_join(context_files, "\n\n", fn %{path: path, content: content} ->
-            "<!-- From: #{path} -->\n#{content}"
-          end)
-
-        parts ++ ["\n## Project Context\n\n#{file_blocks}"]
-      else
-        parts
-      end
-
-    # Skills summary
-    parts =
-      if skills != [] do
-        skill_lines =
-          Enum.map_join(skills, "\n", fn skill ->
-            "- **#{skill.name}**: #{skill.description}"
-          end)
-
-        parts ++ ["\n## Available Skills\n\n#{skill_lines}"]
-      else
-        parts
-      end
-
-    Enum.join(parts, "\n")
+    [
+      format_context_files(context_files),
+      format_skills(skills)
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n")
   end
 
-  # --- Private ---
+  # ── Private ─────────────────────────────────────────────────────────────
+
+  defp format_context_files([]), do: nil
+
+  defp format_context_files(files) do
+    blocks =
+      Enum.map_join(files, "\n\n", fn %{path: path, content: content} ->
+        "<!-- From: #{path} -->\n#{content}"
+      end)
+
+    "\n## Project Context\n\n#{blocks}"
+  end
+
+  defp format_skills([]), do: nil
+
+  defp format_skills(skills) do
+    lines =
+      Enum.map_join(skills, "\n", fn skill ->
+        "- **#{skill.name}**: #{skill.description}"
+      end)
+
+    "\n## Available Skills\n\n#{lines}"
+  end
 
   # Returns directories from the given path up to the filesystem root.
   # Result is ordered root-first (deepest directory last).
-  defp walk_up(path) do
-    do_walk_up(path, [])
-  end
+  defp walk_up(path), do: do_walk_up(path, [])
 
   defp do_walk_up(path, acc) do
     parent = Path.dirname(path)
@@ -185,38 +185,27 @@ defmodule Opal.Context do
 
   # Scans a directory for skill subdirectories containing SKILL.md.
   defp scan_skills_dir(dir) do
-    if File.dir?(dir) do
-      case File.ls(dir) do
-        {:ok, entries} ->
-          entries
-          |> Enum.map(fn entry -> Path.join(dir, entry) end)
-          |> Enum.filter(&File.dir?/1)
-          |> Enum.flat_map(fn skill_dir ->
-            skill_md = Path.join(skill_dir, "SKILL.md")
-
-            if File.regular?(skill_md) do
-              dir_name = Path.basename(skill_dir)
-
-              case Opal.Skill.parse_file(skill_md) do
-                {:ok, skill} ->
-                  case Opal.Skill.validate(skill, dir_name: dir_name) do
-                    :ok -> [skill]
-                    {:error, _} -> []
-                  end
-
-                {:error, _} ->
-                  []
-              end
-            else
-              []
-            end
-          end)
-
-        {:error, _} ->
-          []
-      end
+    with true <- File.dir?(dir),
+         {:ok, entries} <- File.ls(dir) do
+      entries
+      |> Enum.map(&Path.join(dir, &1))
+      |> Enum.filter(&File.dir?/1)
+      |> Enum.flat_map(&parse_skill/1)
     else
-      []
+      _ -> []
+    end
+  end
+
+  defp parse_skill(skill_dir) do
+    skill_md = Path.join(skill_dir, "SKILL.md")
+    dir_name = Path.basename(skill_dir)
+
+    with true <- File.regular?(skill_md),
+         {:ok, skill} <- Opal.Skill.parse_file(skill_md),
+         :ok <- Opal.Skill.validate(skill, dir_name: dir_name) do
+      [skill]
+    else
+      _ -> []
     end
   end
 end

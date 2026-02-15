@@ -6,6 +6,7 @@ defmodule Opal.Message do
   assistant, and tool executions. Each message has a role that determines
   its semantics:
 
+    * `:system` — a system-level instruction (e.g. system prompt, summarizer directives)
     * `:user` — a user-originated message with text content
     * `:assistant` — an assistant response with text and optional tool calls
     * `:tool_call` — a tool invocation specifying name, call ID, and arguments
@@ -14,7 +15,7 @@ defmodule Opal.Message do
   Every message is assigned a unique ID at construction time.
   """
 
-  @type role :: :user | :assistant | :tool_call | :tool_result
+  @type role :: :system | :user | :assistant | :tool_call | :tool_result
 
   @type tool_call :: %{
           call_id: String.t(),
@@ -50,6 +51,20 @@ defmodule Opal.Message do
     :metadata,
     is_error: false
   ]
+
+  @doc """
+  Creates a system message with the given instruction content.
+
+  ## Examples
+
+      iex> msg = Opal.Message.system("You are a helpful assistant.")
+      iex> msg.role
+      :system
+  """
+  @spec system(String.t()) :: t()
+  def system(content) when is_binary(content) do
+    %__MODULE__{id: generate_id(), role: :system, content: content}
+  end
 
   @doc """
   Creates a user message with the given text content.

@@ -266,6 +266,23 @@ defmodule Opal.Session do
       metadata: Keyword.get(opts, :metadata, %{})
     }
 
+    # If a saved session file was provided, load it during init so the
+    # Agent (started after us in the supervision tree) finds messages ready.
+    state =
+      case Keyword.get(opts, :load_from) do
+        nil ->
+          state
+
+        path when is_binary(path) ->
+          case do_load(table, path) do
+            {:ok, %{current_id: cid, metadata: meta}} ->
+              %{state | current_id: cid, metadata: meta}
+
+            {:error, _reason} ->
+              state
+          end
+      end
+
     {:ok, state}
   end
 
@@ -516,9 +533,15 @@ defmodule Opal.Session do
           nil
 
         list ->
-          Enum.map(list, fn tc ->
-            %{call_id: tc["call_id"], name: tc["name"], arguments: tc["arguments"]}
+          list
+          |> Enum.map(fn tc ->
+            %{call_id: tc["call_id"], name: tc["name"], arguments: tc["arguments"] || %{}}
           end)
+          |> Enum.reject(fn tc -> is_nil(tc.call_id) or is_nil(tc.name) end)
+          |> case do
+            [] -> nil
+            valid -> valid
+          end
       end
 
     # Restore structured metadata, converting string keys to atoms for

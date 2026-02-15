@@ -27,6 +27,10 @@ for (let i = 0; i < args.length; i++) {
     case "-C":
       opts.workingDir = args[++i];
       break;
+    case "--session":
+    case "-s":
+      opts.sessionId = args[++i];
+      break;
     case "--verbose":
     case "-v":
       opts.verbose = true;
@@ -47,6 +51,7 @@ for (let i = 0; i < args.length; i++) {
 Options:
   --model <provider/id>   Model to use (e.g. anthropic/claude-sonnet-4-20250514)
   --working-dir, -C <dir> Working directory
+  --session, -s <id>      Resume a previous session by ID
   --auto-confirm          Auto-confirm all tool executions
   --debug                 Enable debug feature/tools for this session
   --verbose, -v           Verbose output
@@ -64,4 +69,23 @@ if (!opts.workingDir) {
 // Clear the screen so the app starts with a fresh viewport.
 process.stdout.write("\x1b[2J\x1b[H");
 
-render(React.createElement(App, { sessionOpts: opts }));
+// Track the session ID so we can print a resume hint after exit.
+let exitSessionId: string | undefined;
+
+const instance = render(
+  React.createElement(App, {
+    sessionOpts: opts,
+    onSessionId: (id: string) => {
+      exitSessionId = id;
+    },
+  }),
+);
+
+instance
+  .waitUntilExit()
+  .then(() => {
+    if (exitSessionId) {
+      console.log(`\nResume this session: opal --session "${exitSessionId}"\n`);
+    }
+  })
+  .catch(() => {});

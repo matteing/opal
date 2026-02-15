@@ -1,17 +1,16 @@
 defmodule Opal.Model do
   @moduledoc """
-  A struct representing model configuration for an agent session.
+  Model configuration for an agent session.
 
-  Encapsulates the provider, model identifier, and optional thinking level
-  used when making requests to a language model API.
+  Ties together a provider (`:copilot`, `:anthropic`, `:openai`, …), a model
+  ID string, and an optional thinking level.
 
   ## Examples
 
-      iex> Opal.Model.new(:copilot, "claude-sonnet-4-5")
-      %Opal.Model{provider: :copilot, id: "claude-sonnet-4-5", thinking_level: :off}
-
-      iex> Opal.Model.new(:copilot, "claude-sonnet-4-5", thinking_level: :high)
-      %Opal.Model{provider: :copilot, id: "claude-sonnet-4-5", thinking_level: :high}
+      Opal.Model.new(:copilot, "claude-sonnet-4-5")
+      Opal.Model.new(:anthropic, "claude-sonnet-4-5", thinking_level: :high)
+      Opal.Model.parse("anthropic:claude-sonnet-4-5")
+      Opal.Model.coerce({:openai, "gpt-4o"})
   """
 
   @type thinking_level :: :off | :low | :medium | :high | :max
@@ -25,17 +24,18 @@ defmodule Opal.Model do
   @enforce_keys [:provider, :id]
   defstruct [:provider, :id, thinking_level: :off]
 
-  @valid_thinking_levels [:off, :low, :medium, :high, :max]
+  @thinking_levels ~w(off low medium high max)a
+
+  # -------------------------------------------------------------------
+  # Constructors
+  # -------------------------------------------------------------------
 
   @doc """
-  Creates a new model configuration.
+  Creates a model from an explicit provider atom and model ID.
 
-  ## Parameters
+  ## Options
 
-    * `provider` — the provider atom (e.g. `:copilot`, `:anthropic`, `:openai`)
-    * `id` — the model identifier string (e.g. `"claude-sonnet-4-5"`)
-    * `opts` — optional keyword list:
-      * `:thinking_level` — one of `:off`, `:low`, `:medium`, `:high`, `:max` (default: `:off`)
+    * `:thinking_level` — one of #{inspect(~w(off low medium high max)a)} (default `:off`)
 
   ## Examples
 
@@ -45,22 +45,17 @@ defmodule Opal.Model do
   @spec new(atom(), String.t(), keyword()) :: t()
   def new(provider, id, opts \\ [])
       when is_atom(provider) and is_binary(id) do
-    thinking_level = Keyword.get(opts, :thinking_level, :off)
+    thinking = Keyword.get(opts, :thinking_level, :off)
 
-    unless thinking_level in @valid_thinking_levels do
+    thinking in @thinking_levels ||
       raise ArgumentError,
-            "invalid thinking_level: #{inspect(thinking_level)}, " <>
-              "expected one of #{inspect(@valid_thinking_levels)}"
-    end
+            "invalid thinking_level: #{inspect(thinking)}, expected one of #{inspect(@thinking_levels)}"
 
-    %__MODULE__{provider: provider, id: id, thinking_level: thinking_level}
+    %__MODULE__{provider: provider, id: id, thinking_level: thinking}
   end
 
   @doc """
-  Parses a model specification string into an `Opal.Model`.
-
-  Accepts `"provider:model_id"` format (e.g. `"anthropic:claude-sonnet-4-5"`).
-  Also accepts a bare model ID, which defaults to the `:copilot` provider.
+  Parses a `"provider:model_id"` string. Bare model IDs default to `:copilot`.
 
   ## Examples
 
@@ -74,34 +69,25 @@ defmodule Opal.Model do
   def parse(spec, opts \\ []) when is_binary(spec) do
     {provider, id} =
       case String.split(spec, ":", parts: 2) do
-        [provider_str, model_id] ->
-          provider =
-            try do
-              String.to_existing_atom(provider_str)
-            rescue
-              ArgumentError ->
-                raise ArgumentError,
-                      "unknown provider: #{inspect(provider_str)}"
-            end
-
-          {provider, model_id}
-
-        [model_id] ->
-          {:copilot, model_id}
+        [provider_str, model_id] -> {to_provider_atom!(provider_str), model_id}
+        [model_id] -> {:copilot, model_id}
       end
 
     new(provider, id, opts)
   end
 
+  # -------------------------------------------------------------------
+  # Coercion
+  # -------------------------------------------------------------------
+
   @doc """
-  Coerces a model specification into an `Opal.Model` struct.
+  Normalizes any model spec into an `%Opal.Model{}`.
 
-  This is the single normalization entry point for model specs. It accepts:
+  Accepted inputs:
 
-    * An `%Opal.Model{}` struct (returned as-is)
-    * A `"provider:model_id"` string (e.g. `"anthropic:claude-sonnet-4-5"`)
-    * A bare model ID string (defaults to `:copilot` provider)
-    * A `{provider, model_id}` tuple where provider is an atom or string
+    * `%Opal.Model{}` — returned as-is
+    * `"provider:model_id"` or bare `"model_id"` — parsed via `parse/2`
+    * `{provider, model_id}` tuple — provider may be atom or string
 
   ## Examples
 
@@ -117,30 +103,30 @@ defmodule Opal.Model do
   """
   @spec coerce(t() | String.t() | {atom() | String.t(), String.t()}, keyword()) :: t()
   def coerce(spec, opts \\ [])
-
   def coerce(%__MODULE__{} = model, _opts), do: model
-
   def coerce(spec, opts) when is_binary(spec), do: parse(spec, opts)
 
-  def coerce({provider, id}, opts) when is_binary(id) do
-    provider_atom = if is_atom(provider), do: provider, else: String.to_existing_atom(provider)
-    new(provider_atom, id, opts)
-  end
+  def coerce({provider, id}, opts) when is_atom(provider) and is_binary(id),
+    do: new(provider, id, opts)
+
+  def coerce({provider, id}, opts) when is_binary(provider) and is_binary(id),
+    do: new(to_provider_atom!(provider), id, opts)
+
+  # -------------------------------------------------------------------
+  # Provider helpers
+  # -------------------------------------------------------------------
 
   @doc """
-  Returns the provider module for the given model.
+  Returns the provider module for a model.
 
-  Maps `:copilot` to `Opal.Provider.Copilot` and all other providers
-  to `Opal.Provider.LLM`.
+  `:copilot` maps to `Opal.Provider.Copilot`; everything else uses `Opal.Provider.LLM`.
 
   ## Examples
 
-      iex> model = Opal.Model.new(:copilot, "gpt-5")
-      iex> Opal.Model.provider_module(model)
+      iex> Opal.Model.new(:copilot, "gpt-5") |> Opal.Model.provider_module()
       Opal.Provider.Copilot
 
-      iex> model = Opal.Model.new(:anthropic, "claude-sonnet-4-5")
-      iex> Opal.Model.provider_module(model)
+      iex> Opal.Model.new(:anthropic, "claude-sonnet-4-5") |> Opal.Model.provider_module()
       Opal.Provider.LLM
   """
   @spec provider_module(t()) :: module()
@@ -148,18 +134,23 @@ defmodule Opal.Model do
   def provider_module(%__MODULE__{}), do: Opal.Provider.LLM
 
   @doc """
-  Returns the ReqLLM model specification string for this model.
-
-  Only applicable for non-Copilot providers that use ReqLLM.
+  Formats as a `"provider:model_id"` string for ReqLLM.
 
   ## Examples
 
-      iex> model = Opal.Model.new(:anthropic, "claude-sonnet-4-5")
-      iex> Opal.Model.to_req_llm_spec(model)
+      iex> Opal.Model.new(:anthropic, "claude-sonnet-4-5") |> Opal.Model.to_req_llm_spec()
       "anthropic:claude-sonnet-4-5"
   """
   @spec to_req_llm_spec(t()) :: String.t()
-  def to_req_llm_spec(%__MODULE__{provider: provider, id: id}) do
-    "#{provider}:#{id}"
+  def to_req_llm_spec(%__MODULE__{provider: provider, id: id}), do: "#{provider}:#{id}"
+
+  # -------------------------------------------------------------------
+  # Private
+  # -------------------------------------------------------------------
+
+  defp to_provider_atom!(name) do
+    String.to_existing_atom(name)
+  rescue
+    ArgumentError -> raise ArgumentError, "unknown provider: #{inspect(name)}"
   end
 end

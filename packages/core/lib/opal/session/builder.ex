@@ -15,7 +15,7 @@ defmodule Opal.Session.Builder do
     disabled_tools = resolve_disabled_tools(config, tools)
 
     [
-      session_id: generate_session_id(),
+      session_id: Map.get(config, :session_id) || generate_session_id(),
       system_prompt: Map.get(config, :system_prompt, ""),
       model: model,
       tools: tools,

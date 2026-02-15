@@ -30,7 +30,19 @@ flowchart LR
 
 ## Data Model
 
-Each message is an `Opal.Message` struct with a unique `id` and a `parent_id` that links it to the previous message. This forms a tree, not a flat list:
+Each message is an `Opal.Message` struct with a unique `id` and a `parent_id` that links it to the previous message. This forms a tree, not a flat list.
+
+### Roles
+
+| Role           | Constructor                  | Purpose                                                          |
+| -------------- | ---------------------------- | ---------------------------------------------------------------- |
+| `:system`      | `Opal.Message.system/1`      | System-level instructions (system prompt, summarizer directives) |
+| `:user`        | `Opal.Message.user/1`        | User-originated text                                             |
+| `:assistant`   | `Opal.Message.assistant/2`   | Model response with optional tool calls                          |
+| `:tool_call`   | `Opal.Message.tool_call/3`   | Tool invocation (call_id, name, arguments)                       |
+| `:tool_result` | `Opal.Message.tool_result/3` | Tool execution output, keyed by call_id                          |
+
+### Tree Structure
 
 ```mermaid
 graph TD
@@ -55,6 +67,7 @@ The `current_id` pointer tracks the active leaf. `get_path/1` walks parent links
 Messages live in a `:set` ETS table (one per session). ETS gives O(1) lookups by message ID and in-process access without serialization.
 
 **State fields:**
+
 - `table` — ETS table reference
 - `current_id` — pointer to the active leaf message
 - `metadata` — session-level data (title, created_at, etc.)

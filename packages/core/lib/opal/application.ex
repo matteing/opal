@@ -29,8 +29,12 @@ defmodule Opal.Application do
   @doc """
   Starts Erlang distribution so remote nodes can connect.
 
-  Writes the node name to `~/.opal/node` for discovery by `--connect`.
+  Writes the node name to `~/.opal/node` for discovery by `pnpm inspect`.
   No-op if distribution is already started. Returns `{:ok, node_name}` or `{:error, reason}`.
+
+  The distribution cookie is read from `config :opal, :distribution_cookie`.
+  When set to `:random` (the default), a cryptographically random cookie is
+  generated each time. Set an explicit atom to use a fixed cookie.
   """
   @spec start_distribution() :: {:ok, node()} | {:error, term()}
   def start_distribution do
@@ -41,7 +45,7 @@ defmodule Opal.Application do
       {:ok, Node.self()}
     else
       node_name = :"opal_#{System.pid()}"
-      cookie = :opal
+      cookie = distribution_cookie()
 
       case Node.start(node_name, :shortnames) do
         {:ok, _pid} ->
@@ -54,6 +58,18 @@ defmodule Opal.Application do
           Logger.warning("Could not start distribution: #{inspect(reason)}")
           {:error, reason}
       end
+    end
+  end
+
+  defp distribution_cookie do
+    case Application.get_env(:opal, :distribution_cookie, :random) do
+      :random ->
+        :crypto.strong_rand_bytes(18)
+        |> Base.url_encode64(padding: false)
+        |> String.to_atom()
+
+      cookie when is_atom(cookie) ->
+        cookie
     end
   end
 
@@ -84,6 +100,7 @@ defmodule Opal.Application do
     path = node_file_path()
     File.mkdir_p!(Path.dirname(path))
     File.write!(path, "#{node_name}\n#{cookie}\n")
+    File.chmod!(path, 0o600)
   end
 
   defp node_file_path do

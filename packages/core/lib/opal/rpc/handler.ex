@@ -431,6 +431,13 @@ defmodule Opal.RPC.Handler do
         |> maybe_put_string(params, "system_prompt", :system_prompt)
         |> Map.put(:working_dir, Map.get(params, "working_dir", File.cwd!()))
         |> maybe_put_true(params, "session", :session)
+        |> maybe_put_string(params, "session_id", :session_id)
+
+      # Resuming a session implies persistence
+      opts =
+        if Map.has_key?(opts, :session_id),
+          do: Map.put(opts, :session, true),
+          else: opts
 
       {:ok, opts}
     end
