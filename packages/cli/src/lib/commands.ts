@@ -35,6 +35,7 @@ export function buildHelpMessage(): string {
     "  `/agents <n|main>`        — switch view to sub-agent or main\n" +
     "  `/opal`                   — open configuration menu\n" +
     "  `/compact`                — compact conversation history\n" +
+    "  `/debug`                  — toggle RPC message panel\n" +
     "  `/help`                   — show this help"
   );
 }

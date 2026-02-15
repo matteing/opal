@@ -93,7 +93,9 @@ defmodule Opal.RPC.Stdio do
   defp stdin_read_loop(parent) do
     # Open fd 0 (stdin) in binary stream mode. We accumulate chunks
     # and split on newlines to extract complete JSON-RPC messages.
-    port = :erlang.open_port({:fd, 0, 0}, [:binary, :stream])
+    # The :eof option causes a {port, :eof} message instead of port
+    # exit when stdin closes — critical for clean shutdown.
+    port = :erlang.open_port({:fd, 0, 0}, [:binary, :stream, :eof])
     stdin_loop(port, parent, "")
   end
 

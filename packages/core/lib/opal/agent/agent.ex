@@ -949,8 +949,9 @@ defmodule Opal.Agent do
   end
 
   # Defense-in-depth: walks a chronological message list and ensures every
-  # assistant message with tool_calls has matching tool_results, AND every
-  # tool_result has a preceding assistant message with a matching tool_call.
+  # assistant message with tool_calls is immediately followed by matching
+  # tool_results, and strips orphaned/out-of-place tool_results.
+  #
   # This runs on the final list sent to the provider, catching corruption
   # regardless of source (compaction, abort, stream error, session reload).
   @doc false
@@ -960,7 +961,7 @@ defmodule Opal.Agent do
       Enum.reduce(chronological_messages, MapSet.new(), fn
         %{role: :assistant, tool_calls: tcs}, ids when is_list(tcs) and tcs != [] ->
           tcs
-          |> Enum.map(& &1[:call_id])
+          |> Enum.map(&tool_call_id/1)
           |> Enum.filter(&is_binary/1)
           |> Enum.reduce(ids, &MapSet.put(&2, &1))
 
@@ -968,23 +969,27 @@ defmodule Opal.Agent do
           ids
       end)
 
-    # Second pass: inject missing results and strip orphaned results
+    # Second pass: relocate matched results directly after tool-calling
+    # assistants, synthesize missing, and strip leftovers.
     do_ensure(chronological_messages, valid_call_ids, [])
   end
 
   defp do_ensure([], _valid_ids, acc), do: Enum.reverse(acc)
 
-  # Strip tool_results whose call_id doesn't match any assistant's tool_calls
-  defp do_ensure([%{role: :tool_result, call_id: cid} = msg | rest], valid_ids, acc) do
+  # Strip standalone tool_results. Matched results are relocated by the
+  # assistant branch below, so anything that reaches here is out-of-place.
+  defp do_ensure([%{role: :tool_result, call_id: cid} | rest], valid_ids, acc) do
     if MapSet.member?(valid_ids, cid) do
-      do_ensure(rest, valid_ids, [msg | acc])
+      Logger.warning("Stripping out-of-place tool_result: #{cid}")
     else
       Logger.warning("Stripping orphaned tool_result with no matching tool_call: #{cid}")
-      do_ensure(rest, valid_ids, acc)
     end
+
+    do_ensure(rest, valid_ids, acc)
   end
 
-  # For assistant messages with tool_calls, ensure all calls have results ahead
+  # For assistant messages with tool_calls, relocate all matching results so
+  # they are adjacent, then synthesize any missing ones.
   defp do_ensure(
          [%{role: :assistant, tool_calls: tcs} = msg | rest],
          valid_ids,
@@ -993,40 +998,71 @@ defmodule Opal.Agent do
        when is_list(tcs) and tcs != [] do
     expected_ids =
       tcs
-      |> Enum.map(& &1[:call_id])
-      |> Enum.filter(&(&1 != nil))
-      |> MapSet.new()
+      |> Enum.map(&tool_call_id/1)
+      |> Enum.filter(&is_binary/1)
+      |> Enum.uniq()
 
-    result_ids_ahead = collect_result_ids(rest)
-    missing = MapSet.difference(expected_ids, result_ids_ahead)
+    {matched, rest} = take_tool_results_for_ids(rest, MapSet.new(expected_ids))
 
-    if MapSet.size(missing) == 0 do
-      do_ensure(rest, valid_ids, [msg | acc])
-    else
+    missing =
+      expected_ids
+      |> Enum.reject(&Map.has_key?(matched, &1))
+
+    if missing != [] do
       Logger.warning(
-        "Injecting #{MapSet.size(missing)} synthetic tool_results for orphaned tool_calls"
+        "Injecting #{length(missing)} synthetic tool_results for orphaned tool_calls"
       )
-
-      synthetics =
-        Enum.map(missing, fn call_id ->
-          Opal.Message.tool_result(call_id, "[Error: tool result missing]", true)
-        end)
-
-      new_acc = Enum.reduce(synthetics, [msg | acc], fn s, a -> [s | a] end)
-      do_ensure(rest, valid_ids, new_acc)
     end
+
+    results =
+      Enum.map(expected_ids, fn call_id ->
+        Map.get(matched, call_id) ||
+          Opal.Message.tool_result(call_id, "[Error: tool result missing]", true)
+      end)
+
+    new_acc = Enum.reverse([msg | results]) ++ acc
+    do_ensure(rest, valid_ids, new_acc)
   end
 
   defp do_ensure([msg | rest], valid_ids, acc) do
     do_ensure(rest, valid_ids, [msg | acc])
   end
 
-  # Collects all tool_result call_ids from a message list (for lookahead).
-  defp collect_result_ids(messages) do
-    Enum.reduce(messages, MapSet.new(), fn
-      %{role: :tool_result, call_id: cid}, ids when is_binary(cid) -> MapSet.put(ids, cid)
-      _, ids -> ids
+  defp take_tool_results_for_ids(messages, expected_ids) do
+    {matched, kept_rev} =
+      Enum.reduce(messages, {%{}, []}, fn
+        %{role: :tool_result, call_id: cid} = msg, {found, kept} ->
+          cond do
+            is_binary(cid) and MapSet.member?(expected_ids, cid) and not Map.has_key?(found, cid) ->
+              {Map.put(found, cid, msg), kept}
+
+            is_binary(cid) and MapSet.member?(expected_ids, cid) ->
+              Logger.warning("Dropping duplicate tool_result for call_id: #{cid}")
+              {found, kept}
+
+            true ->
+              {found, [msg | kept]}
+          end
+
+        msg, {found, kept} ->
+          {found, [msg | kept]}
+      end)
+
+    {matched, Enum.reverse(kept_rev)}
+  end
+
+  defp tool_call_id(%{call_id: call_id}) when is_binary(call_id), do: call_id
+  defp tool_call_id(%{"call_id" => call_id}) when is_binary(call_id), do: call_id
+  defp tool_call_id(_), do: nil
+
+  defp tool_call_ids(tool_calls) do
+    Enum.reduce(tool_calls, [], fn tc, ids ->
+      case tool_call_id(tc) do
+        call_id when is_binary(call_id) -> [call_id | ids]
+        _ -> ids
+      end
     end)
+    |> Enum.reverse()
   end
 
   # Scans ALL assistant messages with tool_calls and injects synthetic
@@ -1061,8 +1097,7 @@ defmodule Opal.Agent do
        when is_list(tcs) and tcs != [] do
     orphans =
       tcs
-      |> Enum.map(& &1[:call_id])
-      |> Enum.filter(&(&1 != nil))
+      |> tool_call_ids()
       |> Enum.reject(&MapSet.member?(result_ids, &1))
 
     find_orphaned_calls(rest, result_ids, acc ++ orphans)

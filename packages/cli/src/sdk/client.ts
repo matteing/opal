@@ -48,6 +48,22 @@ interface PendingRequest {
   reject: (error: Error) => void;
 }
 
+// --- RPC message log entry ---
+
+export type RpcDirection = "outgoing" | "incoming";
+
+export interface RpcMessageEntry {
+  id: number;
+  direction: RpcDirection;
+  timestamp: number;
+  /** Raw JSON-RPC payload */
+  raw: unknown;
+  /** RPC method name (absent for bare responses) */
+  method?: string;
+  /** "request" | "response" | "notification" | "error" */
+  kind: "request" | "response" | "notification" | "error";
+}
+
 // --- Client options ---
 
 export interface OpalClientOptions {
@@ -71,6 +87,7 @@ export class OpalClient extends EventEmitter {
   private process: ChildProcess;
   private rl: Interface;
   private nextId = 1;
+  private rpcSeq = 0;
   private pending = new Map<number, PendingRequest>();
   private onServerRequest?: OpalClientOptions["onServerRequest"];
   private closed = false;
@@ -212,6 +229,15 @@ export class OpalClient extends EventEmitter {
 
   private send(msg: JsonRpcRequest | JsonRpcResponse): void {
     this.process.stdin!.write(JSON.stringify(msg) + "\n");
+    const entry: RpcMessageEntry = {
+      id: ++this.rpcSeq,
+      direction: "outgoing",
+      timestamp: Date.now(),
+      raw: msg,
+      method: "method" in msg ? (msg as JsonRpcRequest).method : undefined,
+      kind: "method" in msg ? "request" : "response",
+    };
+    this.emit("rpc:message", entry);
   }
 
   private handleLine(line: string): void {
@@ -224,6 +250,23 @@ export class OpalClient extends EventEmitter {
       this.emit("parseError", line);
       return;
     }
+
+    // Emit raw incoming RPC message for debug panel
+    const entry: RpcMessageEntry = {
+      id: ++this.rpcSeq,
+      direction: "incoming",
+      timestamp: Date.now(),
+      raw: msg,
+      method: "method" in msg ? (msg as { method: string }).method : undefined,
+      kind: isResponse(msg)
+        ? msg.error
+          ? "error"
+          : "response"
+        : isNotification(msg)
+          ? "notification"
+          : "request",
+    };
+    this.emit("rpc:message", entry);
 
     if (isResponse(msg)) {
       this.handleResponse(msg);

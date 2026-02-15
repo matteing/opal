@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { AgentEvent, TokenUsage, ConfirmRequest } from "../sdk/protocol.js";
 import { Session, type SessionOptions } from "../sdk/session.js";
+import type { RpcMessageEntry } from "../sdk/client.js";
 import { applyEvent, combineDeltas, emptyAgentView } from "../lib/reducers.js";
 import {
   errorMessage,
@@ -123,6 +124,10 @@ export interface OpalState {
   lastDeltaAt: number;
   /** Server stderr lines captured during startup for diagnostics. */
   serverLogs: string[];
+  /** JSON-RPC message log for the debug panel. */
+  rpcMessages: RpcMessageEntry[];
+  /** Whether the debug split panel is visible. */
+  showDebugPanel: boolean;
 }
 
 export interface OpalActions {
@@ -139,6 +144,7 @@ export interface OpalActions {
   toggleOpalFeature: (key: "subAgents" | "skills" | "mcp" | "debug", enabled: boolean) => void;
   toggleOpalTool: (name: string, enabled: boolean) => void;
   switchTab: (tabId: string) => void;
+  toggleDebugPanel: () => void;
   authStartDeviceFlow: () => void;
   authSubmitKey: (providerId: string, apiKey: string) => void;
 }
@@ -166,6 +172,8 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     nodeName: "",
     lastDeltaAt: 0,
     serverLogs: [],
+    rpcMessages: [],
+    showDebugPanel: false,
   });
 
   const sessionRef = useRef<Session | null>(null);
@@ -200,6 +208,13 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     Session.start({
       session: true,
       ...opts,
+      onRpcMessage: (entry: RpcMessageEntry) => {
+        if (!mounted) return;
+        setState((s) => ({
+          ...s,
+          rpcMessages: [...s.rpcMessages.slice(-199), entry],
+        }));
+      },
       onStderr: (data: string) => {
         if (!mounted) return;
         // Capture server logs during startup for diagnostics display
@@ -524,6 +539,16 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
           addSystemMessage(buildHelpMessage());
           break;
         }
+        case "debug": {
+          setState((s) => {
+            const next = !s.showDebugPanel;
+            if (!next) {
+              addSystemMessage("Debug panel hidden.");
+            }
+            return { ...s, showDebugPanel: next };
+          });
+          break;
+        }
         default:
           addSystemMessage(`Unknown command: \`/${cmd}\`. Type \`/help\` for available commands.`);
       }
@@ -617,6 +642,10 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     setState((s) => ({ ...s, activeTab: tabId }));
   }, []);
 
+  const toggleDebugPanel = useCallback(() => {
+    setState((s) => ({ ...s, showDebugPanel: !s.showDebugPanel }));
+  }, []);
+
   const authStartDeviceFlow = useCallback(() => {
     const session = sessionRef.current;
     if (!session) return;
@@ -684,6 +713,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       toggleOpalFeature,
       toggleOpalTool,
       switchTab,
+      toggleDebugPanel,
       authStartDeviceFlow,
       authSubmitKey,
     }),
@@ -701,6 +731,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       toggleOpalFeature,
       toggleOpalTool,
       switchTab,
+      toggleDebugPanel,
       authStartDeviceFlow,
       authSubmitKey,
     ],

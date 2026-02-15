@@ -247,6 +247,42 @@ defmodule Opal.Agent.ConversationIntegrityTest do
       assert "valid" in result_ids
       refute "stale" in result_ids
     end
+
+    test "relocates existing tool_results directly after assistant tool_calls" do
+      messages = [
+        %Message{id: "1", role: :user, content: "load skills"},
+        %Message{
+          id: "2",
+          role: :assistant,
+          content: "",
+          tool_calls: [
+            %{call_id: "toolu_1", name: "use_skill", arguments: %{"skill_name" => "git"}},
+            %{call_id: "toolu_2", name: "use_skill", arguments: %{"skill_name" => "docs"}}
+          ]
+        },
+        # Skill context injection can interleave before tool results land
+        %Message{id: "3", role: :user, content: "[System] Skill 'git' activated"},
+        %Message{id: "4", role: :user, content: "[System] Skill 'docs' activated"},
+        %Message{id: "5", role: :tool_result, call_id: "toolu_1", content: "Skill git loaded"},
+        %Message{id: "6", role: :tool_result, call_id: "toolu_2", content: "Skill docs loaded"},
+        %Message{id: "7", role: :assistant, content: "done"}
+      ]
+
+      result = Agent.ensure_tool_results(messages)
+
+      assert Enum.map(result, & &1.role) == [
+               :user,
+               :assistant,
+               :tool_result,
+               :tool_result,
+               :user,
+               :user,
+               :assistant
+             ]
+
+      assert Enum.at(result, 2).call_id == "toolu_1"
+      assert Enum.at(result, 3).call_id == "toolu_2"
+    end
   end
 
   # ── Integration tests with the agent ───────────────────────────────

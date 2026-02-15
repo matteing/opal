@@ -11,6 +11,7 @@ import { ModelPicker } from "./components/model-picker.js";
 import { OpalMenu } from "./components/opal-menu.js";
 import { ShimmerText } from "./components/shimmer-text.js";
 import { SetupWizard } from "./components/device-auth.js";
+import { RpcPanel } from "./components/rpc-panel.js";
 import { openPlanInEditor } from "./open-editor.js";
 import type { SessionOptions } from "./sdk/session.js";
 
@@ -175,6 +176,7 @@ export const App: FC<AppProps> = ({ sessionOpts, onSessionId }) => {
   }
 
   const subAgentCount = Object.keys(state.subAgents).length;
+  const rpcPanelHeight = Math.min(12, Math.floor(rows * 0.35));
 
   return (
     <Box flexDirection="column" width="100%" minHeight={initialFill ? rows : undefined}>
@@ -238,6 +240,10 @@ export const App: FC<AppProps> = ({ sessionOpts, onSessionId }) => {
       )}
 
       <BottomBar state={state} actions={actions} />
+
+      {state.showDebugPanel && (
+        <RpcPanel messages={state.rpcMessages} height={rpcPanelHeight} />
+      )}
     </Box>
   );
 };

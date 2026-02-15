@@ -121,9 +121,80 @@ The `debug_state` tool is for **self-diagnosis** — the agent inspecting its ow
 
 The key difference: `debug_state` works within a turn and returns structured JSON the agent can reason about. External inspection gives a live event stream a human watches in real time.
 
+## Integration testing with opal-server
+
+Beyond unit tests (`mix test`) and the `debug_state` tool, you can spin up a real opal-server instance and interact with it programmatically. This lets you verify end-to-end behavior after making changes — e.g., "does session/start still work after I refactored config?"
+
+All commands run from `packages/core/`.
+
+### One-off RPC calls
+
+Use `scripts/opal-rpc.exs` to send a single JSON-RPC method and get a JSON response:
+
+```bash
+# Liveness check
+mix run --no-start ../../scripts/opal-rpc.exs -- opal/ping
+
+# Start a session and see the full response
+mix run --no-start ../../scripts/opal-rpc.exs -- session/start '{"working_dir": "/tmp"}'
+
+# Check auth status
+mix run --no-start ../../scripts/opal-rpc.exs -- auth/status
+
+# List saved sessions
+mix run --no-start ../../scripts/opal-rpc.exs -- session/list
+
+# Get agent state (use session_id from session/start)
+mix run --no-start ../../scripts/opal-rpc.exs -- agent/state '{"session_id": "abc123"}'
+```
+
+The output is JSON with `ok: true/false` and either `result` or `error`. This is useful for testing RPC handler changes, config parsing, auth flow, etc.
+
+### Full session lifecycle
+
+Use `scripts/opal-session.exs` to start a session, send a prompt, and collect the complete event stream:
+
+```bash
+# Send a prompt and see the full event lifecycle
+mix run --no-start ../../scripts/opal-session.exs -- "What tools do you have?"
+
+# With a specific model
+mix run --no-start ../../scripts/opal-session.exs -- "List files" --model copilot:gpt-4.1
+
+# JSON event output (one event per line, for programmatic parsing)
+mix run --no-start ../../scripts/opal-session.exs -- "Hello" --json --timeout 15000
+
+# With a working directory (agent will discover context files there)
+mix run --no-start ../../scripts/opal-session.exs -- "Read README.md" --working-dir /path/to/project
+```
+
+Human-readable mode prints events to stderr and the final response to stdout. JSON mode (`--json`) prints one JSON object per event line, useful for piping to `jq` or programmatic analysis.
+
+### When to use these scripts
+
+| Scenario | Tool |
+|----------|------|
+| Verify an RPC method works after changing handler.ex | `opal-rpc.exs` |
+| Test session startup after config/builder changes | `opal-rpc.exs` with `session/start` |
+| Verify auth flow changes | `opal-rpc.exs` with `auth/status` |
+| Test end-to-end prompt→response→tool flow | `opal-session.exs` |
+| Verify event stream after changing agent/events code | `opal-session.exs --json` |
+| Reproduce a bug with a specific prompt | `opal-session.exs` |
+
+### How they work
+
+Both scripts boot the Opal OTP application in-process (no child process or stdio transport) and call `Opal.RPC.Handler.handle/2` directly. This means:
+
+- No stdio pipe management or process lifecycle issues
+- Fast startup (reuses compiled BEAM)
+- Full access to the same code paths as the real server
+- Distribution and RPC transport are disabled to avoid side effects
+
 ## Source files
 
 - `packages/core/lib/opal/tool/debug.ex` — The `debug_state` tool implementation
 - `packages/core/lib/opal/agent/event_log.ex` — In-memory bounded event log (ETS ring buffer)
 - `packages/core/lib/opal/agent/tool_runner.ex` — Where feature flags filter active tools
 - `packages/core/lib/opal/config.ex` — `Opal.Config.Features` struct with `:debug` toggle
+- `scripts/opal-rpc.exs` — One-off RPC call script for integration testing
+- `scripts/opal-session.exs` — Full session lifecycle script with event streaming

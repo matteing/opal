@@ -23,7 +23,14 @@ defmodule Opal.Application do
       end
 
     opts = [strategy: :rest_for_one, name: Opal.Supervisor]
-    Supervisor.start_link(children, opts)
+
+    with {:ok, pid} <- Supervisor.start_link(children, opts) do
+      if Application.get_env(:opal, :start_distribution, true) do
+        start_distribution()
+      end
+
+      {:ok, pid}
+    end
   end
 
   @doc """
