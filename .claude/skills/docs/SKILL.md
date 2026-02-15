@@ -47,7 +47,7 @@ Place tool docs in `docs/tools/`. Place subsystem docs directly in `docs/`.
 - Prefer concrete examples over abstract descriptions.
 - Use code blocks for schemas, configs, and short snippets.
 - Keep headings to 3 levels max (##, ###, no ####).
-- Link to source files when referencing specific modules (e.g. `core/lib/opal/tool/edit_lines.ex`).
+- Link to source files when referencing specific modules (e.g. `packages/core/lib/opal/tool/edit_lines.ex`).
 
 ## References
 

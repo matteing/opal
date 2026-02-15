@@ -35,14 +35,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            core/deps
-            core/_build
-          key: mix-${{ runner.os }}-${{ hashFiles('core/mix.lock') }}
+            packages/core/deps
+            packages/core/_build
+          key: mix-${{ runner.os }}-${{ hashFiles('packages/core/mix.lock') }}
           restore-keys: mix-${{ runner.os }}-
 
       - name: Install deps
         run: |
-          cd core && mix deps.get && cd ..
+          cd packages/core && mix deps.get && cd ../..
           pnpm install --frozen-lockfile
 
       - name: Codegen check

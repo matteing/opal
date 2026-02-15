@@ -7,7 +7,7 @@ Opal's test suite uses ExUnit with no external mocking libraries. External depen
 ```bash
 pnpm test                             # all tests from repo root (runs nx run-many -t test)
 
-cd core
+cd packages/core
 
 mix test                              # all tests (excludes :live)
 mix test --include live               # include real API tests (needs GitHub token)
@@ -94,7 +94,7 @@ This gives each test full control over multi-turn agent behaviour without any sh
 
 ## Fixtures
 
-Pre-recorded SSE event sequences live in `core/test/support/fixtures/`:
+Pre-recorded SSE event sequences live in `packages/core/test/support/fixtures/`:
 
 | Fixture | Format | Content |
 |---------|--------|---------|
@@ -175,7 +175,7 @@ Thinking fixtures can be re-recorded from live API calls. The live test module (
 
 ```bash
 # Record new fixtures from live API
-cd core
+cd packages/core
 mix test --include live --include save_fixtures test/opal/live_thinking_test.exs
 ```
 
@@ -187,10 +187,10 @@ The integration tests (`thinking_integration_test.exs`) replay these fixtures wi
 
 | File | Purpose |
 |------|---------|
-| `core/test/test_helper.exs` | ExUnit config, tag exclusions |
-| `core/test/support/fixture_helper.ex` | Fixture loading, `Req.Response.Async` simulation |
-| `core/test/support/fixtures/*.json` | Pre-recorded SSE event sequences |
-| `core/test/opal/live_test.exs` | Live API tests (general) |
-| `core/test/opal/live_thinking_test.exs` | Live API tests for reasoning/thinking fixture recording |
-| `core/test/opal/thinking_integration_test.exs` | Fixture-replay integration tests for thinking |
-| `core/config/test.exs` | Logger level for tests |
+| `packages/core/test/test_helper.exs` | ExUnit config, tag exclusions |
+| `packages/core/test/support/fixture_helper.ex` | Fixture loading, `Req.Response.Async` simulation |
+| `packages/core/test/support/fixtures/*.json` | Pre-recorded SSE event sequences |
+| `packages/core/test/opal/live_test.exs` | Live API tests (general) |
+| `packages/core/test/opal/live_thinking_test.exs` | Live API tests for reasoning/thinking fixture recording |
+| `packages/core/test/opal/thinking_integration_test.exs` | Fixture-replay integration tests for thinking |
+| `packages/core/config/test.exs` | Logger level for tests |

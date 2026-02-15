@@ -90,7 +90,7 @@ This is how compaction summarizes old messages without breaking the tree structu
 
 ## Source
 
-- `core/lib/opal/session.ex` — GenServer, ETS operations, persistence
-- `core/lib/opal/session/builder.ex` — Session startup config resolution
-- `core/lib/opal/session/compaction.ex` — Compaction algorithm (see [compaction.md](compaction.md))
-- `core/lib/opal/session/branch_summary.ex` — LLM-generated branch summaries
+- `packages/core/lib/opal/session.ex` — GenServer, ETS operations, persistence
+- `packages/core/lib/opal/session/builder.ex` — Session startup config resolution
+- `packages/core/lib/opal/session/compaction.ex` — Compaction algorithm (see [compaction.md](compaction.md))
+- `packages/core/lib/opal/session/branch_summary.ex` — LLM-generated branch summaries

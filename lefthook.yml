@@ -2,21 +2,21 @@ pre-commit:
   parallel: false
   commands:
     format-elixir:
-      root: "core/"
+      root: "packages/core/"
       glob: "**/*.{ex,exs}"
       run: mix format {staged_files}
       stage_fixed: true
 
     format-cli:
-      root: "cli/"
+      root: "packages/cli/"
       glob: "src/**/*.{ts,tsx}"
       run: npx prettier --write {staged_files} && npx eslint --fix {staged_files}
       stage_fixed: true
 
     test-elixir:
-      glob: "core/**/*.{ex,exs}"
-      run: cd core && mix test
+      glob: "packages/core/**/*.{ex,exs}"
+      run: cd packages/core && mix test
 
     test-cli:
-      glob: "cli/**/*.{ts,tsx}"
-      run: cd cli && pnpm test
+      glob: "packages/cli/**/*.{ts,tsx}"
+      run: cd packages/cli && pnpm test

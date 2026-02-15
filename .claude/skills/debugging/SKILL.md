@@ -123,7 +123,7 @@ The key difference: `debug_state` works within a turn and returns structured JSO
 
 ## Source files
 
-- `core/lib/opal/tool/debug.ex` — The `debug_state` tool implementation
-- `core/lib/opal/agent/event_log.ex` — In-memory bounded event log (ETS ring buffer)
-- `core/lib/opal/agent/tool_runner.ex` — Where feature flags filter active tools
-- `core/lib/opal/config.ex` — `Opal.Config.Features` struct with `:debug` toggle
+- `packages/core/lib/opal/tool/debug.ex` — The `debug_state` tool implementation
+- `packages/core/lib/opal/agent/event_log.ex` — In-memory bounded event log (ETS ring buffer)
+- `packages/core/lib/opal/agent/tool_runner.ex` — Where feature flags filter active tools
+- `packages/core/lib/opal/config.ex` — `Opal.Config.Features` struct with `:debug` toggle

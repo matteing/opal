@@ -40,4 +40,4 @@ Tasks are stored in a DETS file at `~/.opal/tasks/<hash>.dets`, where `<hash>` i
 
 ## Source
 
-`core/lib/opal/tool/tasks.ex`
+`packages/core/lib/opal/tool/tasks.ex`

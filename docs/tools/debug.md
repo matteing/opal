@@ -49,6 +49,6 @@ When debug is disabled, event capture is off and existing in-memory debug events
 
 ## Source
 
-- `core/lib/opal/tool/debug.ex`
-- `core/lib/opal/agent/event_log.ex`
-- `core/lib/opal/agent/tool_runner.ex`
+- `packages/core/lib/opal/tool/debug.ex`
+- `packages/core/lib/opal/agent/event_log.ex`
+- `packages/core/lib/opal/agent/tool_runner.ex`

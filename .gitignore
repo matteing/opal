@@ -31,11 +31,11 @@ node_modules/
 npm/opal/releases/
 
 # Burrito build output
-cli/burrito_out/
+packages/cli/burrito_out/
 
 # CLI build artifacts
-cli/dist/
-cli/bin/
+packages/cli/dist/
+packages/cli/bin/
 
 # Prevent npm lockfile from returning
 package-lock.json

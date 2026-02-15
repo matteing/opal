@@ -136,10 +136,10 @@ config :opal, data_dir: System.get_env("OPAL_DATA_DIR", "~/.opal")
 
 ## Source
 
-- `core/lib/opal/config.ex` — Data directory paths and `ensure_dirs!/1`
-- `core/lib/opal/auth/copilot.ex` — Copilot token persistence (`save_token/1`, `load_token/0`)
-- `core/lib/opal/settings.ex` — User preferences persistence
-- `core/lib/opal/session.ex` — Session save/load in JSONL format
-- `core/lib/opal/tool/tasks.ex` — DETS-backed task storage
-- `core/lib/opal/tool/shell.ex` — Temporary output files
-- `core/lib/opal/application.ex` — Node discovery file
+- `packages/core/lib/opal/config.ex` — Data directory paths and `ensure_dirs!/1`
+- `packages/core/lib/opal/auth/copilot.ex` — Copilot token persistence (`save_token/1`, `load_token/0`)
+- `packages/core/lib/opal/settings.ex` — User preferences persistence
+- `packages/core/lib/opal/session.ex` — Session save/load in JSONL format
+- `packages/core/lib/opal/tool/tasks.ex` — DETS-backed task storage
+- `packages/core/lib/opal/tool/shell.ex` — Temporary output files
+- `packages/core/lib/opal/application.ex` — Node discovery file

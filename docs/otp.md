@@ -213,12 +213,12 @@ Process.send_after(self(), :retry_turn, delay_ms)
 
 | File | Contains |
 |------|----------|
-| `core/lib/opal/application.ex` | Application startup, root supervisor children |
-| `core/lib/opal/agent/agent.ex` | Agent `:gen_statem` loop |
-| `core/lib/opal/session.ex` | Session GenServer with ETS |
-| `core/lib/opal/session_server.ex` | Per-session Supervisor |
-| `core/lib/opal/events.ex` | Pub/sub helpers (subscribe, broadcast) |
-| `core/lib/opal/rpc/stdio.ex` | JSON-RPC transport GenServer |
-| `core/lib/opal/sub_agent.ex` | Sub-agent spawning helpers |
-| `core/lib/opal/mcp/supervisor.ex` | MCP client supervision |
-| `core/lib/opal/mcp/client.ex` | MCP client (Anubis-based) |
+| `packages/core/lib/opal/application.ex` | Application startup, root supervisor children |
+| `packages/core/lib/opal/agent/agent.ex` | Agent `:gen_statem` loop |
+| `packages/core/lib/opal/session.ex` | Session GenServer with ETS |
+| `packages/core/lib/opal/session_server.ex` | Per-session Supervisor |
+| `packages/core/lib/opal/events.ex` | Pub/sub helpers (subscribe, broadcast) |
+| `packages/core/lib/opal/rpc/stdio.ex` | JSON-RPC transport GenServer |
+| `packages/core/lib/opal/sub_agent.ex` | Sub-agent spawning helpers |
+| `packages/core/lib/opal/mcp/supervisor.ex` | MCP client supervision |
+| `packages/core/lib/opal/mcp/client.ex` | MCP client (Anubis-based) |

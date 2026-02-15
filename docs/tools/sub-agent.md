@@ -85,8 +85,8 @@ During the RPC call (waiting for the user), the sub-agent is blocked too (its to
 
 ### Placement
 
-`Opal.SubAgent` remains a top-level module because it is a public SDK entry point (`spawn/2`, `run/3`, `stop/1`) used outside the agent internals. Agent-loop internals live under `core/lib/opal/agent/`, while cross-cutting public APIs stay at `core/lib/opal/`.
+`Opal.SubAgent` remains a top-level module because it is a public SDK entry point (`spawn/2`, `run/3`, `stop/1`) used outside the agent internals. Agent-loop internals live under `packages/core/lib/opal/agent/`, while cross-cutting public APIs stay at `packages/core/lib/opal/`.
 
 ## Source
 
-`core/lib/opal/tool/sub_agent.ex`, `core/lib/opal/sub_agent.ex`, `core/lib/opal/tool/ask_parent.ex`, `core/lib/opal/tool/ask.ex`
+`packages/core/lib/opal/tool/sub_agent.ex`, `packages/core/lib/opal/sub_agent.ex`, `packages/core/lib/opal/tool/ask_parent.ex`, `packages/core/lib/opal/tool/ask.ex`

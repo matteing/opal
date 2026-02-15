@@ -261,7 +261,9 @@ defmodule Opal.Agent.Stream do
   end
 
   defp append_tool_call_delta(tool_calls, tool_call) do
-    case find_tool_call_index(tool_calls, tool_call) do
+    idx = find_tool_call_index(tool_calls, tool_call) || find_fallback_tool_call_index(tool_calls)
+
+    case idx do
       nil ->
         tool_calls ++ [tool_call]
 

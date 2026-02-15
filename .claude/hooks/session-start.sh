@@ -33,8 +33,8 @@ fi
 pnpm install
 
 # --- Elixir dependencies ---
-cd core
+cd packages/core
 mix local.hex --force --if-missing
 mix deps.get
 mix compile
-cd ..
+cd ../..

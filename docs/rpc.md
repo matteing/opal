@@ -121,7 +121,7 @@ graph LR
 
 ## Source
 
-- `core/lib/opal/rpc/protocol.ex` — Method/event definitions, codegen source of truth
-- `core/lib/opal/rpc/stdio.ex` — Stdio transport, event serialization
-- `core/lib/opal/rpc/handler.ex` — Method dispatch
+- `packages/core/lib/opal/rpc/protocol.ex` — Method/event definitions, codegen source of truth
+- `packages/core/lib/opal/rpc/stdio.ex` — Stdio transport, event serialization
+- `packages/core/lib/opal/rpc/handler.ex` — Method dispatch
 - `scripts/codegen_ts.exs` — TypeScript type generation

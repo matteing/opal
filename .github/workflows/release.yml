@@ -64,10 +64,10 @@ jobs:
           otp-version: ${{ env.OTP_VERSION }}
 
       - name: Install deps
-        run: cd core && mix deps.get --only prod
+        run: cd packages/core && mix deps.get --only prod
 
       - name: Build release (${{ matrix.target }})
-        run: cd core && mix release opal_server --overwrite
+        run: cd packages/core && mix release opal_server --overwrite
         env:
           BURRITO_TARGET: ${{ matrix.target }}
 
@@ -75,7 +75,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.binary }}
-          path: core/burrito_out/*
+          path: packages/core/burrito_out/*
           retention-days: 1
 
   # ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ jobs:
 
       - name: Install deps
         run: |
-          cd core && mix deps.get && cd ..
+          cd packages/core && mix deps.get && cd ../..
           pnpm install --frozen-lockfile
 
       - name: Codegen + Build
@@ -112,8 +112,8 @@ jobs:
         with:
           name: cli-dist
           path: |
-            cli/dist
-            cli/package.json
+            packages/cli/dist
+            packages/cli/package.json
           retention-days: 1
 
   # ---------------------------------------------------------------------------
@@ -143,31 +143,31 @@ jobs:
       - name: Assemble npm package
         run: |
           # CLI dist
-          cp -r artifacts/cli-dist/dist cli/dist
+          cp -r artifacts/cli-dist/dist packages/cli/dist
 
           # Burrito binaries
-          mkdir -p cli/releases
-          cp artifacts/opal_server_darwin_arm64/* cli/releases/
-          cp artifacts/opal_server_linux_x64/*    cli/releases/
-          cp artifacts/opal_server_linux_arm64/*   cli/releases/
-          cp artifacts/opal_server_win32_x64/*     cli/releases/
-          chmod +x cli/releases/* 2>/dev/null || true
+          mkdir -p packages/cli/releases
+          cp artifacts/opal_server_darwin_arm64/* packages/cli/releases/
+          cp artifacts/opal_server_linux_x64/*    packages/cli/releases/
+          cp artifacts/opal_server_linux_arm64/*   packages/cli/releases/
+          cp artifacts/opal_server_win32_x64/*     packages/cli/releases/
+          chmod +x packages/cli/releases/* 2>/dev/null || true
 
           echo "==> Package contents:"
-          ls -lh cli/releases/
+          ls -lh packages/cli/releases/
 
       - name: Publish to npm
-        run: cd cli && npm publish --access public
+        run: cd packages/cli && npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Install Elixir deps
-        run: cd core && mix deps.get
+        run: cd packages/core && mix deps.get
         env:
           MIX_ENV: dev
 
       - name: Publish to Hex
-        run: cd core && mix hex.publish --yes
+        run: cd packages/core && mix hex.publish --yes
         env:
           MIX_ENV: dev
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}

@@ -1,7 +1,7 @@
 ---
 name: live-tests
 description: Writes live integration tests that hit the real Copilot API and record responses as replayable fixtures. Use this skill when adding new agent behaviors, provider integrations, or tool interactions that need real-world API coverage.
-globs: "{core/test/**,core/test/support/fixtures/**}"
+globs: "{packages/core/test/**,packages/core/test/support/fixtures/**}"
 ---
 
 # Live Test & Fixture Recording Skill
@@ -19,7 +19,7 @@ Live test (mix test --include live --include save_fixtures)
   │
   └─ FixtureHelper.save_fixture/2  ← writes events to JSON file
         │
-        └─ core/test/support/fixtures/<name>.json
+        └─ packages/core/test/support/fixtures/<name>.json
 
 Fixture-based test (mix test)
   │
@@ -39,7 +39,7 @@ Fixture-based test (mix test)
 
 ## Writing a live test
 
-Live tests go in `core/test/opal/live_test.exs`. They require `@moduletag :live` (excluded by default) and use the `RecordingProvider` to capture real SSE events.
+Live tests go in `packages/core/test/opal/live_test.exs`. They require `@moduletag :live` (excluded by default) and use the `RecordingProvider` to capture real SSE events.
 
 ### Template
 
@@ -91,7 +91,7 @@ mix test --include live test/opal/live_test.exs:<line_number>
 
 ## Writing a fixture-based integration test
 
-Once you have a fixture, write a deterministic integration test that replays it. These go in `core/test/opal/integration_test.exs` or a new file under `core/test/opal/`.
+Once you have a fixture, write a deterministic integration test that replays it. These go in `packages/core/test/opal/integration_test.exs` or a new file under `packages/core/test/opal/`.
 
 ### Template
 
@@ -133,7 +133,7 @@ end
 
 ## Fixture file format
 
-Fixtures live in `core/test/support/fixtures/` as JSON:
+Fixtures live in `packages/core/test/support/fixtures/` as JSON:
 
 ```json
 {
@@ -161,7 +161,7 @@ Each `data` field contains one SSE event payload as a JSON string.
 
 ## Key files
 
-- `core/test/opal/live_test.exs` — Live API tests with recording
-- `core/test/opal/integration_test.exs` — Fixture-based integration tests
-- `core/test/support/fixture_helper.ex` — Fixture load/save/replay helpers
-- `core/test/support/fixtures/` — Recorded fixture JSON files
+- `packages/core/test/opal/live_test.exs` — Live API tests with recording
+- `packages/core/test/opal/integration_test.exs` — Fixture-based integration tests
+- `packages/core/test/support/fixture_helper.ex` — Fixture load/save/replay helpers
+- `packages/core/test/support/fixtures/` — Recorded fixture JSON files

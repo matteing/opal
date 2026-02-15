@@ -1,7 +1,7 @@
 ---
 name: lint-and-format
 description: Runs linting and formatting checks before committing. Use this skill after writing or modifying code to ensure it passes all linters and formatters before creating a commit.
-globs: "{core,cli}/**/*.{ex,exs,ts,tsx,js,json}"
+globs: "{packages/core,packages/cli}/**/*.{ex,exs,ts,tsx,js,json}"
 ---
 
 # Lint & Format Skill
@@ -16,7 +16,7 @@ You ensure all code passes the project's linters and formatters before it gets c
 
 ## Commands
 
-### Elixir (core/)
+### Elixir (packages/core/)
 
 ```bash
 # Check formatting (what CI runs)
@@ -26,7 +26,7 @@ pnpm nx run core:lint
 pnpm nx run core:format
 ```
 
-### TypeScript/JavaScript (cli/)
+### TypeScript/JavaScript (packages/cli/)
 
 ```bash
 # ESLint check

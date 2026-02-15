@@ -42,7 +42,7 @@ importers:
         specifier: ^8.55.0
         version: 8.55.0(eslint@9.39.2)(typescript@5.9.3)
 
-  cli:
+  packages/cli:
     dependencies:
       ink:
         specifier: ^6.7.0

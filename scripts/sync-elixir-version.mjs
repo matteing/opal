@@ -1,5 +1,5 @@
 /**
- * Sync the Elixir package version in core/mix.exs to match the Nx release version.
+ * Sync the Elixir package version in packages/core/mix.exs to match the Nx release version.
  * Called by Nx Release via postVersionCommand.
  *
  * Usage: node scripts/sync-elixir-version.mjs <version>
@@ -15,7 +15,7 @@ if (!version) {
 }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const mixPath = resolve(root, "core/mix.exs");
+const mixPath = resolve(root, "packages/core/mix.exs");
 const content = readFileSync(mixPath, "utf-8");
 const updated = content.replace(/@version "[^"]+"/, `@version "${version}"`);
 

@@ -193,7 +193,7 @@ Key event types and their UI effects:
 
 ## SDK
 
-The TypeScript SDK (`cli/src/sdk/`) can be used independently of the CLI for programmatic access:
+The TypeScript SDK (`packages/cli/src/sdk/`) can be used independently of the CLI for programmatic access:
 
 ```typescript
 import { Session } from "@unfinite/opal";
@@ -212,12 +212,12 @@ See [sdk.md](sdk.md) for the full SDK documentation.
 
 | File | Purpose |
 |------|---------|
-| `cli/src/bin.ts` | CLI entry point, argument parsing |
-| `cli/src/app.tsx` | Main Ink application layout |
-| `cli/src/hooks/use-opal.ts` | State management, event reducer, actions |
-| `cli/src/components/*.tsx` | UI components |
-| `cli/src/sdk/client.ts` | JSON-RPC transport over subprocess stdio |
-| `cli/src/sdk/session.ts` | High-level session API |
-| `cli/src/sdk/resolve.ts` | Server binary discovery |
-| `cli/src/sdk/protocol.ts` | Auto-generated type definitions |
-| `cli/src/sdk/transforms.ts` | snake_case ↔ camelCase conversion |
+| `packages/cli/src/bin.ts` | CLI entry point, argument parsing |
+| `packages/cli/src/app.tsx` | Main Ink application layout |
+| `packages/cli/src/hooks/use-opal.ts` | State management, event reducer, actions |
+| `packages/cli/src/components/*.tsx` | UI components |
+| `packages/cli/src/sdk/client.ts` | JSON-RPC transport over subprocess stdio |
+| `packages/cli/src/sdk/session.ts` | High-level session API |
+| `packages/cli/src/sdk/resolve.ts` | Server binary discovery |
+| `packages/cli/src/sdk/protocol.ts` | Auto-generated type definitions |
+| `packages/cli/src/sdk/transforms.ts` | snake_case ↔ camelCase conversion |

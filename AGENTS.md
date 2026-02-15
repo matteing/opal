@@ -6,8 +6,8 @@
 
 This is an Elixir monorepo with two main components:
 
-- **`core/`** - The Opal SDK (Elixir library) providing the agent engine, tools, providers, and MCP bridge
-- **`cli/`** - Terminal UI application that consumes the core library for interactive agent sessions
+- **`packages/core/`** - The Opal SDK (Elixir library) providing the agent engine, tools, providers, and MCP bridge
+- **`packages/cli/`** - Terminal UI application that consumes the core library for interactive agent sessions
 
 The project leverages Elixir/OTP's strengths: supervision trees, GenServers, process isolation, and fault tolerance.
 
@@ -148,7 +148,7 @@ end
 ## File Structure
 
 ```
-core/lib/opal/
+packages/core/lib/opal/
 ├── agent.ex              # Main agent GenServer
 ├── agent/                # Agent loop internals (stream, tool_runner, retry, etc.)
 ├── auth.ex               # Authentication system
@@ -162,7 +162,7 @@ core/lib/opal/
 ├── mcp/                  # MCP bridge components
 └── rpc/                  # JSON-RPC server
 
-cli/src/
+packages/cli/src/
 ├── app.tsx               # TUI application (React/Ink)
 ├── bin.ts                # Entry point
 ├── components/           # UI components

@@ -11,14 +11,21 @@
     "test": "nx run-many -t test",
     "lint": "nx run-many -t lint",
     "format": "nx run-many -t format",
-    "precommit": "pnpm format && pnpm lint && pnpm nx run core:docs && pnpm build",
+    "precommit": "pnpm format && pnpm lint && pnpm build",
     "deps": "nx run-many -t deps",
-    "dev": "cross-env NX_TUI=false nx run cli:build && cd cli && node dist/bin.js",
+    "dev": "cross-env NX_TUI=false nx run cli:build && cd packages/cli && node dist/bin.js",
     "codegen": "nx run cli:codegen",
     "inspect": "iex --sname inspector --cookie opal --remsh opal --dot-iex scripts/inspect.exs",
     "release": "nx release",
     "release:dry-run": "nx release --dry-run",
     "prepare": "lefthook install"
+  },
+  "prettier": {
+    "semi": true,
+    "singleQuote": false,
+    "trailingComma": "all",
+    "printWidth": 100,
+    "tabWidth": 2
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

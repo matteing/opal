@@ -27,4 +27,4 @@ Non-zero exit codes produce an error result containing the output and the exit c
 
 ## Source
 
-`core/lib/opal/tool/shell.ex`
+`packages/core/lib/opal/tool/shell.ex`

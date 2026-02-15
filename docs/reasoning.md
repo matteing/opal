@@ -237,24 +237,24 @@ Provider EventStream → {ref, {:events, [{:thinking_delta, "..."}]}}
 
 ## Source
 
-- `core/lib/opal/model.ex` — `thinking_level` field and validation (`:off | :low | :medium | :high | :max`)
-- `core/lib/opal/models.ex` — Per-model `thinking_levels` from LLMDB, `supports_max_thinking?/1`
-- `core/lib/opal/message.ex` — `thinking` field on Message struct
-- `core/lib/opal/provider/openai.ex` — Shared `parse_chat_event/1`, `convert_messages/2`, `reasoning_effort/1`
-- `core/lib/opal/provider/copilot.ex` — `maybe_add_reasoning_effort/2`, `maybe_add_reasoning_config/2`, `supports_thinking?/1`, Responses API conversion
-- `core/lib/opal/provider/llm.ex` — `maybe_add_thinking/2` → ReqLLM `reasoning_effort`, thinking roundtrip via metadata
-- `core/lib/opal/provider/event_stream.ex` — EventStream struct for native event delivery
-- `core/lib/opal/agent/stream.ex` — Thinking accumulation and auto-start detection
-- `core/lib/opal/agent/agent.ex` — `current_thinking` state, dual stream handling (SSE + EventStream), `finalize_response`
-- `core/lib/opal/session.ex` — Thinking persistence in JSONL
-- `core/lib/opal/rpc/handler.ex` — `thinking/set` and `model/set` with `thinking_level`
-- `cli/src/hooks/use-opal.ts` — Timeline thinking entries, `appendThinkingDelta`
-- `cli/src/components/message-list.tsx` — `ThinkingBlock` component
-- `cli/src/components/model-picker.tsx` — Two-step picker (model → thinking level)
-- `core/test/opal/reasoning_effort_test.exs` — Reasoning effort unit tests
-- `core/test/opal/thinking_integration_test.exs` — Full-stack thinking integration tests (fixture replay)
-- `core/test/opal/live_thinking_test.exs` — Live API tests that record thinking fixtures
-- `core/test/opal/provider/openai_test.exs` — Shared OpenAI module tests
+- `packages/core/lib/opal/model.ex` — `thinking_level` field and validation (`:off | :low | :medium | :high | :max`)
+- `packages/core/lib/opal/models.ex` — Per-model `thinking_levels` from LLMDB, `supports_max_thinking?/1`
+- `packages/core/lib/opal/message.ex` — `thinking` field on Message struct
+- `packages/core/lib/opal/provider/openai.ex` — Shared `parse_chat_event/1`, `convert_messages/2`, `reasoning_effort/1`
+- `packages/core/lib/opal/provider/copilot.ex` — `maybe_add_reasoning_effort/2`, `maybe_add_reasoning_config/2`, `supports_thinking?/1`, Responses API conversion
+- `packages/core/lib/opal/provider/llm.ex` — `maybe_add_thinking/2` → ReqLLM `reasoning_effort`, thinking roundtrip via metadata
+- `packages/core/lib/opal/provider/event_stream.ex` — EventStream struct for native event delivery
+- `packages/core/lib/opal/agent/stream.ex` — Thinking accumulation and auto-start detection
+- `packages/core/lib/opal/agent/agent.ex` — `current_thinking` state, dual stream handling (SSE + EventStream), `finalize_response`
+- `packages/core/lib/opal/session.ex` — Thinking persistence in JSONL
+- `packages/core/lib/opal/rpc/handler.ex` — `thinking/set` and `model/set` with `thinking_level`
+- `packages/cli/src/hooks/use-opal.ts` — Timeline thinking entries, `appendThinkingDelta`
+- `packages/cli/src/components/message-list.tsx` — `ThinkingBlock` component
+- `packages/cli/src/components/model-picker.tsx` — Two-step picker (model → thinking level)
+- `packages/core/test/opal/reasoning_effort_test.exs` — Reasoning effort unit tests
+- `packages/core/test/opal/thinking_integration_test.exs` — Full-stack thinking integration tests (fixture replay)
+- `packages/core/test/opal/live_thinking_test.exs` — Live API tests that record thinking fixtures
+- `packages/core/test/opal/provider/openai_test.exs` — Shared OpenAI module tests
 
 ## References
 

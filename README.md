@@ -69,8 +69,8 @@ See the [installation guide](docs/installing.md) for authentication, API keys, c
 
 | Project     | What it is |
 | ----------- | ---------- |
-| **`core/`** | The Elixir SDK — agent engine, tools, providers, sessions, MCP bridge, RPC server. Embeddable in any supervision tree. |
-| **`cli/`**  | React/Ink terminal UI + typed TypeScript client SDK. Talks to core over JSON-RPC stdio. Published as `@unfinite/opal` on npm. |
+| **`packages/core/`** | The Elixir SDK — agent engine, tools, providers, sessions, MCP bridge, RPC server. Embeddable in any supervision tree. |
+| **`packages/cli/`**  | React/Ink terminal UI + typed TypeScript client SDK. Talks to core over JSON-RPC stdio. Published as `@unfinite/opal` on npm. |
 
 See the [full architecture docs](docs/index.md) for the process tree, request flow, and supervision model.
 

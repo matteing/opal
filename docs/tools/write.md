@@ -25,4 +25,4 @@ This prevents silent encoding corruption when the LLM writes content without `\r
 
 ## Source
 
-`core/lib/opal/tool/write.ex`, `core/lib/opal/tool/file_helper.ex`
+`packages/core/lib/opal/tool/write.ex`, `packages/core/lib/opal/tool/file_helper.ex`

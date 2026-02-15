@@ -96,18 +96,6 @@ defmodule Opal.Agent.StateMachineTest do
     %{pid: pid, session_id: session_id}
   end
 
-  defp _wait_for_idle(pid, timeout \\ 5000) do
-    deadline = System.monotonic_time(:millisecond) + timeout
-
-    Stream.repeatedly(fn ->
-      Process.sleep(10)
-      Agent.get_state(pid)
-    end)
-    |> Enum.find(fn state ->
-      state.status == :idle or System.monotonic_time(:millisecond) > deadline
-    end)
-  end
-
   setup do
     on_exit(fn ->
       try do

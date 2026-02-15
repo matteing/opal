@@ -276,12 +276,12 @@ For most use cases, `Opal.Provider.LLM` already covers the provider via ReqLLM. 
 
 ## Source
 
-- `core/lib/opal/provider.ex` — Behaviour definition and event types
-- `core/lib/opal/provider/copilot.ex` — GitHub Copilot implementation (Chat Completions + Responses API)
-- `core/lib/opal/provider/llm.ex` — ReqLLM-based multi-provider implementation (EventStream mode)
-- `core/lib/opal/provider/openai.ex` — Shared Chat Completions parsing, message conversion, and reasoning effort mapping
-- `core/lib/opal/provider/event_stream.ex` — EventStream struct for native event delivery
-- `core/lib/opal/models.ex` — LLMDB-backed model discovery and metadata
-- `core/lib/opal/auth.ex` — Provider-agnostic credential probe (`Opal.Auth.probe/0`)
-- `core/lib/opal/auth/copilot.ex` — Device-code OAuth and token management (Copilot only)
-- `core/lib/opal/model.ex` — Model struct with `parse/1` and `coerce/1` for string/tuple specs
+- `packages/core/lib/opal/provider.ex` — Behaviour definition and event types
+- `packages/core/lib/opal/provider/copilot.ex` — GitHub Copilot implementation (Chat Completions + Responses API)
+- `packages/core/lib/opal/provider/llm.ex` — ReqLLM-based multi-provider implementation (EventStream mode)
+- `packages/core/lib/opal/provider/openai.ex` — Shared Chat Completions parsing, message conversion, and reasoning effort mapping
+- `packages/core/lib/opal/provider/event_stream.ex` — EventStream struct for native event delivery
+- `packages/core/lib/opal/models.ex` — LLMDB-backed model discovery and metadata
+- `packages/core/lib/opal/auth.ex` — Provider-agnostic credential probe (`Opal.Auth.probe/0`)
+- `packages/core/lib/opal/auth/copilot.ex` — Device-code OAuth and token management (Copilot only)
+- `packages/core/lib/opal/model.ex` — Model struct with `parse/1` and `coerce/1` for string/tuple specs

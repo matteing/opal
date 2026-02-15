@@ -1,6 +1,6 @@
 {
   "name": "cli",
-  "root": "cli",
+  "root": "packages/cli",
   "namedInputs": {
     "source": [
       "{projectRoot}/src/**/*",
@@ -11,30 +11,30 @@
   "targets": {
     "build": {
       "command": "tsc",
-      "options": { "cwd": "cli" },
+      "options": { "cwd": "packages/cli" },
       "inputs": ["source"],
       "outputs": ["{projectRoot}/dist"],
       "dependsOn": ["codegen"]
     },
     "dev": {
       "command": "node dist/bin.js",
-      "options": { "cwd": "cli" },
+      "options": { "cwd": "packages/cli" },
       "dependsOn": ["build"],
       "cache": false
     },
     "lint": {
       "command": "pnpm lint && pnpm format:check",
-      "options": { "cwd": "cli" },
-      "inputs": ["source", "{workspaceRoot}/eslint.config.js", "{workspaceRoot}/.prettierrc"]
+      "options": { "cwd": "packages/cli" },
+      "inputs": ["source", "{workspaceRoot}/eslint.config.js", "{workspaceRoot}/package.json"]
     },
     "test": {
       "command": "pnpm test",
-      "options": { "cwd": "cli" },
+      "options": { "cwd": "packages/cli" },
       "inputs": ["source"]
     },
     "format": {
       "command": "pnpm lint:fix && pnpm format",
-      "options": { "cwd": "cli" },
+      "options": { "cwd": "packages/cli" },
       "cache": false
     },
     "deps": {
@@ -43,20 +43,20 @@
       "cache": false
     },
     "codegen": {
-      "command": "mix run ../scripts/codegen_ts.exs",
-      "options": { "cwd": "core" },
+      "command": "mix run ../../scripts/codegen_ts.exs",
+      "options": { "cwd": "packages/core" },
       "inputs": [
-        "{workspaceRoot}/core/lib/**/protocol.*",
+        "{workspaceRoot}/packages/core/lib/**/protocol.*",
         "{workspaceRoot}/scripts/codegen_ts.exs"
       ],
       "outputs": ["{projectRoot}/src/sdk/protocol.ts"],
       "dependsOn": ["core:build"]
     },
     "codegen:check": {
-      "command": "mix run ../scripts/codegen_ts.exs --check",
-      "options": { "cwd": "core" },
+      "command": "mix run ../../scripts/codegen_ts.exs --check",
+      "options": { "cwd": "packages/core" },
       "inputs": [
-        "{workspaceRoot}/core/lib/**/protocol.*",
+        "{workspaceRoot}/packages/core/lib/**/protocol.*",
         "{workspaceRoot}/scripts/codegen_ts.exs",
         "{projectRoot}/src/sdk/protocol.ts"
       ],
@@ -64,7 +64,7 @@
     },
     "nx-release-publish": {
       "command": "npm publish --access public",
-      "options": { "cwd": "cli" },
+      "options": { "cwd": "packages/cli" },
       "dependsOn": ["build"]
     }
   }

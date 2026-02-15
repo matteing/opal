@@ -42,4 +42,4 @@ UTF-8 BOM is stripped before output. The LLM never sees it, preventing invisible
 
 ## Source
 
-`core/lib/opal/tool/read.ex`, `core/lib/opal/tool/file_helper.ex`
+`packages/core/lib/opal/tool/read.ex`, `packages/core/lib/opal/tool/file_helper.ex`

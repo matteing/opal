@@ -41,8 +41,8 @@ Use a scope to identify the affected area:
 
 | Scope    | Meaning                                     |
 |----------|---------------------------------------------|
-| `core`   | Elixir core (`core/` directory)             |
-| `cli`    | TypeScript CLI (`cli/` directory)           |
+| `core`   | Elixir core (`packages/core/` directory)             |
+| `cli`    | TypeScript CLI (`packages/cli/` directory)           |
 | `rpc`    | JSON-RPC protocol layer                     |
 | `agent`  | Agent loop / GenServer                      |
 | `tools`  | Built-in tool implementations               |
