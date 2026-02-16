@@ -48,7 +48,13 @@ export const AskUserDialog: FC<AskUserDialogProps> = ({ question, choices, onRes
   }, []);
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={colors.accentAlt} paddingX={2} paddingY={1}>
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={colors.accentAlt}
+      paddingX={2}
+      paddingY={1}
+    >
       <Text bold color={colors.accentAlt}>
         Agent Question
       </Text>
@@ -59,7 +65,11 @@ export const AskUserDialog: FC<AskUserDialogProps> = ({ question, choices, onRes
       {hasChoices && (
         <Box flexDirection="column" marginTop={1}>
           {choices.map((choice, i) => (
-            <Text key={choice} bold={i === selected} color={i === selected ? colors.accentAlt : undefined}>
+            <Text
+              key={choice}
+              bold={i === selected}
+              color={i === selected ? colors.accentAlt : undefined}
+            >
               {i === selected ? "▸ " : "  "}
               {choice}
             </Text>

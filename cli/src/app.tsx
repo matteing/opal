@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, type FC } from "react";
 import { Box, Text, useApp, useInput, useStdout, type Key } from "ink";
 import { useOpal } from "./hooks/use-opal.js";
-import { Header } from "./components/header.js";
 import { MessageList } from "./components/message-list.js";
 import { BottomBar } from "./components/bottom-bar.js";
 import { ThinkingIndicator } from "./components/thinking.js";

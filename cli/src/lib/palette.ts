@@ -43,7 +43,7 @@ export const colors = {
   thinking: "#cc5490",
 
   // User messages
-  userBg: "#1a1a2e",
+  userBg: "#161616",
   userText: "#e0e0e0",
 
   // Status

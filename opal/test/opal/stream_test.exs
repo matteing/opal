@@ -6,8 +6,12 @@ defmodule Opal.StreamTest do
       # Simulate agent behavior with a spawned process that broadcasts events
       session_id = "stream-test-#{System.unique_integer([:positive])}"
 
-      # Start the Events registry if not already started (test env)
-      start_supervised!({Registry, keys: :duplicate, name: Opal.Events.Registry})
+      # Ensure the Events registry is running (may already be started by Application)
+      _ =
+        case Registry.start_link(keys: :duplicate, name: Opal.Events.Registry) do
+          {:ok, pid} -> pid
+          {:error, {:already_started, pid}} -> pid
+        end
 
       # We need a mock agent that returns state and accepts prompts.
       # Use a simple GenServer for this.

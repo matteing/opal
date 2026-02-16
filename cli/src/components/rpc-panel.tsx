@@ -72,7 +72,8 @@ export const RpcPanel: FC<RpcPanelProps> = ({ messages, height }) => {
       <Box flexDirection="column" height={bodyHeight} overflow="hidden">
         {visible.slice(-bodyHeight).map((entry) => {
           const arrow = entry.direction === "outgoing" ? "→" : "←";
-          const arrowColor = entry.direction === "outgoing" ? colors.rpcOutgoing : colors.rpcIncoming;
+          const arrowColor =
+            entry.direction === "outgoing" ? colors.rpcOutgoing : colors.rpcIncoming;
           const method = entry.method ?? `#${(entry.raw as { id?: number }).id ?? "?"}`;
           const body = summarize(entry, MAX_BODY_LEN);
 

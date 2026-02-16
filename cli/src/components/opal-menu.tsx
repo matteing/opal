@@ -96,7 +96,13 @@ export const OpalMenu: FC<OpalMenuProps> = ({
   const toolStart = items.findIndex((i) => i.section === "tools");
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={colors.accent} paddingX={2} paddingY={1}>
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={colors.accent}
+      paddingX={2}
+      paddingY={1}
+    >
       <Text bold color={colors.accent}>
         Opal Configuration
       </Text>
@@ -140,8 +146,12 @@ export const OpalMenu: FC<OpalMenuProps> = ({
               const isSelected = idx === selected;
               return (
                 <Text key={item.key}>
-                  <Text color={isSelected ? colors.accent : undefined}>{isSelected ? "❯" : " "}</Text>{" "}
-                  <Text color={item.enabled ? colors.success : colors.error}>{item.enabled ? "✓" : "✗"}</Text>{" "}
+                  <Text color={isSelected ? colors.accent : undefined}>
+                    {isSelected ? "❯" : " "}
+                  </Text>{" "}
+                  <Text color={item.enabled ? colors.success : colors.error}>
+                    {item.enabled ? "✓" : "✗"}
+                  </Text>{" "}
                   <Text bold={isSelected} color={isSelected ? colors.accent : undefined}>
                     {item.label}
                   </Text>

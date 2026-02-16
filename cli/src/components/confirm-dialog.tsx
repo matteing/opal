@@ -28,7 +28,13 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({ request, onResolve }) =>
   });
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={colors.accent} paddingX={2} paddingY={1}>
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={colors.accent}
+      paddingX={2}
+      paddingY={1}
+    >
       <Text bold color={colors.accent}>
         {request.title}
       </Text>

@@ -75,7 +75,13 @@ export const ModelPicker: FC<ModelPickerProps> = ({
 
   if (phase === "thinking") {
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor={colors.accentAlt} paddingX={2} paddingY={1}>
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor={colors.accentAlt}
+        paddingX={2}
+        paddingY={1}
+      >
         <Text bold color={colors.accentAlt}>
           Thinking level
         </Text>
@@ -86,7 +92,9 @@ export const ModelPicker: FC<ModelPickerProps> = ({
             const isSelected = i === thinkingSelected;
             return (
               <Text key={level}>
-                <Text color={isSelected ? colors.accentAlt : undefined}>{isSelected ? "❯" : " "}</Text>{" "}
+                <Text color={isSelected ? colors.accentAlt : undefined}>
+                  {isSelected ? "❯" : " "}
+                </Text>{" "}
                 <Text bold={isSelected} color={isSelected ? colors.accentAlt : undefined}>
                   {capitalize(level)}
                 </Text>
@@ -100,7 +108,13 @@ export const ModelPicker: FC<ModelPickerProps> = ({
   }
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={colors.accent} paddingX={2} paddingY={1}>
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={colors.accent}
+      paddingX={2}
+      paddingY={1}
+    >
       <Text bold color={colors.accent}>
         Select a model
       </Text>
