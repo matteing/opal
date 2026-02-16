@@ -1,15 +1,15 @@
 # Erlang Distribution
 
-Opal uses Erlang's built-in distribution protocol to let you connect a second terminal to a running agent for live inspection and debugging. When you run `pnpm inspect`, you're joining the same BEAM cluster as the agent — from there you can stream events, query process state, and run arbitrary Elixir expressions against the live system.
+Opal uses Erlang's built-in distribution protocol to let you connect a second terminal to a running agent for live inspection and debugging. When you run `mise run inspect`, you're joining the same BEAM cluster as the agent — from there you can stream events, query process state, and run arbitrary Elixir expressions against the live system.
 
 ## Quick Start
 
 ```bash
 # Terminal 1 — start opal normally
-pnpm dev
+mise run dev
 
 # Terminal 2 — connect and watch events
-pnpm inspect
+mise run inspect
 ```
 
 The inspector connects to the running agent node and streams every event (tool calls, LLM deltas, errors) in real time. Press `Ctrl+C` twice to disconnect.
@@ -103,7 +103,7 @@ opal_12345@MacBook-Pro
 aB3xQ7kM9nR2pS5vW1
 ```
 
-The `pnpm inspect` command runs `scripts/inspect.sh`, which reads the node name and cookie from this file and launches IEx with the correct arguments:
+The `mise run inspect` command runs `scripts/inspect.sh`, which reads the node name and cookie from this file and launches IEx with the correct arguments:
 
 ```bash
 NODE_NAME=$(sed -n '1p' ~/.opal/node)
@@ -157,7 +157,7 @@ flush()
 ## Source Files
 
 - `lib/opal/application.ex` — `start_distribution/0`, node file read/write
-- `lib/opal/inspect.ex` — Event watcher for `pnpm inspect`
+- `lib/opal/inspect.ex` — Event watcher for `mise run inspect`
 - `lib/opal/events.ex` — Registry-based pub/sub
 - `scripts/inspect.sh` — Wrapper script that reads `~/.opal/node` and launches IEx
 

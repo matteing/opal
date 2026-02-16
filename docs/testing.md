@@ -5,9 +5,9 @@ Opal's test suite uses ExUnit with no external mocking libraries. External depen
 ## Running Tests
 
 ```bash
-pnpm test                             # all tests from repo root (runs nx run-many -t test)
+mise run test                          # all tests (core + CLI in parallel)
 
-# from repo root
+# Elixir tests (from opal/ directory, or use mise)
 
 mix test                              # all tests (excludes :live)
 mix test --include live               # include real API tests (needs GitHub token)
@@ -175,7 +175,7 @@ Thinking fixtures can be re-recorded from live API calls. The live test module (
 
 ```bash
 # Record new fixtures from live API
-# from repo root
+# from opal/ directory
 mix test --include live --include save_fixtures test/opal/live_thinking_test.exs
 ```
 

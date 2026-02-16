@@ -7,7 +7,7 @@ Opal exposes a live event stream you can tap into from a second terminal. This u
 Start Opal normally in one terminal, then open a second terminal:
 
 ```bash
-pnpm inspect
+mise run inspect
 ```
 
 You'll see a colored, timestamped stream of every event the agent produces:
@@ -52,7 +52,7 @@ If the node was already started with `--sname` (e.g. during development with `ie
 
 ### Inspector Connection
 
-The `pnpm inspect` command runs `scripts/inspect.sh`, which:
+The `mise run inspect` command runs `scripts/inspect.sh`, which:
 
 1. Reads the node name and cookie from `~/.opal/node`
 2. Launches `iex --sname inspector_PID --cookie <cookie> --remsh <node> --dot-iex scripts/inspect.exs`
@@ -109,4 +109,4 @@ flush()
 - `lib/opal/inspect.ex` — Watch loop and event formatting
 - `lib/opal/events.ex` — Registry-based pub/sub
 - `lib/opal/application.ex` — Distribution startup and `~/.opal/node` file
-- `scripts/inspect.exs` — Auto-run script for `pnpm inspect`
+- `scripts/inspect.exs` — Auto-run script for `mise run inspect`

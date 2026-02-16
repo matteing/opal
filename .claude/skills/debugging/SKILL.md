@@ -117,7 +117,7 @@ Events reveal the actual execution flow. Look for:
 
 ## Relationship to external inspection
 
-The `debug_state` tool is for **self-diagnosis** — the agent inspecting its own state. For **external inspection** by a human, Opal also supports connecting a second terminal via Erlang distribution (`pnpm inspect`). See `docs/inspecting.md` for that workflow.
+The `debug_state` tool is for **self-diagnosis** — the agent inspecting its own state. For **external inspection** by a human, Opal also supports connecting a second terminal via Erlang distribution (`mise run inspect`). See `docs/inspecting.md` for that workflow.
 
 The key difference: `debug_state` works within a turn and returns structured JSON the agent can reason about. External inspection gives a live event stream a human watches in real time.
 

@@ -69,7 +69,7 @@ See the [installation guide](docs/installing.md) for authentication, API keys, c
 
 | Project     | What it is |
 | ----------- | ---------- |
-| **`lib/`** | The Elixir SDK — agent engine, tools, providers, sessions, MCP bridge, RPC server. Embeddable in any supervision tree. |
+| **`opal/`** | The Elixir SDK — agent engine, tools, providers, sessions, MCP bridge, RPC server. Embeddable in any supervision tree. |
 | **`cli/`**  | React/Ink terminal UI + typed TypeScript client SDK. Talks to core over JSON-RPC stdio. Published as `@unfinite/opal` on npm. |
 
 See the [full architecture docs](docs/index.md) for the process tree, request flow, and supervision model.
@@ -175,10 +175,10 @@ end
 ```sh
 mise run deps                      # install deps
 mise run dev                       # run TUI in dev mode
-cd cli && pnpm dev -- --debug      # run with debug feature/tools enabled
+mise run dev -- --debug             # run with debug feature/tools enabled
 mise run test                      # tests
 mise run lint && mise run format   # lint & format
-bash scripts/inspect.sh            # connect via iex to a running dev mode instance
+mise run inspect                   # connect via iex to a running dev mode instance
 ```
 
 ## Principles

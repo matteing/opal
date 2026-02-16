@@ -30,7 +30,7 @@ The SDK finds the opal-server binary in three ways, tried in order:
 
 1. **PATH** — `opal-server` installed globally
 2. **Bundled binary** — `releases/opal_server_<platform>_<arch>` inside the npm package
-3. **Dev mode** — Monorepo: runs `elixir -S mix run --no-halt` in `../core/`
+3. **Dev mode** — Monorepo: runs `elixir -S mix run --no-halt` in `../opal/`
 
 Platform mapping: `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`.
 
