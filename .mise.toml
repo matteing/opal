@@ -99,7 +99,7 @@ run = "node cli/dist/bin.js --expose opal#opal"
 
 [tasks.inspect]
 description = "Connect to a running dev instance via iex --remsh"
-run = "iex --sname inspector --cookie opal --remsh opal@$(hostname -s)"
+run = "bash scripts/inspect.sh"
 
 [tasks.server]
 description = "Start opal-server with Erlang distribution"
