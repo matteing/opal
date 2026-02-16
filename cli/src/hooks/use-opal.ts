@@ -17,7 +17,6 @@ import {
   parseCommand,
   buildDisplaySpec,
   normalizeModelSpec,
-  buildHelpMessage,
   buildAgentListMessage,
 } from "../lib/commands.js";
 import {
@@ -86,6 +85,8 @@ export interface OpalState {
   rpcMessages: RpcMessageEntry[];
   /** Whether the debug split panel is visible. */
   showDebugPanel: boolean;
+  /** Whether the help overlay is visible. */
+  showHelp: boolean;
 }
 
 export interface OpalActions {
@@ -103,6 +104,8 @@ export interface OpalActions {
   toggleOpalTool: (name: string, enabled: boolean) => void;
   switchTab: (tabId: string) => void;
   toggleDebugPanel: () => void;
+  showHelpMenu: () => void;
+  dismissHelpMenu: () => void;
   authStartDeviceFlow: () => void;
   authSubmitKey: (providerId: string, apiKey: string) => void;
 }
@@ -132,6 +135,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     serverLogs: [],
     rpcMessages: [],
     showDebugPanel: false,
+    showHelp: false,
   });
 
   const sessionRef = useRef<Session | null>(null);
@@ -526,7 +530,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
           break;
         }
         case "help": {
-          addSystemMessage(buildHelpMessage());
+          setState((s) => ({ ...s, showHelp: true }));
           break;
         }
         case "debug": {
@@ -636,6 +640,14 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     setState((s) => ({ ...s, showDebugPanel: !s.showDebugPanel }));
   }, []);
 
+  const showHelpMenu = useCallback(() => {
+    setState((s) => ({ ...s, showHelp: true }));
+  }, []);
+
+  const dismissHelpMenu = useCallback(() => {
+    setState((s) => ({ ...s, showHelp: false }));
+  }, []);
+
   const authStartDeviceFlow = useCallback(() => {
     const session = sessionRef.current;
     if (!session) return;
@@ -704,6 +716,8 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       toggleOpalTool,
       switchTab,
       toggleDebugPanel,
+      showHelpMenu,
+      dismissHelpMenu,
       authStartDeviceFlow,
       authSubmitKey,
     }),
@@ -722,6 +736,8 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
       toggleOpalTool,
       switchTab,
       toggleDebugPanel,
+      showHelpMenu,
+      dismissHelpMenu,
       authStartDeviceFlow,
       authSubmitKey,
     ],

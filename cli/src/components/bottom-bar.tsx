@@ -99,7 +99,7 @@ export const BottomBar: FC<BottomBarProps> = memo(
             </Text>
             <Text dimColor>│</Text>
             <Text dimColor>
-              <Text bold>ctrl+o</Text> tool output
+              <Text bold>ctrl+o</Text> tools
             </Text>
             <Text dimColor>│</Text>
             <Text dimColor>

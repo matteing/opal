@@ -8,6 +8,7 @@ import { ConfirmDialog } from "./components/confirm-dialog.js";
 import { AskUserDialog } from "./components/ask-user-dialog.js";
 import { ModelPicker } from "./components/model-picker.js";
 import { OpalMenu } from "./components/opal-menu.js";
+import { HelpMenu } from "./components/help-menu.js";
 import { ShimmerText } from "./components/shimmer-text.js";
 import { SetupWizard } from "./components/device-auth.js";
 import { RpcPanel } from "./components/rpc-panel.js";
@@ -247,6 +248,8 @@ export const App: FC<AppProps> = ({ sessionOpts, initialPrompt, onSessionId }) =
           onDismiss={actions.dismissOpalMenu}
         />
       )}
+
+      {state.showHelp && <HelpMenu onDismiss={actions.dismissHelpMenu} />}
 
       <BottomBar state={state} actions={actions} />
 

@@ -190,15 +190,12 @@ describe("useOpal hook", () => {
   // --- Command routing ---
 
   describe("runCommand", () => {
-    it("/help adds help message", async () => {
+    it("/help opens help overlay", async () => {
       const { unmount } = render(React.createElement(HookWrapper));
       await tick(50);
       capturedActions?.runCommand("/help");
       await tick();
-      const msgs = capturedState?.main.timeline.filter(
-        (e) => e.kind === "message" && e.message.content.includes("/model"),
-      );
-      expect(msgs?.length).toBeGreaterThanOrEqual(1);
+      expect(capturedState?.showHelp).toBe(true);
       unmount();
     });
 
@@ -338,6 +335,26 @@ describe("useOpal hook", () => {
       unmount();
     });
 
+    it("showHelpMenu sets showHelp", async () => {
+      const { unmount } = render(React.createElement(HookWrapper));
+      await tick(50);
+      capturedActions?.showHelpMenu();
+      await tick();
+      expect(capturedState?.showHelp).toBe(true);
+      unmount();
+    });
+
+    it("dismissHelpMenu clears showHelp", async () => {
+      const { unmount } = render(React.createElement(HookWrapper));
+      await tick(50);
+      capturedActions?.showHelpMenu();
+      await tick();
+      expect(capturedState?.showHelp).toBe(true);
+      capturedActions?.dismissHelpMenu();
+      await tick();
+      expect(capturedState?.showHelp).toBe(false);
+      unmount();
+    });
     it("switchTab changes activeTab", async () => {
       const { unmount } = render(React.createElement(HookWrapper));
       await tick(50);
