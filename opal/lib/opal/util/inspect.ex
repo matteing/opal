@@ -83,10 +83,8 @@ defmodule Opal.Inspect do
       iex> Opal.Inspect.agent("abc123def456")
       #PID<0.456.0>
   """
-  @spec agent(String.t() | nil) :: pid()
-  def agent(session_id \\ nil)
-
-  def agent(nil) do
+  @spec agent() :: pid()
+  def agent do
     case sessions() do
       [{_id, pid}] ->
         pid
@@ -101,6 +99,7 @@ defmodule Opal.Inspect do
     end
   end
 
+  @spec agent(String.t()) :: pid()
   def agent(session_id) when is_binary(session_id) do
     case Registry.lookup(Opal.Registry, {:agent, session_id}) do
       [{pid, _}] -> pid
@@ -120,10 +119,11 @@ defmodule Opal.Inspect do
       iex> state = Opal.Inspect.state()
       %Opal.Agent.State{session_id: "abc123", status: :idle, ...}
   """
-  @spec state(String.t() | nil) :: State.t()
-  def state(session_id \\ nil) do
-    Opal.Agent.get_state(agent(session_id))
-  end
+  @spec state() :: State.t()
+  def state, do: Opal.Agent.get_state(agent())
+
+  @spec state(String.t()) :: State.t()
+  def state(session_id), do: Opal.Agent.get_state(agent(session_id))
 
   @doc """
   Returns the current system prompt (including discovered context,
@@ -146,23 +146,25 @@ defmodule Opal.Inspect do
       iex> Opal.Inspect.system_prompt(file: true)
       Wrote system prompt to /tmp/opal-system-prompt.md
 
-      iex> Opal.Inspect.system_prompt(file: "~/prompt.md")
-      Wrote system prompt to /Users/you/prompt.md
+      iex> Opal.Inspect.system_prompt("session-id", file: true)
   """
-  def system_prompt(opts \\ [])
-
-  def system_prompt(session_id) when is_binary(session_id) do
-    system_prompt(session_id: session_id)
+  @spec system_prompt(keyword()) :: String.t() | :ok
+  def system_prompt(opts \\ []) when is_list(opts) do
+    fetch_and_format_prompt(agent(), opts)
   end
 
-  def system_prompt(opts) when is_list(opts) do
-    pid = agent(Keyword.get(opts, :session_id))
+  @spec system_prompt(String.t(), keyword()) :: String.t() | :ok
+  def system_prompt(session_id, opts) when is_binary(session_id) do
+    fetch_and_format_prompt(agent(session_id), opts)
+  end
+
+  defp fetch_and_format_prompt(pid, opts) do
     messages = Opal.Agent.get_context(pid)
 
     prompt =
       case messages do
         [%{role: :system, content: p} | _] -> p
-        _ -> state(Keyword.get(opts, :session_id)).system_prompt
+        _ -> Opal.Agent.get_state(pid).system_prompt
       end
 
     case Keyword.get(opts, :file) do
@@ -190,7 +192,8 @@ defmodule Opal.Inspect do
   """
   @spec messages(keyword()) :: [Opal.Message.t()]
   def messages(opts \\ []) do
-    s = state(Keyword.get(opts, :session_id))
+    sid = Keyword.get(opts, :session_id)
+    s = if sid, do: state(sid), else: state()
     msgs = s.messages
 
     msgs =
@@ -213,11 +216,11 @@ defmodule Opal.Inspect do
       iex> Opal.Inspect.tools()
       [{"read_file", Opal.Tool.Read}, {"shell", Opal.Tool.Shell}, ...]
   """
-  @spec tools(String.t() | nil) :: [{String.t(), module()}]
-  def tools(session_id \\ nil) do
-    s = state(session_id)
-    Enum.map(s.tools, fn mod -> {mod.name(), mod} end)
-  end
+  @spec tools() :: [{String.t(), module()}]
+  def tools, do: Enum.map(state().tools, fn mod -> {mod.name(), mod} end)
+
+  @spec tools(String.t()) :: [{String.t(), module()}]
+  def tools(session_id), do: Enum.map(state(session_id).tools, fn mod -> {mod.name(), mod} end)
 
   @doc """
   Returns the current model.
@@ -227,10 +230,11 @@ defmodule Opal.Inspect do
       iex> Opal.Inspect.model()
       %Opal.Provider.Model{provider: :copilot, id: "claude-sonnet-4"}
   """
-  @spec model(String.t() | nil) :: Opal.Provider.Model.t()
-  def model(session_id \\ nil) do
-    state(session_id).model
-  end
+  @spec model() :: Opal.Provider.Model.t()
+  def model, do: state().model
+
+  @spec model(String.t()) :: Opal.Provider.Model.t()
+  def model(session_id), do: state(session_id).model
 
   @doc """
   Returns a summary map of the current session state.
@@ -250,10 +254,13 @@ defmodule Opal.Inspect do
         token_usage: %{prompt_tokens: 4200, ...}
       }
   """
-  @spec summary(String.t() | nil) :: map()
-  def summary(session_id \\ nil) do
-    s = state(session_id)
+  @spec summary() :: map()
+  def summary, do: build_summary(state())
 
+  @spec summary(String.t()) :: map()
+  def summary(session_id), do: build_summary(state(session_id))
+
+  defp build_summary(s) do
     %{
       session_id: s.session_id,
       status: s.status,
