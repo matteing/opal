@@ -95,7 +95,7 @@ depends = ["deps:*"]
 [tasks.dev]
 description = "Build and launch the CLI"
 depends = ["build"]
-run = "node cli/dist/bin.js --remote opal"
+run = "node cli/dist/bin.js --expose opal"
 
 [tasks.server]
 description = "Start opal-server with Erlang distribution"
