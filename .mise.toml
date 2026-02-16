@@ -95,7 +95,11 @@ depends = ["deps:*"]
 [tasks.dev]
 description = "Build and launch the CLI"
 depends = ["build"]
-run = "node cli/dist/bin.js --expose opal"
+run = "node cli/dist/bin.js --expose opal#opal"
+
+[tasks.inspect]
+description = "Connect to a running dev instance via iex --remsh"
+run = "iex --sname inspector --cookie opal --remsh opal@$(hostname -s)"
 
 [tasks.server]
 description = "Start opal-server with Erlang distribution"
