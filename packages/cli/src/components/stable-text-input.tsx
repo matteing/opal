@@ -88,10 +88,14 @@ export const StableTextInput: FC<StableTextInputProps> = ({
       if (showCursorRef.current) nextCursor--;
     } else if (key.rightArrow) {
       if (showCursorRef.current) nextCursor++;
-    } else if (key.backspace || key.delete) {
+    } else if (key.backspace) {
       if (cursor > 0) {
         nextValue = value.slice(0, cursor - 1) + value.slice(cursor);
         nextCursor--;
+      }
+    } else if (key.delete) {
+      if (cursor < value.length) {
+        nextValue = value.slice(0, cursor) + value.slice(cursor + 1);
       }
     } else {
       nextValue = value.slice(0, cursor) + input + value.slice(cursor);

@@ -23,6 +23,7 @@ defmodule Opal.Agent do
   """
 
   @behaviour :gen_statem
+
   require Logger
   alias Opal.Agent.State
 
@@ -300,8 +301,6 @@ defmodule Opal.Agent do
   def executing_tools(event_type, event_content, %State{} = state) do
     dispatch_state_event(event_type, event_content, %{state | status: :executing_tools})
   end
-
-  defp dispatch_state_event(:enter, _old_state, state), do: {:keep_state, state}
 
   defp dispatch_state_event({:call, from}, message, state) do
     case handle_call(message, from, state) do

@@ -142,10 +142,13 @@ defmodule Opal.Tool.Shell do
   end
 
   defp run_command(shell, args, opts, timeout, emit) do
+    caller = self()
+    os_pid_ref = make_ref()
+
     task =
       Task.async(fn ->
         if emit do
-          run_streaming(shell, args, opts, emit)
+          run_streaming(shell, args, opts, emit, caller, os_pid_ref)
         else
           System.cmd(shell, args, opts)
         end
@@ -153,18 +156,21 @@ defmodule Opal.Tool.Shell do
 
     case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
       {:ok, {output, 0}} ->
+        flush_os_pid(os_pid_ref)
         {:ok, truncate_shell_output(output)}
 
       {:ok, {output, exit_code}} ->
+        flush_os_pid(os_pid_ref)
         {:error, "Command exited with status #{exit_code}\n#{truncate_shell_output(output)}"}
 
       nil ->
+        kill_orphaned_process(os_pid_ref)
         {:error, "Command timed out after #{timeout}ms"}
     end
   end
 
   # Runs a command via Port, emitting output chunks as they arrive.
-  defp run_streaming(shell, args, opts, emit) do
+  defp run_streaming(shell, args, opts, emit, caller, os_pid_ref) do
     port_opts = [
       :binary,
       :exit_status,
@@ -179,8 +185,21 @@ defmodule Opal.Tool.Shell do
         dir -> [{:cd, String.to_charlist(dir)} | port_opts]
       end
 
-    port = Port.open({:spawn_executable, System.find_executable(shell)}, port_opts)
-    collect_port_output(port, emit, [])
+    case System.find_executable(shell) do
+      nil ->
+        {"Shell '#{shell}' not found in PATH", 127}
+
+      executable ->
+        port = Port.open({:spawn_executable, executable}, port_opts)
+
+        # Report the OS PID so the caller can kill it on timeout
+        case Port.info(port, :os_pid) do
+          {:os_pid, pid} -> send(caller, {os_pid_ref, pid})
+          _ -> :ok
+        end
+
+        collect_port_output(port, emit, [])
+    end
   end
 
   defp collect_port_output(port, emit, acc) do
@@ -241,9 +260,42 @@ defmodule Opal.Tool.Shell do
 
   # Writes full output to a temp file so the LLM can reference it later.
   defp save_full_output(output) do
+    dir = Path.join(System.tmp_dir!(), "opal-shell")
+    File.mkdir_p!(dir)
+
     id = :crypto.strong_rand_bytes(6) |> Base.encode16(case: :lower)
-    path = Path.join(System.tmp_dir!(), "opal-shell-#{id}.log")
+    path = Path.join(dir, "#{id}.log")
     File.write!(path, output)
     path
+  end
+
+  # Drains the OS PID message after normal command completion.
+  defp flush_os_pid(ref) do
+    receive do
+      {^ref, _os_pid} -> :ok
+    after
+      0 -> :ok
+    end
+  end
+
+  # Kills an orphaned OS process after timeout.
+  defp kill_orphaned_process(ref) do
+    receive do
+      {^ref, os_pid} when is_integer(os_pid) and os_pid > 0 ->
+        case :os.type() do
+          {:unix, _} ->
+            # Kill process and its children
+            System.cmd("kill", ["-9", "#{os_pid}"], stderr_to_stdout: true)
+
+          {:win32, _} ->
+            System.cmd("taskkill", ["/PID", "#{os_pid}", "/T", "/F"],
+              stderr_to_stdout: true
+            )
+        end
+
+        :ok
+    after
+      0 -> :ok
+    end
   end
 end

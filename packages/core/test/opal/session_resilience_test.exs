@@ -40,39 +40,30 @@ defmodule Opal.SessionResilienceTest do
   end
 
   describe "load empty file" do
-    test "empty file causes a match error (no header line)" do
+    test "empty file returns error instead of crashing" do
       session_id = "sess-empty-#{System.unique_integer([:positive])}"
       {:ok, session} = Session.start_link(session_id: session_id)
 
       path = Path.join(System.tmp_dir!(), "empty_session_#{session_id}.jsonl")
       File.write!(path, "")
 
-      # Empty file has no header line — do_load will crash with MatchError.
-      # This is a known gap: the session doesn't handle empty files gracefully.
-      Process.flag(:trap_exit, true)
-
-      catch_exit do
-        Session.load(session, path)
-      end
+      # Empty file is now handled gracefully — returns an error tuple.
+      assert {:error, _reason} = Session.load(session, path)
 
       File.rm(path)
     end
   end
 
   describe "load corrupted JSONL" do
-    test "file with invalid JSON header crashes session" do
+    test "file with invalid JSON header returns error" do
       session_id = "sess-corrupt-#{System.unique_integer([:positive])}"
       {:ok, session} = Session.start_link(session_id: session_id)
 
       path = Path.join(System.tmp_dir!(), "corrupt_session_#{session_id}.jsonl")
       File.write!(path, "this is not json\n{\"role\": \"user\", \"content\": \"hi\"}\n")
 
-      # Jason.decode! on invalid header crashes the session
-      Process.flag(:trap_exit, true)
-
-      catch_exit do
-        Session.load(session, path)
-      end
+      # Invalid JSON header is now handled gracefully — returns an error tuple.
+      assert {:error, _reason} = Session.load(session, path)
 
       File.rm(path)
     end

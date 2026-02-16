@@ -91,8 +91,14 @@ defmodule Opal.Application do
     case File.read(path) do
       {:ok, contents} ->
         case String.split(String.trim(contents), "\n") do
-          [name, cookie] ->
-            {:ok, String.to_atom(name), String.to_atom(cookie)}
+          [name, cookie] when name != "" and cookie != "" ->
+            # Validate node name format (e.g. "opal_12345@hostname")
+            if Regex.match?(~r/^[\w@.\-]+$/, name) do
+              {:ok, String.to_atom(name), String.to_atom(cookie)}
+            else
+              Logger.warning("Invalid node name in #{path}: #{inspect(name)}")
+              :error
+            end
 
           _ ->
             :error
@@ -107,7 +113,8 @@ defmodule Opal.Application do
     path = node_file_path()
     File.mkdir_p!(Path.dirname(path))
     File.write!(path, "#{node_name}\n#{cookie}\n")
-    File.chmod!(path, 0o600)
+    # Best-effort permission restriction — chmod is unsupported on Windows
+    _ = File.chmod(path, 0o600)
   end
 
   defp node_file_path do

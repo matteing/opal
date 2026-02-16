@@ -62,9 +62,12 @@ defmodule Opal.Provider.LLM do
   defp bridge_to_events(stream_response) do
     caller = self()
     ref = make_ref()
+    ready_ref = make_ref()
 
     spawn(fn ->
-      Process.sleep(5)
+      # Signal that the spawned process is running before streaming begins
+      send(caller, {ready_ref, :go})
+
       text_started = false
 
       {_text_started, _tc_state} =
@@ -93,6 +96,13 @@ defmodule Opal.Provider.LLM do
     cancel_fn = fn ->
       stream_response.cancel.()
       :ok
+    end
+
+    # Wait for the spawned process to be running before returning
+    receive do
+      {^ready_ref, :go} -> :ok
+    after
+      5_000 -> :ok
     end
 
     {:ok, %Opal.Provider.EventStream{ref: ref, cancel_fun: cancel_fn}}
@@ -198,22 +208,42 @@ defmodule Opal.Provider.LLM do
     # Conversion is handled internally by stream/4 via ReqLLM.
     # This callback exists for compaction/summary subsystems that
     # need the wire format. Return a passthrough representation.
-    Enum.map(messages, fn msg ->
+    Enum.flat_map(messages, fn msg ->
       case msg do
         %Opal.Message{role: :system, content: c} ->
-          %{role: "system", content: c}
+          [%{role: "system", content: c}]
 
         %Opal.Message{role: :user, content: c} ->
-          %{role: "user", content: c}
+          [%{role: "user", content: c}]
 
         %Opal.Message{role: :assistant, content: c} ->
-          %{role: "assistant", content: c || ""}
+          [%{role: "assistant", content: c || ""}]
 
         %Opal.Message{role: :tool_result, call_id: id, content: c} ->
-          %{role: "tool", tool_call_id: id, content: c || ""}
+          [%{role: "tool", tool_call_id: id, content: c || ""}]
+
+        %Opal.Message{
+          role: :tool_call,
+          content: content,
+          tool_calls: tool_calls
+        }
+        when is_list(tool_calls) and tool_calls != [] ->
+          calls =
+            Enum.map(tool_calls, fn tc ->
+              %{
+                id: tc.call_id || tc.id,
+                type: "function",
+                function: %{name: tc.name, arguments: Jason.encode!(tc.arguments || %{})}
+              }
+            end)
+
+          [%{role: "assistant", content: content || "", tool_calls: calls}]
+
+        %Opal.Message{role: :tool_call, content: content} ->
+          [%{role: "assistant", content: content || ""}]
 
         _ ->
-          %{}
+          []
       end
     end)
   end

@@ -225,6 +225,8 @@ defmodule Opal.Tool.Tasks do
     Path.join(dir, "#{hash}.dets") |> String.to_charlist()
   end
 
+  # Atom count is bounded — one per unique working_dir hash, not per user input.
+  # Working dirs are a finite set within a session's lifetime.
   defp table_name(working_dir) do
     hash =
       :crypto.hash(:sha256, working_dir)
@@ -241,6 +243,7 @@ defmodule Opal.Tool.Tasks do
     case :dets.open_file(table, file: path, type: :set) do
       {:ok, ^table} ->
         try do
+          ensure_counter(table)
           fun.(table)
         after
           :dets.close(table)
@@ -252,11 +255,36 @@ defmodule Opal.Tool.Tasks do
   end
 
   defp all_tasks(table) do
-    :dets.foldl(fn {_id, task}, acc -> [task | acc] end, [], table)
+    :dets.foldl(fn
+      {:__counter__, _}, acc -> acc
+      {_id, task}, acc -> [task | acc]
+    end, [], table)
   end
 
+  # Atomic counter — avoids duplicate IDs when concurrent with_dets calls overlap.
+  # Uses :dets.update_counter/3 which is atomic within a single DETS table.
   defp next_id(table) do
-    :dets.foldl(fn {id, _}, max -> max(id, max) end, 0, table) + 1
+    :dets.update_counter(table, :__counter__, 1)
+  end
+
+  # Seeds the :__counter__ key on first access or when opening a legacy table.
+  # insert_new/2 is atomic — only one process will succeed under concurrent access.
+  defp ensure_counter(table) do
+    unless :dets.member(table, :__counter__) do
+      max_id =
+        :dets.foldl(
+          fn
+            {id, _}, max when is_integer(id) -> max(id, max)
+            _, max -> max
+          end,
+          0,
+          table
+        )
+
+      :dets.insert_new(table, {:__counter__, max_id})
+    end
+
+    :ok
   end
 
   defp now_iso, do: NaiveDateTime.utc_now() |> NaiveDateTime.to_string()

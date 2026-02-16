@@ -3,6 +3,15 @@ import type { AgentEvent, TokenUsage, ConfirmRequest } from "../sdk/protocol.js"
 import { Session, type SessionOptions } from "../sdk/session.js";
 import type { RpcMessageEntry } from "../sdk/client.js";
 import { applyEvent, combineDeltas, emptyAgentView } from "../lib/reducers.js";
+import type {
+  Message,
+  Task,
+  Skill,
+  Context,
+  TimelineEntry,
+  AgentView,
+  SubAgent,
+} from "../lib/reducers.js";
 import {
   errorMessage,
   parseCommand,
@@ -21,6 +30,7 @@ import {
 import { toggleFeature, toggleTool, type OpalRuntimeConfig } from "../lib/opal-menu.js";
 
 export type { AuthProvider, AuthFlow };
+export type { Message, Task, Skill, Context, TimelineEntry, AgentView, SubAgent };
 
 // --- State types ---
 
@@ -35,60 +45,6 @@ interface ModelEntry {
 // OpalRuntimeConfig is imported from lib/opal-menu.ts
 
 // errorMessage is now imported from lib/commands.ts
-
-export interface Message {
-  role: "user" | "assistant";
-  content: string;
-  /** True when this message is queued while the agent is busy. */
-  queued?: boolean;
-}
-
-export interface Task {
-  tool: string;
-  callId: string;
-  args: Record<string, unknown>;
-  meta: string;
-  status: "running" | "done" | "error";
-  result?: { ok: boolean; output?: unknown; error?: string };
-}
-
-export interface Skill {
-  name: string;
-  description: string;
-  status: "loaded";
-}
-
-export interface Context {
-  files: string[];
-  skills: string[];
-  mcpServers: string[];
-  status: "discovered";
-}
-
-export type TimelineEntry =
-  | { kind: "message"; message: Message }
-  | { kind: "tool"; task: Task }
-  | { kind: "skill"; skill: Skill }
-  | { kind: "context"; context: Context }
-  | { kind: "thinking"; text: string };
-
-/** Shared view shape used by both main agent and sub-agents. */
-export interface AgentView {
-  timeline: TimelineEntry[];
-  thinking: string | null;
-  statusMessage: string | null;
-  isRunning: boolean;
-}
-
-export interface SubAgent extends AgentView {
-  sessionId: string;
-  parentCallId: string;
-  label: string;
-  model: string;
-  tools: string[];
-  startedAt: number;
-  toolCount: number;
-}
 
 // AuthProvider and AuthFlow are imported from lib/auth.ts and re-exported above
 

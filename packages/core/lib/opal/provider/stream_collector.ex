@@ -35,11 +35,38 @@ defmodule Opal.Provider.StreamCollector do
   end
 
   defp collect_sse(resp, provider, acc, timeout_ms) do
+    # Fallback for non-async Req responses. Use a deadline to avoid
+    # resetting the timeout when discarding unrelated messages.
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    collect_sse_until(resp, provider, acc, deadline)
+  end
+
+  defp collect_sse_until(resp, provider, acc, deadline) do
+    remaining = max(deadline - System.monotonic_time(:millisecond), 0)
+
     receive do
-      message ->
-        handle_sse_message(resp, provider, acc, timeout_ms, message)
+      message when is_tuple(message) ->
+        case Req.parse_message(resp, message) do
+          {:ok, chunks} when is_list(chunks) ->
+            {next_acc, done?} =
+              Enum.reduce(chunks, {acc, false}, fn
+                {:data, data}, {text_acc, done} ->
+                  {append_sse_data(data, provider, text_acc), done}
+
+                :done, {text_acc, _done} ->
+                  {text_acc, true}
+
+                _other, {text_acc, done} ->
+                  {text_acc, done}
+              end)
+
+            if done?, do: next_acc, else: collect_sse_until(resp, provider, next_acc, deadline)
+
+          :unknown ->
+            collect_sse_until(resp, provider, acc, deadline)
+        end
     after
-      timeout_ms -> acc
+      remaining -> acc
     end
   end
 

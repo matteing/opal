@@ -228,7 +228,7 @@ defmodule Opal.Auth.Copilot do
   # --- Private helpers ---
 
   defp refresh_token(%{"github_token" => github_token} = token_data) do
-    case exchange_copilot_token(github_token) do
+    case exchange_copilot_token(github_token, domain()) do
       {:ok, copilot_response} ->
         updated =
           Map.merge(token_data, %{

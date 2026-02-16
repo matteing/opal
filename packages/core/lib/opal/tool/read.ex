@@ -107,7 +107,7 @@ defmodule Opal.Tool.Read do
   # imports, and module definitions live). Each truncation message tells the
   # LLM exactly how to request the next chunk.
 
-  defp truncate_output(content, offset, path) do
+  defp truncate_output(content, offset, _path) do
     lines = String.split(content, "\n")
     total_lines = length(lines)
     start = offset || 1
@@ -120,7 +120,7 @@ defmodule Opal.Tool.Read do
 
         {:ok,
          "[Line 1 is #{kb}KB, exceeds #{max_kb}KB limit. " <>
-           "Use shell: head -c #{@max_bytes} #{path}]"}
+           "Use read_file with offset=1 and limit=#{@max_lines}, or split with a shell command.]"}
 
       # Too many lines — keep the first @max_lines
       total_lines > @max_lines ->

@@ -187,21 +187,24 @@ defmodule Opal.Provider.Copilot do
          "type" => "response.output_item.done",
          "item" => %{"type" => "function_call"} = item
        }) do
+    # Complements response.function_call_arguments.done — duplicate
+    # finalization is harmless since finalize_tool_call/2 merges idempotently.
+    # Uses safe argument parsing (default %{}) since the primary handler
+    # already captured arguments_raw when JSON is malformed.
+    info =
+      compact_tool_info(%{
+        item_id: item["id"],
+        call_id: item["call_id"],
+        name: item["name"]
+      })
+
     args =
-      case Jason.decode(item["arguments"] || "{}") do
+      case decode_tool_arguments(item["arguments"]) do
         {:ok, parsed} -> parsed
         {:error, _} -> %{}
       end
 
-    [
-      {:tool_call_done,
-       %{
-         item_id: item["id"],
-         call_id: item["call_id"],
-         name: item["name"],
-         arguments: args
-       }}
-    ]
+    [{:tool_call_done, Map.put(info, :arguments, args)}]
   end
 
   defp do_parse_event(%{"type" => "response.completed", "response" => response}) do

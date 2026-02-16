@@ -216,7 +216,7 @@ defmodule Opal.Config do
 
     * `:auto_save` — when `true`, automatically persists the session to disk
       after the agent goes idle. Requires a `Session` process to be attached.
-      Default: `false`.
+      Default: `true`.
 
     * `:auto_title` — when `true`, automatically generates a short session title
       from the first user message using the LLM. Default: `true`.

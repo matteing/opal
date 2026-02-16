@@ -150,12 +150,11 @@ defmodule Opal.Provider.LLMTest do
       assert Enum.map(results, & &1.role) == ["system", "user", "assistant", "tool"]
     end
 
-    test "returns empty map for unknown message roles" do
+    test "drops unknown message roles" do
       model = Model.new(:anthropic, "claude-sonnet-4-5")
       messages = [%Message{id: "x", role: :unknown, content: "wat"}]
 
-      [result] = LLM.convert_messages(model, messages)
-      assert result == %{}
+      assert [] = LLM.convert_messages(model, messages)
     end
   end
 end

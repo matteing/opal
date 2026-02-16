@@ -106,7 +106,7 @@ defmodule Opal.Tool.Debug do
 
   defp recent_messages(messages, limit) do
     messages
-    |> Enum.take(limit)
+    |> Enum.take(-limit)
     |> Enum.map(fn msg ->
       %{
         id: msg.id,

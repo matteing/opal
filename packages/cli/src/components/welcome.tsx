@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, type FC } from "react";
 import { Box, Text } from "ink";
+import { PALETTE } from "../lib/palette.js";
 
 // Polished opal cabochon — smooth oval with ±2 char transitions per side.
 const SHAPE = [
@@ -11,40 +12,6 @@ const SHAPE = [
   "  ▀██████████████▀",
   "    ▀██████████▀",
   "      ▀▀████▀▀",
-];
-
-// Iridescent opal palette — loops back to start for seamless wrap.
-const PALETTE = [
-  "#818cf8",
-  "#7678f4",
-  "#6b6af0",
-  "#6366f1",
-  "#5a75f7",
-  "#4e8bfd",
-  "#38a5f5",
-  "#22bde8",
-  "#22d3ee",
-  "#28dcd8",
-  "#2dd4bf",
-  "#34d399",
-  "#56dc84",
-  "#84e365",
-  "#a3e635",
-  "#c4de22",
-  "#e2d31e",
-  "#fbbf24",
-  "#fba030",
-  "#fb923c",
-  "#f87c50",
-  "#f47272",
-  "#f26492",
-  "#f472b6",
-  "#e46cc8",
-  "#d46ede",
-  "#c084fc",
-  "#ae86fa",
-  "#9b89f9",
-  "#818cf8",
 ];
 
 const FADE_MS = 1500;

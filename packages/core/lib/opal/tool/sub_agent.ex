@@ -266,7 +266,7 @@ defmodule Opal.Tool.SubAgent do
           parent_session_id,
           parent_call_id,
           text,
-          tool_log ++ [entry],
+          [entry | tool_log],
           timeout
         )
 
@@ -279,7 +279,7 @@ defmodule Opal.Tool.SubAgent do
           parent_session_id,
           parent_call_id,
           text,
-          tool_log ++ [entry],
+          [entry | tool_log],
           timeout
         )
 
@@ -311,11 +311,11 @@ defmodule Opal.Tool.SubAgent do
 
       {:opal_event, ^sub_session_id, {:agent_end, _messages} = event} ->
         forward_event(parent_session_id, sub_session_id, parent_call_id, event)
-        {:ok, text, tool_log}
+        {:ok, text, Enum.reverse(tool_log)}
 
       {:opal_event, ^sub_session_id, {:agent_end, _messages, _usage} = event} ->
         forward_event(parent_session_id, sub_session_id, parent_call_id, event)
-        {:ok, text, tool_log}
+        {:ok, text, Enum.reverse(tool_log)}
 
       {:opal_event, ^sub_session_id, {:error, reason}} ->
         {:error, reason}
@@ -345,7 +345,9 @@ defmodule Opal.Tool.SubAgent do
     )
   end
 
-  # Updates the result field of the last pending tool log entry, preferring call_id.
+  # Updates the result field of the most recent pending tool log entry, preferring call_id.
+  # tool_log is in newest-first order (prepend), so finding the first match
+  # gives us the most recently added entry.
   defp update_last_tool_result(tool_log, call_id, name, result) do
     case find_pending_tool_entry_index(tool_log, call_id, name) do
       nil -> tool_log
@@ -356,19 +358,13 @@ defmodule Opal.Tool.SubAgent do
   defp find_pending_tool_entry_index(tool_log, call_id, name) do
     call_id_match =
       if is_binary(call_id) and call_id != "" do
-        find_last_pending_entry_index(tool_log, &(Map.get(&1, :call_id) == call_id))
+        Enum.find_index(tool_log, fn entry ->
+          Map.get(entry, :call_id) == call_id and entry.result == nil
+        end)
       end
 
-    call_id_match || find_last_pending_entry_index(tool_log, &(&1.tool == name))
-  end
-
-  defp find_last_pending_entry_index(tool_log, matcher) do
-    idx =
-      tool_log
-      |> Enum.reverse()
-      |> Enum.find_index(fn entry -> matcher.(entry) and entry.result == nil end)
-
-    if idx, do: length(tool_log) - 1 - idx
+    call_id_match ||
+      Enum.find_index(tool_log, fn entry -> entry.tool == name and entry.result == nil end)
   end
 
   # Formats the sub-agent's response and tool log into a readable string.

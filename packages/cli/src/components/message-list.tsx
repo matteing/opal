@@ -385,9 +385,7 @@ const TasksDisplay: FC<{ tasks: ParsedTask[] }> = ({ tasks }) => {
 const SubAgentSummary: FC<{ task: Task; subAgent: SubAgent }> = ({ task, subAgent }) => {
   const icon = subAgent.isRunning ? "◐" : TOOL_ICONS[task.status];
   const color = subAgent.isRunning ? "yellow" : TOOL_COLORS[task.status];
-  const elapsed = Math.round(
-    ((subAgent.isRunning ? Date.now() : Date.now()) - subAgent.startedAt) / 1000,
-  );
+  const elapsed = Math.round((Date.now() - subAgent.startedAt) / 1000);
 
   const details = [
     `${subAgent.toolCount} tool${subAgent.toolCount !== 1 ? "s" : ""}`,

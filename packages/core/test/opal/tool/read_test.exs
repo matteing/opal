@@ -208,7 +208,7 @@ defmodule Opal.Tool.ReadTest do
       {:ok, result} = Read.execute(%{"path" => "minified.js"}, ctx)
 
       assert result =~ "KB limit"
-      assert result =~ "head -c"
+      assert result =~ "read_file"
     end
 
     test "passes through small files with hashline tags", %{tmp_dir: tmp_dir} do

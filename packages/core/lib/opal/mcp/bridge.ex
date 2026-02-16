@@ -104,55 +104,59 @@ defmodule Opal.MCP.Bridge do
     tool_params = tool["inputSchema"] || %{}
     original_name = tool["name"]
 
-    # Only define if not already defined
-    unless :erlang.module_loaded(mod_name) do
-      contents =
-        quote do
-          @behaviour Opal.Tool
+    # Purge any previous version of this module so reconnections with
+    # changed tool definitions get a fresh module.
+    if :erlang.module_loaded(mod_name) do
+      :code.purge(mod_name)
+      :code.delete(mod_name)
+    end
 
-          @impl true
-          def name, do: unquote(resolved_name)
+    contents =
+      quote do
+        @behaviour Opal.Tool
 
-          @impl true
-          def description, do: unquote(tool_desc)
+        @impl true
+        def name, do: unquote(resolved_name)
 
-          @impl true
-          def parameters, do: unquote(Macro.escape(tool_params))
+        @impl true
+        def description, do: unquote(tool_desc)
 
-          @impl true
-          def execute(args, _context) do
-            case Opal.MCP.Client.server_call_tool(
-                   unquote(client_name),
-                   unquote(original_name),
-                   args
-                 ) do
-              {:ok, %{result: %{"content" => content}}} ->
-                text = extract_text_content(content)
-                {:ok, text}
+        @impl true
+        def parameters, do: unquote(Macro.escape(tool_params))
 
-              {:ok, %{result: result}} ->
-                {:ok, inspect(result)}
+        @impl true
+        def execute(args, _context) do
+          case Opal.MCP.Client.server_call_tool(
+                 unquote(client_name),
+                 unquote(original_name),
+                 args
+               ) do
+            {:ok, %{result: %{"content" => content}}} ->
+              text = extract_text_content(content)
+              {:ok, text}
 
-              {:error, reason} ->
-                {:error, "MCP tool error: #{inspect(reason)}"}
-            end
+            {:ok, %{result: result}} ->
+              {:ok, inspect(result)}
+
+            {:error, reason} ->
+              {:error, "MCP tool error: #{inspect(reason)}"}
           end
-
-          defp extract_text_content(content) when is_list(content) do
-            content
-            |> Enum.map(fn
-              %{"type" => "text", "text" => text} -> text
-              other -> inspect(other)
-            end)
-            |> Enum.join("\n")
-          end
-
-          defp extract_text_content(content) when is_binary(content), do: content
-          defp extract_text_content(content), do: inspect(content)
         end
 
-      Module.create(mod_name, contents, Macro.Env.location(__ENV__))
-    end
+        defp extract_text_content(content) when is_list(content) do
+          content
+          |> Enum.map(fn
+            %{"type" => "text", "text" => text} -> text
+            other -> inspect(other)
+          end)
+          |> Enum.join("\n")
+        end
+
+        defp extract_text_content(content) when is_binary(content), do: content
+        defp extract_text_content(content), do: inspect(content)
+      end
+
+    Module.create(mod_name, contents, Macro.Env.location(__ENV__))
 
     mod_name
   end

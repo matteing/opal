@@ -1,5 +1,6 @@
 import React, { type FC } from "react";
 import { Box, Text, useStdout } from "ink";
+import { homedir } from "os";
 
 export interface HeaderProps {
   workingDir: string;
@@ -9,7 +10,7 @@ export interface HeaderProps {
 export const Header: FC<HeaderProps> = ({ workingDir, nodeName }) => {
   const { stdout } = useStdout();
   const width = stdout?.columns ?? 80;
-  const shortCwd = workingDir.replace(process.env["HOME"] ?? "", "~");
+  const shortCwd = workingDir.replace(homedir(), "~");
   const left = "✦ opal";
   const middle = shortCwd;
   const right = nodeName;

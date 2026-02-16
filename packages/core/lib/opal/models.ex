@@ -23,6 +23,8 @@ defmodule Opal.Models do
 
   @default_context_window 128_000
 
+  require Logger
+
   @doc """
   Lists models available via GitHub Copilot.
 
@@ -36,7 +38,9 @@ defmodule Opal.Models do
     |> Enum.map(&to_model_info/1)
     |> Enum.sort_by(& &1.id)
   rescue
-    _ -> []
+    e ->
+      Logger.warning("LLMDB list_copilot failed: #{Exception.message(e)}")
+      []
   end
 
   @doc """
@@ -58,7 +62,9 @@ defmodule Opal.Models do
     |> Enum.map(&to_model_info/1)
     |> Enum.sort_by(& &1.id)
   rescue
-    _ -> []
+    e ->
+      Logger.warning("LLMDB list_provider(#{inspect(provider)}) failed: #{Exception.message(e)}")
+      []
   end
 
   @doc """
@@ -85,7 +91,9 @@ defmodule Opal.Models do
       _ -> @default_context_window
     end
   rescue
-    _ -> @default_context_window
+    e ->
+      Logger.warning("LLMDB context_window lookup failed: #{Exception.message(e)}")
+      @default_context_window
   end
 
   @doc """
@@ -103,7 +111,9 @@ defmodule Opal.Models do
       _ -> {:error, :not_found}
     end
   rescue
-    _ -> {:error, :not_found}
+    e ->
+      Logger.warning("LLMDB resolve failed: #{Exception.message(e)}")
+      {:error, :not_found}
   end
 
   # Supported thinking levels per model family.

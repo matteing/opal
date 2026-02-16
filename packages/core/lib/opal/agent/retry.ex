@@ -53,17 +53,12 @@ defmodule Opal.Agent.Retry do
     "server_error"
   ]
 
-  @permanent_patterns [
-    "context_length_exceeded",
-    "maximum context length",
-    "too many tokens",
-    "prompt is too long",
-    "unauthorized",
-    "invalid_api_key",
-    "authentication",
-    "content_too_large",
-    "string_above_max_length"
-  ]
+  @permanent_patterns Opal.Agent.Overflow.overflow_patterns() ++
+                         [
+                           "unauthorized",
+                           "invalid_api_key",
+                           "authentication"
+                         ]
 
   # ── Public API ──────────────────────────────────────────────────────────
 

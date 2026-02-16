@@ -6,11 +6,11 @@ How Opal's hashline-based edit tool works and the reasoning behind it.
 
 Opal exposes three file tools to the LLM:
 
-| Tool | Purpose | Module |
-|------|---------|--------|
-| `read_file` | Read file contents with hashline tags, offset/limit slicing, head-truncation | `Opal.Tool.Read` |
-| `edit_file` | Edit lines by hash-anchored references from `read_file` output | `Opal.Tool.Edit` |
-| `write_file` | Create or overwrite an entire file | `Opal.Tool.Write` |
+| Tool         | Purpose                                                                      | Module            |
+| ------------ | ---------------------------------------------------------------------------- | ----------------- |
+| `read_file`  | Read file contents with hashline tags, offset/limit slicing, head-truncation | `Opal.Tool.Read`  |
+| `edit_file`  | Edit lines by hash-anchored references from `read_file` output               | `Opal.Tool.Edit`  |
+| `write_file` | Create or overwrite an entire file                                           | `Opal.Tool.Write` |
 
 The **edit tool** is the primary way the agent modifies existing code. Instead of reproducing old content (str_replace), the model references lines by their `N:hash` tags from `read_file` output.
 
@@ -43,11 +43,11 @@ The edit tool accepts `start` and `end` anchors in `N:hash` format:
 
 Three operations are supported:
 
-| Operation | Behavior |
-|-----------|----------|
+| Operation           | Behavior                                              |
+| ------------------- | ----------------------------------------------------- |
 | `replace` (default) | Replace lines `start` through `end` with `new_string` |
-| `insert_after` | Insert `new_string` after the `start` line |
-| `insert_before` | Insert `new_string` before the `start` line |
+| `insert_after`      | Insert `new_string` after the `start` line            |
+| `insert_before`     | Insert `new_string` before the `start` line           |
 
 Omitting `end` defaults to a single-line edit. Omitting `new_string` deletes the line range.
 
@@ -91,6 +91,7 @@ The blog post [The Harness Problem](https://blog.can.ac/2026/02/12/the-harness-p
 - **Hashline**: matched or beat str_replace for most models. Weak models gained the most.
 
 Selected results:
+
 - Grok Code Fast 1: 6.7% → 68.3% (10× improvement)
 - Gemini: +8% (bigger than most model upgrades)
 - Output tokens dropped up to 61% (no retry loops from match failures)

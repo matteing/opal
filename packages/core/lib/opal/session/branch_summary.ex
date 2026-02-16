@@ -91,7 +91,7 @@ defmodule Opal.Session.BranchSummary do
     ids_b = MapSet.new(Enum.map(path_b, & &1.id))
 
     path_a
-    |> Enum.filter(fn msg -> msg.id in ids_b end)
+    |> Enum.filter(fn msg -> MapSet.member?(ids_b, msg.id) end)
     |> List.last()
     |> case do
       nil -> nil

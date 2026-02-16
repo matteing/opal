@@ -150,14 +150,14 @@ defmodule Opal.RPC.HandlerTest do
 
   describe "handle/2 thinking/set with nonexistent session" do
     test "returns session not found error" do
-      assert {:error, "No session with id: nonexistent"} =
+      assert {:error, -32602, "Session not found", "No session with id: nonexistent"} =
                Handler.handle("thinking/set", %{"session_id" => "nonexistent", "level" => "high"})
     end
   end
 
   describe "handle/2 model/set with nonexistent session" do
     test "returns session not found error" do
-      assert {:error, "No session with id: nonexistent"} =
+      assert {:error, -32602, "Session not found", "No session with id: nonexistent"} =
                Handler.handle("model/set", %{
                  "session_id" => "nonexistent",
                  "model_id" => "gpt-5",

@@ -27,6 +27,7 @@ defmodule Opal.RPC.Stdio do
 
   defstruct [
     :reader,
+    :stdout_port,
     pending_requests: %{},
     next_server_id: 1,
     subscriptions: MapSet.new()
@@ -81,13 +82,12 @@ defmodule Opal.RPC.Stdio do
     # platform-dependent newline semantics. Instead we accumulate bytes
     # in the reader and split on \n ourselves.
     stdout_fd = :erlang.open_port({:fd, 1, 1}, [:binary, :out])
-    Process.put(:stdout_port, stdout_fd)
     parent = self()
 
     {:ok, reader} =
       Task.start_link(fn -> stdin_read_loop(parent) end)
 
-    {:ok, %__MODULE__{reader: reader}}
+    {:ok, %__MODULE__{reader: reader, stdout_port: stdout_fd}}
   end
 
   defp stdin_read_loop(parent) do
@@ -139,7 +139,7 @@ defmodule Opal.RPC.Stdio do
     # Parent CLI process closed stdin — shut down the VM so the server
     # doesn't linger as an orphan (e.g. after Ctrl+C in the terminal).
     Logger.info("stdin closed, shutting down")
-    System.halt(0)
+    System.stop(0)
     {:noreply, state}
   end
 
@@ -153,7 +153,7 @@ defmodule Opal.RPC.Stdio do
 
   def handle_info({:opal_event, session_id, event}, state) do
     notification = event_to_notification(session_id, event)
-    write_stdout(notification)
+    write_stdout(state, notification)
     {:noreply, state}
   end
 
@@ -166,7 +166,7 @@ defmodule Opal.RPC.Stdio do
   @impl true
   def handle_call({:request_client, method, params}, from, state) do
     id = "s2c-#{state.next_server_id}"
-    write_stdout(Opal.RPC.encode_request(id, method, params))
+    write_stdout(state, Opal.RPC.encode_request(id, method, params))
     pending = Map.put(state.pending_requests, id, from)
 
     {:noreply, %{state | pending_requests: pending, next_server_id: state.next_server_id + 1}}
@@ -176,7 +176,7 @@ defmodule Opal.RPC.Stdio do
 
   @impl true
   def handle_cast({:notify, method, params}, state) do
-    write_stdout(Opal.RPC.encode_notification(method, params))
+    write_stdout(state, Opal.RPC.encode_notification(method, params))
     {:noreply, state}
   end
 
@@ -191,18 +191,18 @@ defmodule Opal.RPC.Stdio do
         handle_client_response(id, result, state)
 
       {:error_response, id, error} ->
-        handle_client_response(id, {:error, error}, state)
+        handle_client_error_response(id, error, state)
 
       {:notification, _method, _params} ->
         # Client notifications not currently handled
         state
 
       {:error, :parse_error} ->
-        write_stdout(Opal.RPC.encode_error(nil, Opal.RPC.parse_error(), "Parse error"))
+        write_stdout(state, Opal.RPC.encode_error(nil, Opal.RPC.parse_error(), "Parse error"))
         state
 
       {:error, :invalid_request} ->
-        write_stdout(Opal.RPC.encode_error(nil, Opal.RPC.invalid_request(), "Invalid request"))
+        write_stdout(state, Opal.RPC.encode_error(nil, Opal.RPC.invalid_request(), "Invalid request"))
         state
     end
   end
@@ -211,7 +211,7 @@ defmodule Opal.RPC.Stdio do
     try do
       case Opal.RPC.Handler.handle(method, params) do
         {:ok, result} ->
-          write_stdout(Opal.RPC.encode_response(id, result))
+          write_stdout(state, Opal.RPC.encode_response(id, result))
 
           # Auto-subscribe to events for new sessions
           state =
@@ -224,7 +224,7 @@ defmodule Opal.RPC.Stdio do
           state
 
         {:error, code, message, data} ->
-          write_stdout(Opal.RPC.encode_error(id, code, message, data))
+          write_stdout(state, Opal.RPC.encode_error(id, code, message, data))
           state
       end
     rescue
@@ -232,6 +232,7 @@ defmodule Opal.RPC.Stdio do
         Logger.error("RPC handler crashed: #{Exception.message(e)}")
 
         write_stdout(
+          state,
           Opal.RPC.encode_error(
             id,
             Opal.RPC.internal_error(),
@@ -252,6 +253,18 @@ defmodule Opal.RPC.Stdio do
 
       {nil, _} ->
         Logger.warning("Received response for unknown request id: #{inspect(id)}")
+        state
+    end
+  end
+
+  defp handle_client_error_response(id, error, state) do
+    case Map.pop(state.pending_requests, id) do
+      {from, pending} when from != nil ->
+        GenServer.reply(from, {:error, error})
+        %{state | pending_requests: pending}
+
+      {nil, _} ->
+        Logger.warning("Received error response for unknown request id: #{inspect(id)}")
         state
     end
   end
@@ -362,8 +375,7 @@ defmodule Opal.RPC.Stdio do
 
   # -- I/O --
 
-  defp write_stdout(json) do
-    port = Process.get(:stdout_port)
+  defp write_stdout(%__MODULE__{stdout_port: port}, json) do
     Port.command(port, json <> "\n")
   end
 end

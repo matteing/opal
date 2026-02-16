@@ -17,17 +17,17 @@ The agent converts tool modules to JSON Schema for the LLM. When the LLM request
 
 ## Default Tools
 
-| Tool | Module | Purpose |
-|------|--------|---------|
-| `read_file` | `Opal.Tool.Read` | Read files with hashline-tagged output |
-| `edit_file` | `Opal.Tool.Edit` | Edit by hash-anchored line references |
-| `write_file` | `Opal.Tool.Write` | Create or overwrite files |
-| `shell` | `Opal.Tool.Shell` | Execute shell commands with streaming output |
-| `sub_agent` | `Opal.Tool.SubAgent` | Spawn parallel child agents |
-| `tasks` | `Opal.Tool.Tasks` | DETS-backed task tracker |
-| `use_skill` | `Opal.Tool.UseSkill` | Load agent skills dynamically |
-| `ask_user` | `Opal.Tool.AskUser` | Ask the user a question (top-level agents) |
-| `debug_state` | `Opal.Tool.Debug` | Introspect agent runtime state and recent events (disabled by default) |
+| Tool          | Module               | Purpose                                                                |
+| ------------- | -------------------- | ---------------------------------------------------------------------- |
+| `read_file`   | `Opal.Tool.Read`     | Read files with hashline-tagged output                                 |
+| `edit_file`   | `Opal.Tool.Edit`     | Edit by hash-anchored line references                                  |
+| `write_file`  | `Opal.Tool.Write`    | Create or overwrite files                                              |
+| `shell`       | `Opal.Tool.Shell`    | Execute shell commands with streaming output                           |
+| `sub_agent`   | `Opal.Tool.SubAgent` | Spawn parallel child agents                                            |
+| `tasks`       | `Opal.Tool.Tasks`    | DETS-backed task tracker                                               |
+| `use_skill`   | `Opal.Tool.UseSkill` | Load agent skills dynamically                                          |
+| `ask_user`    | `Opal.Tool.AskUser`  | Ask the user a question (top-level agents)                             |
+| `debug_state` | `Opal.Tool.Debug`    | Introspect agent runtime state and recent events (disabled by default) |
 
 Each tool has a detailed doc in `docs/tools/`:
 

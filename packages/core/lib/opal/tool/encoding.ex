@@ -56,6 +56,6 @@ defmodule Opal.Tool.Encoding do
   Restores CRLF line endings if the original file used them.
   """
   @spec restore_line_endings(binary(), boolean()) :: binary()
-  def restore_line_endings(content, true), do: String.replace(content, "\n", "\r\n")
+  def restore_line_endings(content, true), do: String.replace(content, ~r/(?<!\r)\n/, "\r\n")
   def restore_line_endings(content, false), do: content
 end

@@ -41,7 +41,11 @@ defmodule Opal.Agent.State do
           question_handler: (map() -> {:ok, String.t()} | {:error, term()}) | nil,
           pending_tool_tasks: %{reference() => {Task.t(), map()}},
           tool_results: [{map(), term()}],
-          tool_context: map() | nil
+          tool_context: map() | nil,
+          last_prompt_tokens: non_neg_integer(),
+          last_chunk_at: integer() | nil,
+          stream_watchdog: reference() | nil,
+          last_usage_msg_index: non_neg_integer()
         }
 
   @enforce_keys [:session_id, :model, :working_dir, :config]

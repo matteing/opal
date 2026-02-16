@@ -25,11 +25,12 @@ defmodule Opal.Session do
             session_id: String.t(),
             table: :ets.table(),
             current_id: String.t() | nil,
-            metadata: map()
+            metadata: map(),
+            sessions_dir: String.t() | nil
           }
 
     @enforce_keys [:session_id, :table]
-    defstruct [:session_id, :table, current_id: nil, metadata: %{}]
+    defstruct [:session_id, :table, current_id: nil, metadata: %{}, sessions_dir: nil]
   end
 
   # --- Public API ---
@@ -196,7 +197,7 @@ defmodule Opal.Session do
   end
 
   @doc """
-  Persists the session to disk as an ETF file.
+  Persists the session to disk as a JSONL file.
   """
   @spec save(GenServer.server(), String.t()) :: :ok | {:error, term()}
   def save(session, dir) do
@@ -222,18 +223,25 @@ defmodule Opal.Session do
       {:ok, files} ->
         files
         |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
-        |> Enum.map(fn file ->
+        |> Enum.flat_map(fn file ->
           path = Path.join(dir, file)
           id = String.trim_trailing(file, ".jsonl")
-          stat = File.stat!(path)
-          title = read_session_title(path)
 
-          %{
-            id: id,
-            path: path,
-            title: title,
-            modified: stat.mtime |> NaiveDateTime.from_erl!()
-          }
+          case File.stat(path) do
+            {:ok, stat} ->
+              title = read_session_title(path)
+
+              [%{
+                id: id,
+                path: path,
+                title: title,
+                modified: stat.mtime |> NaiveDateTime.from_erl!()
+              }]
+
+            {:error, _} ->
+              # File was deleted between ls and stat — skip it
+              []
+          end
         end)
         |> Enum.sort_by(& &1.modified, {:desc, NaiveDateTime})
 
@@ -263,7 +271,8 @@ defmodule Opal.Session do
       session_id: session_id,
       table: table,
       current_id: nil,
-      metadata: Keyword.get(opts, :metadata, %{})
+      metadata: Keyword.get(opts, :metadata, %{}),
+      sessions_dir: Keyword.get(opts, :sessions_dir)
     }
 
     # If a saved session file was provided, load it during init so the
@@ -390,7 +399,7 @@ defmodule Opal.Session do
     # Best-effort save before losing the ETS table
     if reason != :normal do
       try do
-        dir = Opal.Config.sessions_dir(Opal.Config.new())
+        dir = state.sessions_dir || Opal.Config.sessions_dir(Opal.Config.new())
         do_save(state, dir)
       rescue
         _ -> :ok
@@ -468,30 +477,51 @@ defmodule Opal.Session do
   defp do_load(table, path) do
     case File.read(path) do
       {:ok, content} ->
-        [header_line | message_lines] =
+        lines =
           content
           |> String.split("\n")
           |> Enum.reject(&(&1 == ""))
 
-        header = Jason.decode!(header_line)
+        case lines do
+          [] ->
+            {:error, :empty_session_file}
 
-        # Clear existing data
-        :ets.delete_all_objects(table)
+          [header_line | message_lines] ->
+            with {:ok, header} <- Jason.decode(header_line),
+                 {:ok, messages} <- decode_message_lines(message_lines) do
+              # Clear existing data
+              :ets.delete_all_objects(table)
 
-        # Insert all messages
-        Enum.each(message_lines, fn line ->
-          msg = json_to_message(Jason.decode!(line))
-          :ets.insert(table, {msg.id, msg})
-        end)
+              # Insert all messages
+              Enum.each(messages, fn msg ->
+                :ets.insert(table, {msg.id, msg})
+              end)
 
-        {:ok,
-         %{
-           current_id: header["current_id"],
-           metadata: atomize_metadata(Map.get(header, "metadata", %{}))
-         }}
+              {:ok,
+               %{
+                 current_id: header["current_id"],
+                 metadata: atomize_metadata(Map.get(header, "metadata", %{}))
+               }}
+            end
+        end
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp decode_message_lines(lines) do
+    messages =
+      Enum.reduce_while(lines, {:ok, []}, fn line, {:ok, acc} ->
+        case Jason.decode(line) do
+          {:ok, data} -> {:cont, {:ok, [json_to_message(data) | acc]}}
+          {:error, _} = err -> {:halt, err}
+        end
+      end)
+
+    case messages do
+      {:ok, list} -> {:ok, Enum.reverse(list)}
+      error -> error
     end
   end
 
@@ -555,7 +585,7 @@ defmodule Opal.Session do
     %Opal.Message{
       id: data["id"],
       parent_id: data["parent_id"],
-      role: String.to_existing_atom(data["role"]),
+      role: safe_to_role(data["role"]),
       content: data["content"],
       thinking: data["thinking"],
       tool_calls: tool_calls,
@@ -571,6 +601,17 @@ defmodule Opal.Session do
   end
 
   defp atomize_metadata(_), do: %{}
+
+  @valid_roles %{
+    "system" => :system,
+    "user" => :user,
+    "assistant" => :assistant,
+    "tool_call" => :tool_call,
+    "tool_result" => :tool_result
+  }
+
+  defp safe_to_role(role) when is_map_key(@valid_roles, role), do: @valid_roles[role]
+  defp safe_to_role(role), do: raise(ArgumentError, "unknown message role: #{inspect(role)}")
 
   defp safe_to_atom(key) when is_binary(key) do
     String.to_existing_atom(key)
@@ -631,7 +672,7 @@ defmodule Opal.Session do
     %{state | current_id: current_id}
   end
 
-  # Reads the title from a saved ETF file's metadata without fully loading it.
+  # Reads the title from a saved JSONL file's metadata without fully loading it.
   defp read_session_title(path) do
     case File.open(path, [:read, :utf8]) do
       {:ok, file} ->

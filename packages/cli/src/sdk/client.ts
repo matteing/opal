@@ -228,7 +228,12 @@ export class OpalClient extends EventEmitter {
   // --- Private ---
 
   private send(msg: JsonRpcRequest | JsonRpcResponse): void {
-    this.process.stdin!.write(JSON.stringify(msg) + "\n");
+    try {
+      this.process.stdin!.write(JSON.stringify(msg) + "\n");
+    } catch {
+      // stdin may already be closed if the server process exited
+      return;
+    }
     const entry: RpcMessageEntry = {
       id: ++this.rpcSeq,
       direction: "outgoing",

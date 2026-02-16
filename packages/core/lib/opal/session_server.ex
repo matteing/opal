@@ -94,6 +94,7 @@ defmodule Opal.SessionServer do
 
       session_opts = [
         session_id: session_id,
+        sessions_dir: sessions_dir,
         name: {:via, Registry, {Opal.Registry, {:session, session_id}}}
       ]
 

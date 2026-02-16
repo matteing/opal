@@ -247,6 +247,9 @@ defmodule Opal.RPC.Handler do
 
       {:ok,
        %{model: %{provider: model.provider, id: model.id, thinking_level: model.thinking_level}}}
+    else
+      {:error, reason} ->
+        {:error, Opal.RPC.invalid_params(), "Session not found", reason}
     end
   end
 
@@ -259,6 +262,9 @@ defmodule Opal.RPC.Handler do
       level = parse_thinking_level(level_str)
       Opal.set_thinking_level(agent, level)
       {:ok, %{thinking_level: level}}
+    else
+      {:error, reason} ->
+        {:error, Opal.RPC.invalid_params(), "Session not found", reason}
     end
   end
 

@@ -42,6 +42,15 @@ defmodule Opal.Agent.Overflow do
     "string_above_max_length"
   ]
 
+  @doc """
+  Returns the list of overflow pattern strings.
+
+  Used by `Opal.Agent.Retry` to classify overflow errors as permanent
+  without duplicating the pattern list.
+  """
+  @spec overflow_patterns() :: [String.t()]
+  def overflow_patterns, do: @overflow_patterns
+
   # ── Public API ──────────────────────────────────────────────────────────
 
   @doc """
