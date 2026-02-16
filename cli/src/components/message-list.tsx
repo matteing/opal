@@ -23,7 +23,6 @@ import {
   shouldReuseRenderedMarkdown,
   type MarkdownRenderCache,
 } from "../lib/markdown.js";
-import { USER_MESSAGE_BG_COLOR, USER_MESSAGE_TEXT_COLOR } from "../lib/message-theme.js";
 const MAX_RENDERED_ENTRIES = 400;
 
 export interface MessageListProps {
@@ -184,10 +183,8 @@ const MessageBlock: FC<{
     if (isUser) {
       return (
         <Box flexDirection="column" marginBottom={1}>
-          <Box width={rowWidth} paddingX={2} paddingY={1} backgroundColor={USER_MESSAGE_BG_COLOR}>
-            <Text color={USER_MESSAGE_TEXT_COLOR} wrap="wrap">
-              {rendered}
-            </Text>
+          <Box width={rowWidth}>
+            <Text wrap="wrap">❯ {rendered}</Text>
           </Box>
           {message.queued && (
             <Box marginLeft={1}>

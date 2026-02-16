@@ -13,24 +13,18 @@ node = { version = "22", postinstall = "corepack enable" }
 description = "Compile Elixir core"
 dir = "opal"
 run = "mix compile --warnings-as-errors"
-sources = ["lib/**/*.ex", "mix.exs", "mix.lock"]
-outputs = ["_build/dev/**/*.beam"]
 
 [tasks.codegen]
 description = "Generate TS types from Elixir schemas"
 dir = "opal"
 depends = ["build:core"]
 run = "mix run ../scripts/codegen_ts.exs"
-sources = ["lib/opal/rpc/**/*.ex", "../scripts/codegen_ts.exs"]
-outputs = ["../cli/src/sdk/protocol.ts"]
 
 [tasks."build:cli"]
 description = "Compile TypeScript CLI"
 depends = ["codegen"]
 dir = "cli"
 run = "npx tsc -p tsconfig.build.json"
-sources = ["src/**/*.{ts,tsx}", "tsconfig.json"]
-outputs = ["dist/**/*.js"]
 
 [tasks.build]
 description = "Full build: core → codegen → CLI"
@@ -101,8 +95,6 @@ depends = ["deps:*"]
 [tasks.dev]
 description = "Build and launch the CLI"
 depends = ["build"]
-sources = []
-outputs = []
 run = "node cli/dist/bin.js --expose opal#opal"
 
 [tasks.inspect]

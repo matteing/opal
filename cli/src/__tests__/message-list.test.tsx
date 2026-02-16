@@ -71,7 +71,7 @@ describe("MessageList visuals", () => {
 
 describe("message theme contrast defaults", () => {
   it("uses a subtle dark user tint with high-contrast text", () => {
-    expect(USER_MESSAGE_BG_COLOR).toBe("blackBright");
-    expect(USER_MESSAGE_TEXT_COLOR).toBe("white");
+    expect(USER_MESSAGE_BG_COLOR).toBe("#1a1a2e");
+    expect(USER_MESSAGE_TEXT_COLOR).toBe("#e0e0e0");
   });
 });
