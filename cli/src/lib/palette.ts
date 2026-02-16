@@ -32,3 +32,35 @@ export const PALETTE = [
   "#9b89f9",
   "#818cf8",
 ];
+
+// ── Semantic colors ──────────────────────────────────────────
+
+export const colors = {
+  // Brand
+  accent: "magenta",
+  accentAlt: "cyan",
+  title: "#d946ef",
+  thinking: "#cc5490",
+
+  // User messages
+  userBg: "#1a1a2e",
+  userText: "#e0e0e0",
+
+  // Status
+  success: "green",
+  warning: "yellow",
+  error: "red",
+  info: "cyan",
+
+  // Chrome
+  border: "gray",
+  muted: "gray",
+
+  // RPC
+  rpcRequest: "cyan",
+  rpcResponse: "green",
+  rpcNotification: "yellow",
+  rpcError: "red",
+  rpcOutgoing: "blue",
+  rpcIncoming: "magenta",
+} as const;

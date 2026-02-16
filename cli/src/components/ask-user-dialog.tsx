@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, type FC } from "react";
 import { Box, Text, useInput, type Key } from "ink";
 import { StableTextInput } from "./stable-text-input.js";
+import { colors } from "../lib/palette.js";
 
 export interface AskUserDialogProps {
   question: string;
@@ -47,8 +48,8 @@ export const AskUserDialog: FC<AskUserDialogProps> = ({ question, choices, onRes
   }, []);
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1}>
-      <Text bold color="cyan">
+    <Box flexDirection="column" borderStyle="round" borderColor={colors.accentAlt} paddingX={2} paddingY={1}>
+      <Text bold color={colors.accentAlt}>
         Agent Question
       </Text>
       <Box marginTop={1}>
@@ -58,7 +59,7 @@ export const AskUserDialog: FC<AskUserDialogProps> = ({ question, choices, onRes
       {hasChoices && (
         <Box flexDirection="column" marginTop={1}>
           {choices.map((choice, i) => (
-            <Text key={choice} bold={i === selected} color={i === selected ? "cyan" : undefined}>
+            <Text key={choice} bold={i === selected} color={i === selected ? colors.accentAlt : undefined}>
               {i === selected ? "▸ " : "  "}
               {choice}
             </Text>
@@ -68,7 +69,7 @@ export const AskUserDialog: FC<AskUserDialogProps> = ({ question, choices, onRes
 
       <Box marginTop={1}>
         {hasChoices && <Text dimColor>Or type a custom answer: </Text>}
-        <Text color="cyan">❯ </Text>
+        <Text color={colors.accentAlt}>❯ </Text>
         <StableTextInput
           value={freeform}
           onChange={setFreeform}

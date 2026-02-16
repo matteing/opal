@@ -1,5 +1,6 @@
 import React, { useState, useEffect, memo, type FC } from "react";
 import { Text } from "ink";
+import { colors } from "../lib/palette.js";
 
 const KAOMOJI = [
   "(◕‿◕)",
@@ -31,7 +32,7 @@ const ThinkingIndicatorBase: FC<ThinkingIndicatorProps> = ({ label = "thinking�
   }, []);
 
   return (
-    <Text color="#cc5490">
+    <Text color={colors.thinking}>
       {KAOMOJI[frame]} {label}
     </Text>
   );

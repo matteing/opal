@@ -1,5 +1,6 @@
 import React, { useState, type FC } from "react";
 import { Box, Text, useInput } from "ink";
+import { colors } from "../lib/palette.js";
 
 export interface ModelPickerProps {
   models: {
@@ -74,8 +75,8 @@ export const ModelPicker: FC<ModelPickerProps> = ({
 
   if (phase === "thinking") {
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1}>
-        <Text bold color="cyan">
+      <Box flexDirection="column" borderStyle="round" borderColor={colors.accentAlt} paddingX={2} paddingY={1}>
+        <Text bold color={colors.accentAlt}>
           Thinking level
         </Text>
         <Text dimColor>↑↓ navigate · enter select · esc back</Text>
@@ -85,11 +86,11 @@ export const ModelPicker: FC<ModelPickerProps> = ({
             const isSelected = i === thinkingSelected;
             return (
               <Text key={level}>
-                <Text color={isSelected ? "cyan" : undefined}>{isSelected ? "❯" : " "}</Text>{" "}
-                <Text bold={isSelected} color={isSelected ? "cyan" : undefined}>
+                <Text color={isSelected ? colors.accentAlt : undefined}>{isSelected ? "❯" : " "}</Text>{" "}
+                <Text bold={isSelected} color={isSelected ? colors.accentAlt : undefined}>
                   {capitalize(level)}
                 </Text>
-                {isCurrent && <Text color="green"> ●</Text>}
+                {isCurrent && <Text color={colors.success}> ●</Text>}
               </Text>
             );
           })}
@@ -99,8 +100,8 @@ export const ModelPicker: FC<ModelPickerProps> = ({
   }
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="magenta" paddingX={2} paddingY={1}>
-      <Text bold color="magenta">
+    <Box flexDirection="column" borderStyle="round" borderColor={colors.accent} paddingX={2} paddingY={1}>
+      <Text bold color={colors.accent}>
         Select a model
       </Text>
       <Text dimColor>↑↓ navigate · enter select · esc cancel</Text>
@@ -112,13 +113,13 @@ export const ModelPicker: FC<ModelPickerProps> = ({
             model.provider && model.provider !== "copilot" ? `${model.provider}/` : "";
           return (
             <Text key={`${model.provider ?? ""}:${model.id}`}>
-              <Text color={isSelected ? "magenta" : undefined}>{isSelected ? "❯" : " "}</Text>{" "}
+              <Text color={isSelected ? colors.accent : undefined}>{isSelected ? "❯" : " "}</Text>{" "}
               {providerLabel && <Text dimColor>{providerLabel}</Text>}
-              <Text bold={isSelected} color={isSelected ? "magenta" : undefined}>
+              <Text bold={isSelected} color={isSelected ? colors.accent : undefined}>
                 {model.id}
               </Text>{" "}
               <Text dimColor>{model.name}</Text>
-              {isCurrent && <Text color="green"> ●</Text>}
+              {isCurrent && <Text color={colors.success}> ●</Text>}
             </Text>
           );
         })}

@@ -23,6 +23,7 @@ import {
   shouldReuseRenderedMarkdown,
   type MarkdownRenderCache,
 } from "../lib/markdown.js";
+import { colors } from "../lib/palette.js";
 const MAX_RENDERED_ENTRIES = 400;
 
 export interface MessageListProps {
@@ -51,7 +52,7 @@ export const MessageList: FC<MessageListProps> = memo(
 
     return (
       <Box flexDirection="column">
-        <Welcome dimmed={hasMessages} />
+        <Welcome dimmed={hasMessages} workingDir={workingDir} />
         {hiddenCount > 0 && (
           <Box paddingX={1} marginBottom={1}>
             <Text dimColor>
@@ -121,7 +122,7 @@ export const MessageList: FC<MessageListProps> = memo(
                 return (
                   <Box key={timelineIndex}>
                     <Text>
-                      <Text color="green">●</Text>{" "}
+                      <Text color={colors.success}>●</Text>{" "}
                       <Text dimColor>Loaded skill: {entry.skill.name}</Text>
                     </Text>
                   </Box>
@@ -183,8 +184,10 @@ const MessageBlock: FC<{
     if (isUser) {
       return (
         <Box flexDirection="column" marginBottom={1}>
-          <Box width={rowWidth}>
-            <Text wrap="wrap">❯ {rendered}</Text>
+          <Box width={rowWidth} paddingX={2} paddingY={1} backgroundColor={colors.userBg}>
+            <Text color={colors.userText} wrap="wrap">
+              {rendered}
+            </Text>
           </Box>
           {message.queued && (
             <Box marginLeft={1}>
@@ -223,9 +226,9 @@ const TOOL_ICONS: Record<Task["status"], string> = {
 };
 
 const TOOL_COLORS: Record<Task["status"], string> = {
-  running: "yellow",
-  done: "green",
-  error: "red",
+  running: colors.warning,
+  done: colors.success,
+  error: colors.error,
 };
 
 const ToolBlock: FC<{ task: Task; width: number; showOutput?: boolean }> = ({
@@ -292,7 +295,7 @@ const ToolBlock: FC<{ task: Task; width: number; showOutput?: boolean }> = ({
           )}
           {!isTasksOutput && task.result && !task.result.ok && task.result.error && (
             <Box marginLeft={2}>
-              <Text color="red" wrap="truncate-end">
+              <Text color={colors.error} wrap="truncate-end">
                 {task.result.error.slice(0, maxOutput)}
               </Text>
             </Box>
@@ -321,7 +324,7 @@ const ThinkingBlock: FC<{ text: string; width: number }> = ({ text, width }) => 
   const truncated = truncateOutput(text, 8, maxWidth);
   return (
     <Box flexDirection="column" marginBottom={1} marginLeft={2}>
-      <Text dimColor italic color="gray">
+      <Text dimColor italic color={colors.muted}>
         💭 {truncated}
       </Text>
     </Box>
@@ -336,14 +339,14 @@ const ContextLines: FC<{ context: Context; rootDir: string }> = ({ context, root
       {items.map((item, i) => (
         <Box key={i}>
           <Text>
-            <Text color="green">●</Text> <Text dimColor>Loaded {item}</Text>
+            <Text color={colors.success}>●</Text> <Text dimColor>Loaded {item}</Text>
           </Text>
         </Box>
       ))}
       {context.distribution && (
         <Box>
           <Text>
-            <Text color="yellow">●</Text>{" "}
+            <Text color={colors.warning}>●</Text>{" "}
             <Text dimColor>
               Debug: {context.distribution.node} (cookie: {context.distribution.cookie})
             </Text>
@@ -391,7 +394,7 @@ const TasksDisplay: FC<{ tasks: ParsedTask[] }> = ({ tasks }) => {
 
 const SubAgentSummary: FC<{ task: Task; subAgent: SubAgent }> = ({ task, subAgent }) => {
   const icon = subAgent.isRunning ? "◐" : TOOL_ICONS[task.status];
-  const color = subAgent.isRunning ? "yellow" : TOOL_COLORS[task.status];
+  const color = subAgent.isRunning ? colors.warning : TOOL_COLORS[task.status];
   const elapsed = Math.round((Date.now() - subAgent.startedAt) / 1000);
 
   const details = [

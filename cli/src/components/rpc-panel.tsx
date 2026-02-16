@@ -1,6 +1,7 @@
 import React, { type FC } from "react";
 import { Box, Text } from "ink";
 import type { RpcMessageEntry } from "../sdk/client.js";
+import { colors } from "../lib/palette.js";
 
 const MAX_VISIBLE = 50;
 const MAX_BODY_LEN = 120;
@@ -17,13 +18,13 @@ function formatTime(ts: number): string {
 function kindColor(entry: RpcMessageEntry): string {
   switch (entry.kind) {
     case "request":
-      return "cyan";
+      return colors.rpcRequest;
     case "response":
-      return "green";
+      return colors.rpcResponse;
     case "notification":
-      return "yellow";
+      return colors.rpcNotification;
     case "error":
-      return "red";
+      return colors.rpcError;
   }
 }
 
@@ -57,12 +58,12 @@ export const RpcPanel: FC<RpcPanelProps> = ({ messages, height }) => {
     <Box
       flexDirection="column"
       borderStyle="single"
-      borderColor="gray"
+      borderColor={colors.border}
       height={height}
       overflow="hidden"
     >
       <Box paddingX={1}>
-        <Text bold color="magenta">
+        <Text bold color={colors.accent}>
           RPC Messages
         </Text>
         <Text dimColor> ({messages.length})</Text>
@@ -71,7 +72,7 @@ export const RpcPanel: FC<RpcPanelProps> = ({ messages, height }) => {
       <Box flexDirection="column" height={bodyHeight} overflow="hidden">
         {visible.slice(-bodyHeight).map((entry) => {
           const arrow = entry.direction === "outgoing" ? "→" : "←";
-          const arrowColor = entry.direction === "outgoing" ? "blue" : "magenta";
+          const arrowColor = entry.direction === "outgoing" ? colors.rpcOutgoing : colors.rpcIncoming;
           const method = entry.method ?? `#${(entry.raw as { id?: number }).id ?? "?"}`;
           const body = summarize(entry, MAX_BODY_LEN);
 

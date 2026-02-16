@@ -3,7 +3,7 @@ import React from "react";
 import { render } from "ink-testing-library";
 import { MessageList } from "../components/message-list.js";
 import type { AgentView, TimelineEntry } from "../hooks/use-opal.js";
-import { USER_MESSAGE_BG_COLOR, USER_MESSAGE_TEXT_COLOR } from "../lib/message-theme.js";
+import { colors } from "../lib/palette.js";
 
 function viewWithTimeline(timeline: TimelineEntry[]): AgentView {
   return {
@@ -71,7 +71,7 @@ describe("MessageList visuals", () => {
 
 describe("message theme contrast defaults", () => {
   it("uses a subtle dark user tint with high-contrast text", () => {
-    expect(USER_MESSAGE_BG_COLOR).toBe("#1a1a2e");
-    expect(USER_MESSAGE_TEXT_COLOR).toBe("#e0e0e0");
+    expect(colors.userBg).toBe("#1a1a2e");
+    expect(colors.userText).toBe("#e0e0e0");
   });
 });

@@ -1,6 +1,7 @@
 import React, { type FC } from "react";
 import { Box, Text, useStdout } from "ink";
 import { homedir } from "os";
+import { colors } from "../lib/palette.js";
 
 export interface HeaderProps {
   workingDir: string;
@@ -20,7 +21,7 @@ export const Header: FC<HeaderProps> = ({ workingDir, nodeName }) => {
 
   return (
     <Box marginBottom={1} paddingX={1}>
-      <Text bold color="magenta">
+      <Text bold color={colors.accent}>
         {left}
       </Text>
       <Text dimColor> · </Text>

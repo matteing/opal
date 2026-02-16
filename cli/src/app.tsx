@@ -14,6 +14,7 @@ import { SetupWizard } from "./components/device-auth.js";
 import { RpcPanel } from "./components/rpc-panel.js";
 import { openPlanInEditor } from "./open-editor.js";
 import type { SessionOptions } from "./sdk/session.js";
+import { colors } from "./lib/palette.js";
 
 export interface AppProps {
   sessionOpts: SessionOptions;
@@ -153,7 +154,7 @@ export const App: FC<AppProps> = ({ sessionOpts, initialPrompt, onSessionId }) =
   if (state.error && !state.sessionReady) {
     return (
       <Box flexDirection="column" padding={1} minHeight={rows}>
-        <Text color="red" bold>
+        <Text color={colors.error} bold>
           Error: {state.error}
         </Text>
       </Box>
@@ -190,11 +191,9 @@ export const App: FC<AppProps> = ({ sessionOpts, initialPrompt, onSessionId }) =
 
   return (
     <Box flexDirection="column" width="100%" minHeight={initialFill ? rows : undefined}>
-      <Header workingDir={state.workingDir} nodeName={state.nodeName} />
-
       {state.error && (
         <Box paddingX={1}>
-          <Text color="red">⚠ {state.error}</Text>
+          <Text color={colors.error}>⚠ {state.error}</Text>
         </Box>
       )}
 

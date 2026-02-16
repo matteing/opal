@@ -1,6 +1,21 @@
 import React, { useState, useEffect, useRef, useMemo, type FC } from "react";
 import { Box, Text } from "ink";
-import { PALETTE } from "../lib/palette.js";
+import { readFileSync } from "fs";
+import { homedir } from "os";
+import { fileURLToPath } from "url";
+import { resolve, dirname } from "path";
+import { PALETTE, colors } from "../lib/palette.js";
+
+const CLI_VERSION = (() => {
+  try {
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const pkgPath = resolve(dir, "../../package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version: string };
+    return pkg.version;
+  } catch {
+    return null;
+  }
+})();
 
 // Polished opal cabochon — smooth oval with ±2 char transitions per side.
 const SHAPE = [
@@ -54,14 +69,18 @@ function computeStaticColors(finalPhase: number): { grid: string[][]; title: str
       ch === " " ? "" : desaturate(opalColor(row, col, finalPhase), sat),
     ),
   );
-  return { grid, title: desaturate("#d946ef", sat) };
+  return { grid, title: desaturate(colors.title, sat) };
 }
 
 export interface WelcomeProps {
   dimmed?: boolean;
+  workingDir?: string;
 }
 
-const WelcomeInner: FC<WelcomeProps> = ({ dimmed = false }) => {
+const WelcomeInner: FC<WelcomeProps> = ({ dimmed = false, workingDir }) => {
+  const shortCwd = workingDir ? workingDir.replace(homedir(), "~") : null;
+  const versionLabel = CLI_VERSION ? `v${CLI_VERSION}` : null;
+  const infoText = [versionLabel, shortCwd].filter(Boolean).join(" · ");
   const [phase, setPhase] = useState(0);
   const [mute, setMute] = useState(0);
   const fadeStart = useRef<number | null>(null);
@@ -121,6 +140,11 @@ const WelcomeInner: FC<WelcomeProps> = ({ dimmed = false }) => {
         <Box marginTop={1}>
           <Text color={staticColors.title}>✦ opal</Text>
         </Box>
+        {infoText && (
+          <Box marginTop={0}>
+            <Text dimColor>{infoText}</Text>
+          </Box>
+        )}
       </Box>
     );
   }
@@ -129,7 +153,7 @@ const WelcomeInner: FC<WelcomeProps> = ({ dimmed = false }) => {
   const sat = 0.85 * mute; // 0 → 0.85 desaturation (keeps a tint)
 
   return (
-    <Box flexDirection="column" alignItems="center" paddingX={1} marginBottom={1}>
+    <Box flexDirection="column" alignItems="center" paddingX={1} marginTop={1} marginBottom={1}>
       <Box flexDirection="column">
         {SHAPE.map((line, row) => (
           <Text key={row}>
@@ -146,13 +170,13 @@ const WelcomeInner: FC<WelcomeProps> = ({ dimmed = false }) => {
         ))}
       </Box>
       <Box marginTop={1}>
-        <Text bold={mute < 1} color={desaturate("#d946ef", sat)}>
+        <Text bold={mute < 1} color={desaturate(colors.title, sat)}>
           ✦ opal
         </Text>
       </Box>
-      {mute < 0.5 && (
-        <Box marginTop={1}>
-          <Text dimColor={mute > 0}>What can I help you with?</Text>
+      {infoText && (
+        <Box marginTop={0}>
+          <Text dimColor>{infoText}</Text>
         </Box>
       )}
     </Box>

@@ -3,6 +3,7 @@ import { Box, Text, useInput, type Key } from "ink";
 import { StableTextInput } from "./stable-text-input.js";
 import type { AuthFlow, AuthProvider, OpalActions } from "../hooks/use-opal.js";
 import { openUrl, copyToClipboard } from "../open-url.js";
+import { colors } from "../lib/palette.js";
 
 export interface SetupWizardProps {
   flow: AuthFlow;
@@ -50,13 +51,13 @@ const DeviceCodeScreen: FC<{ flow: AuthFlow }> = ({ flow }) => {
 
   return (
     <Box flexDirection="column" padding={1} gap={1}>
-      <Text bold color="yellow">
+      <Text bold color={colors.warning}>
         ✦ GitHub Copilot — Sign In
       </Text>
       <Box flexDirection="column" marginLeft={2}>
         <Text>
           Code:{" "}
-          <Text bold color="green">
+          <Text bold color={colors.success}>
             {flow.deviceCode?.userCode}
           </Text>
           {opened && <Text dimColor> (copied)</Text>}
@@ -105,14 +106,14 @@ const ProviderPicker: FC<{
 
   return (
     <Box flexDirection="column" padding={1} gap={1}>
-      <Text bold color="yellow">
+      <Text bold color={colors.warning}>
         ✦ Welcome to Opal
       </Text>
       <Text>Choose a provider to get started:</Text>
       <Box flexDirection="column" marginLeft={2}>
         {providers.map((p, i) => (
           <Text key={p.id}>
-            {i === selected ? <Text color="cyan">❯ </Text> : <Text> </Text>}
+            {i === selected ? <Text color={colors.accentAlt}>❯ </Text> : <Text> </Text>}
             <Text bold={i === selected}>{p.name}</Text>
             <Text dimColor>
               {p.method === "device_code" ? " (sign in with browser)" : ` (${p.envVar})`}
@@ -121,7 +122,7 @@ const ProviderPicker: FC<{
         ))}
       </Box>
       {error && (
-        <Text color="red" bold>
+        <Text color={colors.error} bold>
           {error}
         </Text>
       )}
@@ -151,7 +152,7 @@ const ApiKeyInput: FC<{
 
   return (
     <Box flexDirection="column" padding={1} gap={1}>
-      <Text bold color="yellow">
+      <Text bold color={colors.warning}>
         ✦ {provider.providerName} — Enter API Key
       </Text>
       <Box>
@@ -159,7 +160,7 @@ const ApiKeyInput: FC<{
         <StableTextInput value={value} onChange={setValue} onSubmit={handleSubmit} mask="*" />
       </Box>
       {error && (
-        <Text color="red" bold>
+        <Text color={colors.error} bold>
           {error}
         </Text>
       )}

@@ -1,6 +1,7 @@
 import React, { type FC } from "react";
 import { Box, Text, useInput } from "ink";
 import type { ConfirmRequest } from "../sdk/protocol.js";
+import { colors } from "../lib/palette.js";
 
 export interface ConfirmDialogProps {
   request: ConfirmRequest;
@@ -27,8 +28,8 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({ request, onResolve }) =>
   });
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="magenta" paddingX={2} paddingY={1}>
-      <Text bold color="magenta">
+    <Box flexDirection="column" borderStyle="round" borderColor={colors.accent} paddingX={2} paddingY={1}>
+      <Text bold color={colors.accent}>
         {request.title}
       </Text>
       <Text>{request.message}</Text>
@@ -37,7 +38,7 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({ request, onResolve }) =>
           <Text
             key={action}
             bold={i === selected}
-            color={i === selected ? "magenta" : undefined}
+            color={i === selected ? colors.accent : undefined}
             inverse={i === selected}
           >
             {" "}

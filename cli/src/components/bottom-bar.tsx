@@ -3,6 +3,7 @@ import { Box, Text, useStdout } from "ink";
 import { StableTextInput } from "./stable-text-input.js";
 import type { OpalActions, OpalState } from "../hooks/use-opal.js";
 import { formatTokens } from "../lib/formatting.js";
+import { colors } from "../lib/palette.js";
 
 export interface BottomBarProps {
   state: OpalState;
@@ -63,17 +64,17 @@ export const BottomBar: FC<BottomBarProps> = memo(
         : null;
     const ctxColor = tokenDisplay
       ? tokenDisplay.pct >= 80
-        ? "red"
+        ? colors.error
         : tokenDisplay.pct >= 60
-          ? "yellow"
-          : "green"
+          ? colors.warning
+          : colors.success
       : undefined;
 
     return (
       <Box flexDirection="column">
         <Text dimColor>{"─".repeat(width)}</Text>
         <Box paddingX={1}>
-          <Text color="magenta" bold>
+          <Text color={colors.accent} bold>
             ❯{" "}
           </Text>
           <StableTextInput
@@ -87,7 +88,7 @@ export const BottomBar: FC<BottomBarProps> = memo(
         <Box paddingX={1} justifyContent="space-between">
           <Box gap={1}>
             <Text dimColor>
-              <Text color="magenta" bold>
+              <Text color={colors.accent} bold>
                 /
               </Text>
               help
