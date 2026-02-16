@@ -101,6 +101,8 @@ depends = ["deps:*"]
 [tasks.dev]
 description = "Build and launch the CLI"
 depends = ["build"]
+sources = []
+outputs = []
 run = "node cli/dist/bin.js --expose opal#opal"
 
 [tasks.inspect]
