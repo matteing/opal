@@ -5,6 +5,35 @@ defmodule Opal.Provider do
   Each provider must implement streaming, SSE event parsing, and conversion
   of internal message/tool representations to the provider's wire format.
 
+  ## Using the macro
+
+  The simplest way to define a provider is with `use Opal.Provider`:
+
+      defmodule MyProvider.Anthropic do
+        use Opal.Provider,
+          name: :anthropic,
+          models: ["claude-sonnet-4", "claude-opus-4"]
+
+        @impl true
+        def stream(model, messages, tools, opts) do
+          # Provider-specific streaming implementation
+        end
+
+        @impl true
+        def parse_stream_event(data) do
+          # Parse SSE data into stream events
+        end
+
+        @impl true
+        def convert_messages(model, messages) do
+          # Convert to provider wire format
+        end
+      end
+
+  The macro injects `@behaviour Opal.Provider` and provides a default
+  `convert_tools/1` that delegates to the shared OpenAI format. Override
+  it for provider-specific tool formats.
+
   ## Built-in Providers
 
     * `Opal.Provider.Copilot` — GitHub Copilot via its proprietary API
@@ -83,5 +112,26 @@ defmodule Opal.Provider do
         }
       }
     end)
+  end
+
+  @doc false
+  defmacro __using__(opts) do
+    quote bind_quoted: [opts: opts] do
+      @behaviour Opal.Provider
+
+      @opal_provider_name Keyword.get(opts, :name)
+      @opal_provider_models Keyword.get(opts, :models, [])
+
+      @doc false
+      def __opal_provider_name__, do: @opal_provider_name
+
+      @doc false
+      def __opal_provider_models__, do: @opal_provider_models
+
+      @impl true
+      def convert_tools(tools), do: Opal.Provider.convert_tools(tools)
+
+      defoverridable convert_tools: 1
+    end
   end
 end

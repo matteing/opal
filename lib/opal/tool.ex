@@ -6,7 +6,36 @@ defmodule Opal.Tool do
   available to the agent during a session. Tools are invoked by the
   assistant via tool calls and must return their output as a string.
 
-  ## Implementing a tool
+  ## Using the macro
+
+  The simplest way to define a tool is with `use Opal.Tool`:
+
+      defmodule MyApp.SearchTool do
+        use Opal.Tool,
+          name: "search",
+          description: "Search the codebase"
+
+        @impl true
+        def parameters do
+          %{
+            "type" => "object",
+            "properties" => %{
+              "query" => %{"type" => "string", "description" => "Search query"}
+            },
+            "required" => ["query"]
+          }
+        end
+
+        @impl true
+        def execute(%{"query" => query}, _context) do
+          {:ok, "Results for: \#{query}"}
+        end
+      end
+
+  The `:name` option is optional — if omitted, it is auto-derived from the
+  module name (e.g. `MyApp.SearchTool` → `"search_tool"`).
+
+  ## Implementing the behaviour directly
 
       defmodule MyTool do
         @behaviour Opal.Tool
@@ -69,5 +98,55 @@ defmodule Opal.Tool do
     else
       tool_module.name()
     end
+  end
+
+  @doc false
+  defmacro __using__(opts) do
+    quote bind_quoted: [opts: opts] do
+      @behaviour Opal.Tool
+
+      @opal_tool_name Keyword.get(opts, :name)
+      @opal_tool_description Keyword.get(opts, :description)
+      @opal_tool_group Keyword.get(opts, :group)
+
+      @before_compile Opal.Tool
+
+      @impl true
+      def name do
+        @opal_tool_name ||
+          __MODULE__
+          |> Module.split()
+          |> List.last()
+          |> Macro.underscore()
+      end
+
+      @impl true
+      def description do
+        @opal_tool_description ||
+          raise "#{inspect(__MODULE__)}: :description is required when using `use Opal.Tool`"
+      end
+
+      defoverridable name: 0, description: 0
+    end
+  end
+
+  @doc false
+  defmacro __before_compile__(env) do
+    unless Module.defines?(env.module, {:parameters, 0}) do
+      raise CompileError,
+        file: env.file,
+        line: 0,
+        description:
+          "#{inspect(env.module)} must implement parameters/0 when using `use Opal.Tool`"
+    end
+
+    unless Module.defines?(env.module, {:execute, 2}) do
+      raise CompileError,
+        file: env.file,
+        line: 0,
+        description: "#{inspect(env.module)} must implement execute/2 when using `use Opal.Tool`"
+    end
+
+    :ok
   end
 end

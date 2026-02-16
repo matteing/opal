@@ -274,6 +274,65 @@ defmodule Opal do
     Opal.Agent.configure(agent, attrs)
   end
 
+  @doc """
+  Returns a lazy `Stream` of agent events for a prompt.
+
+  Subscribes to the agent's event bus, sends the prompt, and yields
+  `{event_type, payload}` tuples until the agent finishes (`:agent_end`).
+
+  ## Examples
+
+      {:ok, agent} = Opal.start_session(%{working_dir: "."})
+
+      Opal.stream(agent, "List all files")
+      |> Enum.each(fn
+        {:message_delta, %{delta: text}} -> IO.write(text)
+        {:agent_end, _} -> IO.puts("\\nDone!")
+        _other -> :ok
+      end)
+
+  The stream is lazy — events are received on demand. It terminates
+  automatically when `:agent_end` or `:error` is received.
+  """
+  @spec stream(GenServer.server(), String.t()) :: Enumerable.t()
+  def stream(agent, text) do
+    Stream.resource(
+      fn ->
+        state = Opal.Agent.get_state(agent)
+        session_id = state.session_id
+        Opal.Events.subscribe(session_id)
+        Opal.Agent.prompt(agent, text)
+        session_id
+      end,
+      fn
+        {:done, session_id} ->
+          {:halt, session_id}
+
+        session_id ->
+          receive do
+            {:opal_event, ^session_id, {:agent_end, _} = event} ->
+              {[event], {:done, session_id}}
+
+            {:opal_event, ^session_id, {:agent_end, _, _} = event} ->
+              {[event], {:done, session_id}}
+
+            {:opal_event, ^session_id, {:error, _} = event} ->
+              {[event], {:done, session_id}}
+
+            {:opal_event, ^session_id, event} ->
+              {[event], session_id}
+          after
+            120_000 ->
+              {[{:error, :timeout}], {:done, session_id}}
+          end
+      end,
+      fn
+        {:done, session_id} -> Opal.Events.unsubscribe(session_id)
+        session_id -> Opal.Events.unsubscribe(session_id)
+      end
+    )
+  end
+
   # --- Private Helpers ---
 
   # Finds the SessionServer supervisor that owns the given agent pid.
