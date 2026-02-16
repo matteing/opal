@@ -19,6 +19,9 @@ All examples below assume you're in a connected IEx session.
 Opal.Inspect.sessions()
 # => [{"abc123def456", #PID<0.456.0>}]
 
+# Grab the first session (session_id + pid)
+{sid, pid} = Opal.Inspect.first()
+
 # Get the agent pid (auto-selects if only one session)
 agent = Opal.Inspect.agent()
 
@@ -51,6 +54,12 @@ the LLM sees as the system message.
 ```elixir
 # Print the full assembled system prompt
 Opal.Inspect.system_prompt() |> IO.puts()
+
+# Open in your default editor/viewer as a temp .md file
+Opal.Inspect.system_prompt(file: true)
+
+# Write to a specific path
+Opal.Inspect.system_prompt(file: "~/prompt.md")
 
 # Just the raw system_prompt field (before context/skills/guidelines)
 Opal.Inspect.state().system_prompt |> IO.puts()
