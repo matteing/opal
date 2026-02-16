@@ -46,8 +46,30 @@ defmodule Opal.Inspect do
   end
 
   @doc """
+  Returns `{session_id, pid}` for the first active session found.
+
+  Shorthand for quickly grabbing a session in IEx without caring
+  which one:
+
+      {sid, pid} = Opal.Inspect.first()
+      Opal.Inspect.state(sid)
+
+  ## Examples
+
+      iex> Opal.Inspect.first()
+      {"abc123def456", #PID<0.456.0>}
+  """
+  @spec first() :: {String.t(), pid()}
+  def first do
+    case sessions() do
+      [{_id, _pid} = entry | _] -> entry
+      [] -> raise "No active sessions. Start an Opal session first."
+    end
+  end
+
+  @doc """
   Returns the agent pid for the given session ID, or auto-selects
-  the best candidate when no ID is given.
+  the first session when no ID is given.
 
   When multiple sessions exist, picks the first one found and prints
   which session was chosen. Use `sessions/0` to list all and pass an
@@ -217,7 +239,7 @@ defmodule Opal.Inspect do
       model: "#{s.model.provider}:#{s.model.id}",
       provider: s.provider,
       messages: length(s.messages),
-      tools: length(s.tools),
+      tools: length(s.tool_registry),
       active_skills: s.active_skills,
       available_skills: Enum.map(s.available_skills, & &1.name),
       context_files: s.context_files,
