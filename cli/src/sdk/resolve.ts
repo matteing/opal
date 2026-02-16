@@ -13,20 +13,17 @@ const PLATFORM_MAP: Record<string, string> = {
 };
 
 export interface ServerResolution {
-  /** Command to spawn (binary path, or "mix"/"elixir") */
+  /** Command to spawn (binary path) */
   command: string;
   /** Arguments to pass to the command */
   args: string[];
-  /** Working directory to spawn in (for dev mode) */
-  cwd?: string;
 }
 
 /**
- * Resolve the opal-server binary or dev command.
+ * Resolve the opal-server binary.
  *
- * 1. `opal-server` in PATH (user-installed)
- * 2. Bundled binary in `releases/` (npm distribution)
- * 3. Monorepo dev mode: `elixir --erl "-noinput" -S mix run --no-halt` in `core/`
+ * 1. `opal-server` in PATH (user-installed or dev build)
+ * 2. Bundled platform binary in `releases/` (npm distribution)
  */
 export function resolveServer(): ServerResolution {
   // 1. Check PATH
@@ -54,35 +51,11 @@ export function resolveServer(): ServerResolution {
     }
   }
 
-  // 3. Monorepo dev mode — look for ../core/mix.exs relative to package root
-  const pkgRoot = resolve(fileURLToPath(import.meta.url), "../../..");
-  const coreDir = resolve(pkgRoot, "../core");
-  const coreMix = join(coreDir, "mix.exs");
-  if (existsSync(coreMix)) {
-    return {
-      command: "elixir",
-      args: [
-        "--sname",
-        "opal",
-        "--cookie",
-        "opal",
-        "--erl",
-        "-noinput",
-        "-S",
-        "mix",
-        "run",
-        "--no-halt",
-      ],
-      cwd: coreDir,
-    };
-  }
-
   const tried = [
     `  1. opal-server in PATH`,
     name
       ? `  2. ${join(resolve(fileURLToPath(import.meta.url), "../../releases"), name)}`
       : `  2. (unsupported platform: ${key})`,
-    `  3. ${coreMix} (monorepo dev mode)`,
   ];
 
   throw new Error(

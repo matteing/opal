@@ -82,18 +82,6 @@ describe("resolveServer", () => {
     expect(result.command).toContain("opal_server_darwin_arm64");
   });
 
-  it("falls back to monorepo dev mode", async () => {
-    vi.mocked(existsSync).mockImplementation((path) => {
-      return String(path).endsWith("mix.exs");
-    });
-
-    const resolveServer = await getResolveServer();
-    const result = resolveServer();
-    expect(result.command).toBe("elixir");
-    expect(result.args).toContain("mix");
-    expect(result.cwd).toContain("core");
-  });
-
   it("throws when nothing found", async () => {
     const resolveServer = await getResolveServer();
     expect(() => resolveServer()).toThrow("opal-server not found");

@@ -33,10 +33,10 @@ describe("toRootRelativePath", () => {
     expect(toRootRelativePath(file, root)).toBe("AGENTS.md");
   });
 
-  it("keeps absolute path when file is outside root", () => {
+  it("uses relative path when file is outside root", () => {
     const root = path.resolve("repo-root");
     const outside = path.resolve("outside", "AGENTS.md");
-    expect(toRootRelativePath(outside, root)).toBe(outside);
+    expect(toRootRelativePath(outside, root)).toBe("../outside/AGENTS.md");
   });
 
   it("keeps relative paths unchanged", () => {

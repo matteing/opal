@@ -95,5 +95,8 @@ depends = ["deps:*"]
 [tasks.dev]
 description = "Build and launch the CLI"
 depends = ["build"]
-dir = "cli"
-run = "node dist/bin.js"
+run = "node cli/dist/bin.js"
+
+[tasks.server]
+description = "Start opal-server with Erlang distribution"
+run = "elixir --sname opal -S mix run --no-halt"

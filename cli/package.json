@@ -24,6 +24,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "start": "node dist/bin.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",

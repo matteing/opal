@@ -20,7 +20,7 @@ export function toRootRelativePath(filePath: string, rootDir?: string): string {
   const resolvedRoot = path.resolve(rootDir);
   const relative = path.relative(resolvedRoot, path.resolve(filePath));
 
-  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (!relative || path.isAbsolute(relative)) {
     return filePath;
   }
 
