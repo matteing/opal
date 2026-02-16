@@ -277,6 +277,36 @@ defmodule Opal.Inspect do
     }
   end
 
+  # ── Agent Actions ──────────────────────────────────────────────────
+
+  @doc """
+  Sends a prompt to the agent from IEx.
+
+  ## Examples
+
+      iex> prompt("List all files")
+      :ok
+  """
+  @spec prompt(String.t()) :: :ok
+  def prompt(text), do: Opal.Agent.prompt(agent(), text)
+
+  @spec prompt(String.t(), String.t()) :: :ok
+  def prompt(session_id, text), do: Opal.Agent.prompt(agent(session_id), text)
+
+  @doc """
+  Aborts the currently running agent turn.
+
+  ## Examples
+
+      iex> abort()
+      :ok
+  """
+  @spec abort() :: :ok
+  def abort, do: Opal.Agent.abort(agent())
+
+  @spec abort(String.t()) :: :ok
+  def abort(session_id), do: Opal.Agent.abort(agent(session_id))
+
   # ── Live Event Watching ────────────────────────────────────────────
 
   @doc """
