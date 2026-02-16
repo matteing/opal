@@ -239,7 +239,7 @@ defmodule Opal.Inspect do
       model: "#{s.model.provider}:#{s.model.id}",
       provider: s.provider,
       messages: length(s.messages),
-      tools: length(s.tool_registry),
+      tools: length(s.tools),
       active_skills: s.active_skills,
       available_skills: Enum.map(s.available_skills, & &1.name),
       context_files: s.context_files,
