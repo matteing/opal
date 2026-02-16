@@ -171,7 +171,7 @@ defmodule Opal.Agent.Stream do
   end
 
   def handle_stream_event({:usage, usage}, state) do
-    Opal.Agent.Compaction.update_usage(usage, state)
+    Opal.Agent.UsageTracker.update_usage(usage, state)
   end
 
   def handle_stream_event({:response_done, info}, state) do

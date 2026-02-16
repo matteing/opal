@@ -9,7 +9,7 @@ defmodule Opal.IntegrationTest do
 
   alias Opal.Agent
   alias Opal.Events
-  alias Opal.Model
+  alias Opal.Provider.Model
   alias Opal.Test.FixtureHelper
 
   # Provider that loads fixtures and delegates parsing to the real Copilot parser

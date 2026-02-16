@@ -7,7 +7,7 @@ defmodule Opal.Agent.RecoveryTest do
 
   alias Opal.Agent
   alias Opal.Events
-  alias Opal.Model
+  alias Opal.Provider.Model
   alias Opal.Message
   alias Opal.Test.FixtureHelper
 

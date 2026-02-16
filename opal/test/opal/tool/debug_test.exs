@@ -15,7 +15,7 @@ defmodule Opal.Tool.DebugTest do
       state =
         %State{
           session_id: session_id,
-          model: Opal.Model.coerce({:copilot, "claude-sonnet-4"}),
+          model: Opal.Provider.Model.coerce({:copilot, "claude-sonnet-4"}),
           working_dir: File.cwd!(),
           config: Opal.Config.new(%{features: %{debug: %{enabled: true}}}),
           tools: [Opal.Tool.Read, Opal.Tool.Debug],
@@ -48,7 +48,7 @@ defmodule Opal.Tool.DebugTest do
       state =
         %State{
           session_id: session_id,
-          model: Opal.Model.coerce({:copilot, "claude-sonnet-4"}),
+          model: Opal.Provider.Model.coerce({:copilot, "claude-sonnet-4"}),
           working_dir: File.cwd!(),
           config: Opal.Config.new(%{features: %{debug: %{enabled: false}}})
         }
@@ -79,7 +79,7 @@ defmodule Opal.Tool.DebugTest do
       state =
         %State{
           session_id: session_id,
-          model: Opal.Model.coerce({:copilot, "claude-sonnet-4"}),
+          model: Opal.Provider.Model.coerce({:copilot, "claude-sonnet-4"}),
           working_dir: File.cwd!(),
           config: Opal.Config.new(%{features: %{debug: %{enabled: true}}}),
           tools: [Opal.Tool.Read],
@@ -103,7 +103,7 @@ defmodule Opal.Tool.DebugTest do
       state =
         %State{
           session_id: session_id,
-          model: Opal.Model.coerce({:copilot, "claude-sonnet-4"}),
+          model: Opal.Provider.Model.coerce({:copilot, "claude-sonnet-4"}),
           working_dir: File.cwd!(),
           config: Opal.Config.new(%{features: %{debug: %{enabled: true}}}),
           tools: [],

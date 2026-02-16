@@ -315,7 +315,7 @@ defmodule Opal.Session.Compaction do
   Used internally by compaction and externally by `BranchSummary`.
   Returns `{:ok, text}` or `{:error, reason}`.
   """
-  @spec summarize_with_provider(module(), Opal.Model.t(), String.t()) ::
+  @spec summarize_with_provider(module(), Opal.Provider.Model.t(), String.t()) ::
           {:ok, String.t()} | {:error, term()}
   def summarize_with_provider(provider, model, prompt) do
     # The system prompt explicitly forbids continuation — models are less

@@ -37,7 +37,7 @@ defmodule Opal.MCPFailureTest do
       {:ok, pid} =
         Opal.Agent.start_link(
           session_id: session_id,
-          model: Opal.Model.new(:test, "test"),
+          model: Opal.Provider.Model.new(:test, "test"),
           working_dir: System.tmp_dir!(),
           system_prompt: "Test",
           tools: [],

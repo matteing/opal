@@ -1,4 +1,4 @@
-defmodule Opal.Models do
+defmodule Opal.Provider.Registry do
   @moduledoc """
   Model discovery backed by LLMDB.
 
@@ -76,13 +76,13 @@ defmodule Opal.Models do
 
   ## Examples
 
-      iex> Opal.Models.context_window(%Opal.Model{provider: :copilot, id: "claude-opus-4.6"})
+      iex> Opal.Provider.Registry.context_window(%Opal.Provider.Model{provider: :copilot, id: "claude-opus-4.6"})
       128_000
 
-      iex> Opal.Models.context_window(%Opal.Model{provider: :anthropic, id: "claude-sonnet-4-5"})
+      iex> Opal.Provider.Registry.context_window(%Opal.Provider.Model{provider: :anthropic, id: "claude-sonnet-4-5"})
       200_000
   """
-  @spec context_window(Opal.Model.t()) :: pos_integer()
+  @spec context_window(Opal.Provider.Model.t()) :: pos_integer()
   def context_window(%{provider: provider, id: id}) do
     llmdb_provider = if provider == :copilot, do: :github_copilot, else: provider
 
@@ -102,7 +102,7 @@ defmodule Opal.Models do
   Returns `{:ok, model}` with full LLMDB model data, or `{:error, :not_found}`.
   Useful for checking aliases, capabilities, and other metadata.
   """
-  @spec resolve(Opal.Model.t()) :: {:ok, LLMDB.Model.t()} | {:error, :not_found}
+  @spec resolve(Opal.Provider.Model.t()) :: {:ok, LLMDB.Model.t()} | {:error, :not_found}
   def resolve(%{provider: provider, id: id}) do
     llmdb_provider = if provider == :copilot, do: :github_copilot, else: provider
 

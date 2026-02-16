@@ -2,7 +2,7 @@ defmodule Opal.SubAgentTest do
   use ExUnit.Case, async: false
 
   alias Opal.Agent
-  alias Opal.Model
+  alias Opal.Provider.Model
   alias Opal.SubAgent
 
   # Reuse the TestProvider from AgentTest

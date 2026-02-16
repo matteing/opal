@@ -69,7 +69,7 @@ defmodule Opal.Provider do
       directly, bypassing SSE parsing.
   """
   @callback stream(
-              model :: Opal.Model.t(),
+              model :: Opal.Provider.Model.t(),
               messages :: [Opal.Message.t()],
               tools :: [module()],
               opts :: keyword()
@@ -85,7 +85,8 @@ defmodule Opal.Provider do
   @doc """
   Converts internal `Opal.Message` structs to the provider's wire format.
   """
-  @callback convert_messages(model :: Opal.Model.t(), messages :: [Opal.Message.t()]) :: [map()]
+  @callback convert_messages(model :: Opal.Provider.Model.t(), messages :: [Opal.Message.t()]) ::
+              [map()]
 
   @doc """
   Converts tool modules implementing `Opal.Tool` to the provider's wire format.

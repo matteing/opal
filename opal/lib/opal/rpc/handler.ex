@@ -214,7 +214,7 @@ defmodule Opal.RPC.Handler do
             case parse_provider_name(p) do
               {:ok, provider} ->
                 models =
-                  Opal.Models.list_provider(provider)
+                  Opal.Provider.Registry.list_provider(provider)
                   |> Enum.map(fn m -> Map.put(m, :provider, p) end)
 
                 {:cont, {:ok, acc ++ models}}
@@ -241,7 +241,7 @@ defmodule Opal.RPC.Handler do
   def handle("model/set", %{"session_id" => sid, "model_id" => model_id} = params) do
     with {:ok, agent} <- find_agent_by_session_id(sid) do
       thinking_level = parse_thinking_level(params["thinking_level"])
-      model = Opal.Model.coerce(model_id, thinking_level: thinking_level)
+      model = Opal.Provider.Model.coerce(model_id, thinking_level: thinking_level)
 
       Opal.set_model(agent, model)
 

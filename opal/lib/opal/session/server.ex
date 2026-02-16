@@ -27,7 +27,7 @@ defmodule Opal.SessionServer do
   ## Required Options
 
     * `:session_id` — unique session identifier
-    * `:model` — `Opal.Model.t()` struct
+    * `:model` — `Opal.Provider.Model.t()` struct
     * `:working_dir` — base directory for tool execution
 
   ## Optional Options

@@ -33,12 +33,15 @@ defmodule Opal.Session.Builder do
     case Map.get(config, :model) do
       nil ->
         case Opal.Settings.get("default_model") do
-          saved when is_binary(saved) and saved != "" -> Opal.Model.coerce(saved, model_opts)
-          _ -> Opal.Model.coerce(cfg.default_model, model_opts)
+          saved when is_binary(saved) and saved != "" ->
+            Opal.Provider.Model.coerce(saved, model_opts)
+
+          _ ->
+            Opal.Provider.Model.coerce(cfg.default_model, model_opts)
         end
 
       spec ->
-        Opal.Model.coerce(spec, model_opts)
+        Opal.Provider.Model.coerce(spec, model_opts)
     end
   end
 
@@ -58,7 +61,7 @@ defmodule Opal.Session.Builder do
         if cfg.provider != Opal.Provider.Copilot do
           cfg.provider
         else
-          Opal.Model.provider_module(model)
+          Opal.Provider.Model.provider_module(model)
         end
     end
   end

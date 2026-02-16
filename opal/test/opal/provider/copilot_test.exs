@@ -3,7 +3,7 @@ defmodule Opal.Provider.CopilotTest do
 
   alias Opal.Provider.Copilot
   alias Opal.Message
-  alias Opal.Model
+  alias Opal.Provider.Model
 
   # --- Helpers ---
 

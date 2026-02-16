@@ -7,7 +7,7 @@ defmodule Opal.Agent.StateMachineTest do
 
   alias Opal.Agent
   alias Opal.Events
-  alias Opal.Model
+  alias Opal.Provider.Model
   alias Opal.Test.FixtureHelper
 
   defmodule FastProvider do

@@ -3,7 +3,7 @@ defmodule Opal.Agent.ToolRunnerTest do
 
   alias Opal.Agent.ToolRunner
   alias Opal.Agent.State
-  alias Opal.Model
+  alias Opal.Provider.Model
 
   defmodule SuccessTool do
     @behaviour Opal.Tool

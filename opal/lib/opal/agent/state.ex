@@ -7,7 +7,7 @@ defmodule Opal.Agent.State do
           session_id: String.t(),
           system_prompt: String.t(),
           messages: [Opal.Message.t()],
-          model: Opal.Model.t(),
+          model: Opal.Provider.Model.t(),
           tools: [module()],
           disabled_tools: [String.t()],
           working_dir: String.t(),
@@ -99,4 +99,10 @@ defmodule Opal.Agent.State do
     tool_results: [],
     tool_context: nil
   ]
+
+  @valid_states [:idle, :running, :streaming, :executing_tools]
+
+  @doc "Maps the status field to a valid gen_statem state name."
+  @spec state_name(t()) :: :idle | :running | :streaming | :executing_tools
+  def state_name(%__MODULE__{status: status}) when status in @valid_states, do: status
 end

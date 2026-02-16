@@ -1,4 +1,4 @@
-defmodule Opal.Model do
+defmodule Opal.Provider.Model do
   @moduledoc """
   Model configuration for an agent session.
 
@@ -7,10 +7,10 @@ defmodule Opal.Model do
 
   ## Examples
 
-      Opal.Model.new(:copilot, "claude-sonnet-4-5")
-      Opal.Model.new(:anthropic, "claude-sonnet-4-5", thinking_level: :high)
-      Opal.Model.parse("anthropic:claude-sonnet-4-5")
-      Opal.Model.coerce({:openai, "gpt-4o"})
+      Opal.Provider.Model.new(:copilot, "claude-sonnet-4-5")
+      Opal.Provider.Model.new(:anthropic, "claude-sonnet-4-5", thinking_level: :high)
+      Opal.Provider.Model.parse("anthropic:claude-sonnet-4-5")
+      Opal.Provider.Model.coerce({:openai, "gpt-4o"})
   """
 
   @type thinking_level :: :off | :low | :medium | :high | :max
@@ -39,8 +39,8 @@ defmodule Opal.Model do
 
   ## Examples
 
-      iex> Opal.Model.new(:copilot, "claude-sonnet-4-5")
-      %Opal.Model{provider: :copilot, id: "claude-sonnet-4-5", thinking_level: :off}
+      iex> Opal.Provider.Model.new(:copilot, "claude-sonnet-4-5")
+      %Opal.Provider.Model{provider: :copilot, id: "claude-sonnet-4-5", thinking_level: :off}
   """
   @spec new(atom(), String.t(), keyword()) :: t()
   def new(provider, id, opts \\ [])
@@ -59,11 +59,11 @@ defmodule Opal.Model do
 
   ## Examples
 
-      iex> Opal.Model.parse("anthropic:claude-sonnet-4-5")
-      %Opal.Model{provider: :anthropic, id: "claude-sonnet-4-5", thinking_level: :off}
+      iex> Opal.Provider.Model.parse("anthropic:claude-sonnet-4-5")
+      %Opal.Provider.Model{provider: :anthropic, id: "claude-sonnet-4-5", thinking_level: :off}
 
-      iex> Opal.Model.parse("claude-sonnet-4-5")
-      %Opal.Model{provider: :copilot, id: "claude-sonnet-4-5", thinking_level: :off}
+      iex> Opal.Provider.Model.parse("claude-sonnet-4-5")
+      %Opal.Provider.Model{provider: :copilot, id: "claude-sonnet-4-5", thinking_level: :off}
   """
   @spec parse(String.t(), keyword()) :: t()
   def parse(spec, opts \\ []) when is_binary(spec) do
@@ -81,25 +81,25 @@ defmodule Opal.Model do
   # -------------------------------------------------------------------
 
   @doc """
-  Normalizes any model spec into an `%Opal.Model{}`.
+  Normalizes any model spec into an `%Opal.Provider.Model{}`.
 
   Accepted inputs:
 
-    * `%Opal.Model{}` — returned as-is
+    * `%Opal.Provider.Model{}` — returned as-is
     * `"provider:model_id"` or bare `"model_id"` — parsed via `parse/2`
     * `{provider, model_id}` tuple — provider may be atom or string
 
   ## Examples
 
-      iex> Opal.Model.coerce("anthropic:claude-sonnet-4-5")
-      %Opal.Model{provider: :anthropic, id: "claude-sonnet-4-5", thinking_level: :off}
+      iex> Opal.Provider.Model.coerce("anthropic:claude-sonnet-4-5")
+      %Opal.Provider.Model{provider: :anthropic, id: "claude-sonnet-4-5", thinking_level: :off}
 
-      iex> Opal.Model.coerce({:openai, "gpt-4o"})
-      %Opal.Model{provider: :openai, id: "gpt-4o", thinking_level: :off}
+      iex> Opal.Provider.Model.coerce({:openai, "gpt-4o"})
+      %Opal.Provider.Model{provider: :openai, id: "gpt-4o", thinking_level: :off}
 
-      iex> model = Opal.Model.new(:copilot, "gpt-5")
-      iex> Opal.Model.coerce(model)
-      %Opal.Model{provider: :copilot, id: "gpt-5", thinking_level: :off}
+      iex> model = Opal.Provider.Model.new(:copilot, "gpt-5")
+      iex> Opal.Provider.Model.coerce(model)
+      %Opal.Provider.Model{provider: :copilot, id: "gpt-5", thinking_level: :off}
   """
   @spec coerce(t() | String.t() | {atom() | String.t(), String.t()}, keyword()) :: t()
   def coerce(spec, opts \\ [])
@@ -123,10 +123,10 @@ defmodule Opal.Model do
 
   ## Examples
 
-      iex> Opal.Model.new(:copilot, "gpt-5") |> Opal.Model.provider_module()
+      iex> Opal.Provider.Model.new(:copilot, "gpt-5") |> Opal.Provider.Model.provider_module()
       Opal.Provider.Copilot
 
-      iex> Opal.Model.new(:anthropic, "claude-sonnet-4-5") |> Opal.Model.provider_module()
+      iex> Opal.Provider.Model.new(:anthropic, "claude-sonnet-4-5") |> Opal.Provider.Model.provider_module()
       Opal.Provider.LLM
   """
   @spec provider_module(t()) :: module()
@@ -138,7 +138,7 @@ defmodule Opal.Model do
 
   ## Examples
 
-      iex> Opal.Model.new(:anthropic, "claude-sonnet-4-5") |> Opal.Model.to_req_llm_spec()
+      iex> Opal.Provider.Model.new(:anthropic, "claude-sonnet-4-5") |> Opal.Provider.Model.to_req_llm_spec()
       "anthropic:claude-sonnet-4-5"
   """
   @spec to_req_llm_spec(t()) :: String.t()

@@ -118,7 +118,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
     def convert_tools(tools), do: tools
   end
 
-  @model %Opal.Model{provider: :test, id: "test-model"}
+  @model %Opal.Provider.Model{provider: :test, id: "test-model"}
 
   setup do
     {:ok, session} =
@@ -895,7 +895,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
       {:ok, pid} =
         Opal.Agent.start_link(
           session_id: session_id,
-          model: Opal.Model.new(:test, "test-model"),
+          model: Opal.Provider.Model.new(:test, "test-model"),
           working_dir: System.tmp_dir!(),
           system_prompt: "",
           tools: [],
@@ -965,7 +965,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
       {:ok, pid} =
         Opal.Agent.start_link(
           session_id: session_id,
-          model: Opal.Model.new(:test, "test-model"),
+          model: Opal.Provider.Model.new(:test, "test-model"),
           working_dir: System.tmp_dir!(),
           system_prompt: "",
           tools: [],
@@ -1093,7 +1093,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
       :ok = Session.append(session, Message.assistant("All 15 tests passed."))
 
       # Compact against real API
-      model = Opal.Model.new(:copilot, "claude-sonnet-4")
+      model = Opal.Provider.Model.new(:copilot, "claude-sonnet-4")
 
       :ok =
         Compaction.compact(session,
@@ -1119,7 +1119,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
 
     @tag timeout: 30_000
     test "live iterative compaction produces coherent updates", %{session: session} do
-      model = Opal.Model.new(:copilot, "claude-sonnet-4")
+      model = Opal.Provider.Model.new(:copilot, "claude-sonnet-4")
 
       # Cycle 1
       :ok = Session.append(session, Message.user("Create a JSON API for user CRUD"))
@@ -1272,7 +1272,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
       path_msgs = Session.get_path(session)
       prompt = Compaction.serialize_conversation(path_msgs)
 
-      model = Opal.Model.new(:copilot, "claude-sonnet-4")
+      model = Opal.Provider.Model.new(:copilot, "claude-sonnet-4")
 
       # Use a local recording provider
       recording_pid = start_recording_provider()

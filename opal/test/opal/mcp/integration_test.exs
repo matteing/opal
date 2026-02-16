@@ -42,7 +42,7 @@ defmodule Opal.MCP.IntegrationTest do
       {:ok, session_server} =
         Opal.SessionServer.start_link(
           session_id: "mcp_test_#{:rand.uniform(100_000)}",
-          model: Opal.Model.new(:copilot, "test-model"),
+          model: Opal.Provider.Model.new(:copilot, "test-model"),
           working_dir: dir,
           tools: [],
           provider: NoopProvider,
@@ -79,7 +79,7 @@ defmodule Opal.MCP.IntegrationTest do
       {:ok, session_server} =
         Opal.SessionServer.start_link(
           session_id: session_id,
-          model: Opal.Model.new(:copilot, "test-model"),
+          model: Opal.Provider.Model.new(:copilot, "test-model"),
           working_dir: dir,
           tools: [],
           provider: NoopProvider,
@@ -109,7 +109,7 @@ defmodule Opal.MCP.IntegrationTest do
       {:ok, session_server} =
         Opal.SessionServer.start_link(
           session_id: session_id,
-          model: Opal.Model.new(:copilot, "test-model"),
+          model: Opal.Provider.Model.new(:copilot, "test-model"),
           working_dir: dir,
           tools: [],
           provider: NoopProvider,
@@ -153,7 +153,7 @@ defmodule Opal.MCP.IntegrationTest do
       {:ok, session_server} =
         Opal.SessionServer.start_link(
           session_id: session_id,
-          model: Opal.Model.new(:copilot, "test-model"),
+          model: Opal.Provider.Model.new(:copilot, "test-model"),
           working_dir: dir,
           tools: [],
           provider: NoopProvider,

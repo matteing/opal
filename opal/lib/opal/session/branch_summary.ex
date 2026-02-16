@@ -33,7 +33,7 @@ defmodule Opal.Session.BranchSummary do
   ## Options
 
     * `:provider` — LLM provider module (e.g. `Opal.Provider.Copilot`)
-    * `:model` — `%Opal.Model{}` for summarization calls
+    * `:model` — `%Opal.Provider.Model{}` for summarization calls
     * `:strategy` — set to `:skip` to disable summarization
   """
   @spec summarize_abandoned(

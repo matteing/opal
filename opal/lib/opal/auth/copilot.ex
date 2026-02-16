@@ -250,12 +250,12 @@ defmodule Opal.Auth.Copilot do
   @doc """
   Returns the list of models available via GitHub Copilot.
 
-  Auto-discovered from LLMDB's `github_copilot` provider. See `Opal.Models`
+  Auto-discovered from LLMDB's `github_copilot` provider. See `Opal.Provider.Registry`
   for details on model discovery and Copilot naming quirks.
   """
   @spec list_models() :: [map()]
   def list_models do
-    Opal.Models.list_copilot()
+    Opal.Provider.Registry.list_copilot()
   end
 
   defp token_path do

@@ -3,7 +3,7 @@ defmodule Opal.Provider.LLMTest do
 
   alias Opal.Provider.LLM
   alias Opal.Message
-  alias Opal.Model
+  alias Opal.Provider.Model
 
   # --- Test Tool Module ---
 

@@ -3,7 +3,7 @@ defmodule Opal.Agent.StreamTest do
 
   alias Opal.Agent.State
   alias Opal.Agent.Stream
-  alias Opal.Model
+  alias Opal.Provider.Model
 
   defp base_state do
     %State{

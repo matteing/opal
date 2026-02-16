@@ -64,7 +64,7 @@ defmodule Opal.SubAgent do
     model =
       case Map.get(overrides, :model) do
         nil -> parent_state.model
-        spec -> Opal.Model.coerce(spec)
+        spec -> Opal.Provider.Model.coerce(spec)
       end
 
     # Auto-select provider: explicit override wins.
@@ -84,7 +84,7 @@ defmodule Opal.SubAgent do
               parent_state.provider
 
             true ->
-              Opal.Model.provider_module(model)
+              Opal.Provider.Model.provider_module(model)
           end
       end
 

@@ -101,7 +101,7 @@ defmodule Opal.Session.CompactionTest do
     def convert_tools(tools), do: tools
   end
 
-  @model %Opal.Model{provider: :test, id: "test-model"}
+  @model %Opal.Provider.Model{provider: :test, id: "test-model"}
 
   setup do
     {:ok, session} =

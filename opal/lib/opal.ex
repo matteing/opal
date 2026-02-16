@@ -29,7 +29,7 @@ defmodule Opal do
 
   ## Config Keys
 
-    * `:model` — model specification. Accepts any form that `Opal.Model.coerce/2` supports:
+    * `:model` — model specification. Accepts any form that `Opal.Provider.Model.coerce/2` supports:
       * A `{provider, model_id}` tuple (e.g. `{:anthropic, "claude-sonnet-4-5"}`)
       * A `"provider:model_id"` string (e.g. `"anthropic:claude-sonnet-4-5"`)
       * A bare model ID string defaults to Copilot (e.g. `"claude-sonnet-4-5"`)
@@ -149,11 +149,11 @@ defmodule Opal do
   The provider is automatically updated based on the model's provider atom:
   `:copilot` uses `Opal.Provider.Copilot`, all others use `Opal.Provider.LLM`.
 
-  Accepts any model specification that `Opal.Model.coerce/2` supports:
+  Accepts any model specification that `Opal.Provider.Model.coerce/2` supports:
 
     * A `"provider:model_id"` string (e.g. `"anthropic:claude-sonnet-4-5"`)
     * A `{provider, model_id}` tuple (e.g. `{:copilot, "gpt-5"}`)
-    * An `%Opal.Model{}` struct
+    * An `%Opal.Provider.Model{}` struct
 
   ## Examples
 
@@ -161,10 +161,11 @@ defmodule Opal do
       Opal.set_model(agent, "anthropic:claude-sonnet-4-5")
       Opal.set_model(agent, "anthropic:claude-sonnet-4-5", thinking_level: :high)
   """
-  @spec set_model(pid(), Opal.Model.t() | String.t() | {atom(), String.t()}, keyword()) :: :ok
+  @spec set_model(pid(), Opal.Provider.Model.t() | String.t() | {atom(), String.t()}, keyword()) ::
+          :ok
   def set_model(agent, model_spec, opts \\ []) do
-    model = Opal.Model.coerce(model_spec, opts)
-    provider_module = Opal.Model.provider_module(model)
+    model = Opal.Provider.Model.coerce(model_spec, opts)
+    provider_module = Opal.Provider.Model.provider_module(model)
 
     Opal.Agent.set_model(agent, model)
     Opal.Agent.set_provider(agent, provider_module)
@@ -204,7 +205,7 @@ defmodule Opal do
     * `:session_id` — unique session identifier
     * `:session_dir` — on-disk path for session persistence
     * `:status` — current agent status (`:idle`, `:running`, etc.)
-    * `:model` — the active `%Opal.Model{}` struct
+    * `:model` — the active `%Opal.Provider.Model{}` struct
     * `:provider` — provider module (e.g. `Opal.Provider.Copilot`)
     * `:session` — session process pid (or `nil`)
     * `:working_dir` — base directory for tool execution

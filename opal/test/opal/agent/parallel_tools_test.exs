@@ -7,7 +7,7 @@ defmodule Opal.Agent.ParallelToolsTest do
 
   alias Opal.Agent
   alias Opal.Events
-  alias Opal.Model
+  alias Opal.Provider.Model
 
   # A tool that sleeps for a configurable duration, proving parallelism by wall-clock time.
   defmodule SlowTool do

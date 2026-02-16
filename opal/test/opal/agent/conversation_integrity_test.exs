@@ -14,7 +14,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
   alias Opal.Agent
   alias Opal.Events
   alias Opal.Message
-  alias Opal.Model
+  alias Opal.Provider.Model
 
   # ── Unit tests for ensure_tool_results ─────────────────────────────
 

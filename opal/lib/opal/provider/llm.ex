@@ -11,10 +11,10 @@ defmodule Opal.Provider.LLM do
 
   ## Model Specification
 
-  Models are specified as `"provider:model_id"` strings via `Opal.Model`:
+  Models are specified as `"provider:model_id"` strings via `Opal.Provider.Model`:
 
-      Opal.Model.new(:anthropic, "claude-sonnet-4-5")
-      Opal.Model.new(:openai, "gpt-4o")
+      Opal.Provider.Model.new(:anthropic, "claude-sonnet-4-5")
+      Opal.Provider.Model.new(:openai, "gpt-4o")
 
   ## API Key Management
 
@@ -36,7 +36,7 @@ defmodule Opal.Provider.LLM do
 
   @impl true
   def stream(model, messages, tools, _opts \\ []) do
-    model_spec = Opal.Model.to_req_llm_spec(model)
+    model_spec = Opal.Provider.Model.to_req_llm_spec(model)
     context = to_req_llm_context(model, messages)
     req_tools = to_req_llm_tools(tools)
 

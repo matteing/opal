@@ -228,7 +228,7 @@ defmodule Opal.Provider.OpenAI do
   Returns `nil` for `:off`. Clamps `:max` to `"high"` since OpenAI
   models don't support a "max" effort level.
   """
-  @spec reasoning_effort(Opal.Model.thinking_level()) :: String.t() | nil
+  @spec reasoning_effort(Opal.Provider.Model.thinking_level()) :: String.t() | nil
   def reasoning_effort(:off), do: nil
   def reasoning_effort(:max), do: "high"
   def reasoning_effort(level), do: to_string(level)

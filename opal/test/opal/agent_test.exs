@@ -4,7 +4,7 @@ defmodule Opal.AgentTest do
   alias Opal.Agent
   alias Opal.Agent.State
   alias Opal.Events
-  alias Opal.Model
+  alias Opal.Provider.Model
 
   # --- Test Provider Module ---
   # Simulates streaming by sending Req-compatible messages to the calling process.

@@ -8,7 +8,7 @@ defmodule Opal.Agent.ConcurrentSignalsTest do
 
   alias Opal.Agent
   alias Opal.Events
-  alias Opal.Model
+  alias Opal.Provider.Model
 
   defmodule SlowProvider do
     @behaviour Opal.Provider

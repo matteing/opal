@@ -11,7 +11,7 @@ defmodule Opal.Agent do
       {:ok, pid} = Opal.Agent.start_link(
         session_id: "session-abc",
         system_prompt: "You are a coding assistant.",
-        model: %Opal.Model{provider: :copilot, id: "claude-sonnet-4-5"},
+        model: %Opal.Provider.Model{provider: :copilot, id: "claude-sonnet-4-5"},
         tools: [Opal.Tool.Read, Opal.Tool.Write],
         working_dir: "/path/to/project"
       )
@@ -36,7 +36,7 @@ defmodule Opal.Agent do
 
     * `:session_id` — unique string identifier for this session (required)
     * `:system_prompt` — the system prompt string (default: `""`)
-    * `:model` — an `Opal.Model.t()` struct (required)
+    * `:model` — an `Opal.Provider.Model.t()` struct (required)
     * `:tools` — list of modules implementing `Opal.Tool` (default: `[]`)
     * `:working_dir` — base directory for tool execution (required)
     * `:provider` — module implementing `Opal.Provider` (default: `Opal.Provider.Copilot`)
@@ -109,8 +109,8 @@ defmodule Opal.Agent do
     :gen_statem.call(agent, :get_context)
   end
 
-  @spec set_model(GenServer.server(), Opal.Model.t()) :: :ok
-  def set_model(agent, %Opal.Model{} = model) do
+  @spec set_model(GenServer.server(), Opal.Provider.Model.t()) :: :ok
+  def set_model(agent, %Opal.Provider.Model{} = model) do
     :gen_statem.call(agent, {:set_model, model})
   end
 
@@ -251,7 +251,7 @@ defmodule Opal.Agent do
         prompt_tokens: 0,
         completion_tokens: 0,
         total_tokens: 0,
-        context_window: Opal.Models.context_window(model),
+        context_window: Opal.Provider.Registry.context_window(model),
         current_context_tokens: 0
       }
     }
@@ -305,8 +305,7 @@ defmodule Opal.Agent do
   defp dispatch_state_event({:call, from}, message, state) do
     case handle_call(message, from, state) do
       {:reply, reply, new_state} ->
-        {:next_state, Opal.Agent.Reducer.state_name(new_state), new_state,
-         [{:reply, from, reply}]}
+        {:next_state, State.state_name(new_state), new_state, [{:reply, from, reply}]}
     end
   end
 
@@ -373,7 +372,7 @@ defmodule Opal.Agent do
     {:reply, build_messages(state), state}
   end
 
-  def handle_call({:set_model, %Opal.Model{} = model}, _from, state) do
+  def handle_call({:set_model, %Opal.Provider.Model{} = model}, _from, state) do
     Logger.debug(
       "Model changed session=#{state.session_id} from=#{state.model.id} to=#{model.id}"
     )
@@ -566,7 +565,7 @@ defmodule Opal.Agent do
   # --- Internal Loop Logic ---
 
   # Look up context window from LLMDB. Falls back to 128k if not found.
-  defp model_context_window(model), do: Opal.Models.context_window(model)
+  defp model_context_window(model), do: Opal.Provider.Registry.context_window(model)
 
   @doc """
   Builds messages for token estimation usage.
@@ -657,11 +656,11 @@ defmodule Opal.Agent do
           Opal.Agent.Overflow.context_overflow?(reason) ->
             handle_overflow_compaction(state, reason)
 
-          Opal.Agent.Retries.retryable?(reason) and state.retry_count < state.max_retries ->
+          Opal.Agent.Retry.retryable?(reason) and state.retry_count < state.max_retries ->
             attempt = state.retry_count + 1
 
             delay =
-              Opal.Agent.Retries.delay(attempt,
+              Opal.Agent.Retry.delay(attempt,
                 base_ms: state.retry_base_delay_ms,
                 max_ms: state.retry_max_delay_ms
               )
@@ -687,7 +686,7 @@ defmodule Opal.Agent do
   # report with heuristic estimates for messages added since. This catches
   # growth *between* turns that the lagging `last_prompt_tokens` would miss.
   defp maybe_auto_compact(%State{} = state) do
-    Opal.Agent.Compaction.maybe_auto_compact(state)
+    Opal.Agent.UsageTracker.maybe_auto_compact(state)
   end
 
   # ── Overflow Recovery ─────────────────────────────────────────────────
@@ -699,11 +698,11 @@ defmodule Opal.Agent do
 
   # Without a session process we can't compact — surface the raw error.
   defp handle_overflow_compaction(%State{session: nil} = state, reason) do
-    Opal.Agent.Compaction.handle_overflow_compaction(state, reason)
+    Opal.Agent.UsageTracker.handle_overflow_compaction(state, reason)
   end
 
   defp handle_overflow_compaction(%State{} = state, reason) do
-    Opal.Agent.Compaction.handle_overflow_compaction(state, reason)
+    Opal.Agent.UsageTracker.handle_overflow_compaction(state, reason)
   end
 
   # Prepends system prompt (with discovered context, skill menu, and

@@ -5,7 +5,7 @@ defmodule Opal.Agent.SupervisorFailureTest do
   """
   use ExUnit.Case, async: false
 
-  alias Opal.Model
+  alias Opal.Provider.Model
   alias Opal.Agent.ToolRunner
 
   defmodule ToolProvider do

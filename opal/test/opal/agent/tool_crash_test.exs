@@ -8,7 +8,7 @@ defmodule Opal.Agent.ToolCrashTest do
 
   alias Opal.Agent
   alias Opal.Events
-  alias Opal.Model
+  alias Opal.Provider.Model
 
   # ── Tools ──────────────────────────────────────────────────────────────
 

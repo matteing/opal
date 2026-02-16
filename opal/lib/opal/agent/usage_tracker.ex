@@ -201,7 +201,7 @@ defmodule Opal.Agent.UsageTracker do
 
   # Private helper functions
 
-  defp model_context_window(model), do: Opal.Models.context_window(model)
+  defp model_context_window(model), do: Opal.Provider.Registry.context_window(model)
 
   defp broadcast(%State{} = state, event), do: Opal.Agent.EventLog.broadcast(state, event)
 end

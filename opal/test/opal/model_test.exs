@@ -1,7 +1,7 @@
 defmodule Opal.ModelTest do
   use ExUnit.Case, async: true
 
-  alias Opal.Model
+  alias Opal.Provider.Model
 
   # Validates basic model construction
   describe "new/2" do
@@ -55,7 +55,7 @@ defmodule Opal.ModelTest do
       assert Map.has_key?(model, :thinking_level)
     end
 
-    test "is an Opal.Model struct" do
+    test "is an Opal.Provider.Model struct" do
       model = Model.new(:openai, "gpt-4o")
       assert %Model{} = model
     end

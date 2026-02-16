@@ -22,7 +22,7 @@ defmodule Opal.ThinkingIntegrationTest do
 
   alias Opal.Agent
   alias Opal.Events
-  alias Opal.Model
+  alias Opal.Provider.Model
   alias Opal.Message
   alias Opal.Provider.OpenAI, as: OpenAIShared
   alias Opal.Provider.Copilot
@@ -708,7 +708,7 @@ defmodule Opal.ThinkingIntegrationTest do
 
   describe "Models thinking level discovery" do
     test "thinking-capable copilot models have non-empty thinking_levels" do
-      models = Opal.Models.list_copilot()
+      models = Opal.Provider.Registry.list_copilot()
       claude_sonnet = Enum.find(models, &(&1.id == "claude-sonnet-4"))
 
       assert claude_sonnet != nil
@@ -718,7 +718,7 @@ defmodule Opal.ThinkingIntegrationTest do
     end
 
     test "non-thinking models have empty thinking_levels" do
-      models = Opal.Models.list_copilot()
+      models = Opal.Provider.Registry.list_copilot()
       gpt4o = Enum.find(models, &(&1.id == "gpt-4o"))
 
       if gpt4o do
@@ -728,7 +728,7 @@ defmodule Opal.ThinkingIntegrationTest do
     end
 
     test "opus models support max level" do
-      models = Opal.Models.list_copilot()
+      models = Opal.Provider.Registry.list_copilot()
       opus = Enum.find(models, &(&1.id == "claude-opus-4.6"))
 
       if opus do

@@ -3,7 +3,7 @@ defmodule Opal.Agent.ParallelSubAgentToolCallsTest do
 
   alias Opal.Agent
   alias Opal.Events
-  alias Opal.Model
+  alias Opal.Provider.Model
   alias Opal.Tool.SubAgent, as: SubAgentTool
 
   defmodule ParentAndSubProvider do

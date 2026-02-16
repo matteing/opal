@@ -10,7 +10,7 @@ defmodule Opal.AgentChatCompletionsTest do
 
   alias Opal.Agent
   alias Opal.Events
-  alias Opal.Model
+  alias Opal.Provider.Model
 
   # Provider that emits Chat Completions format SSE and delegates
   # parsing to the real Copilot parser.

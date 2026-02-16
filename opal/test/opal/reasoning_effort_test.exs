@@ -10,7 +10,7 @@ defmodule Opal.ReasoningEffortTest do
   """
   use ExUnit.Case, async: true
 
-  alias Opal.Model
+  alias Opal.Provider.Model
   alias Opal.Provider.Copilot
   alias Opal.Provider.LLM
   alias Opal.Message
@@ -223,9 +223,9 @@ defmodule Opal.ReasoningEffortTest do
   # Model discovery: thinking levels per model
   # ============================================================
 
-  describe "Opal.Models thinking level discovery" do
+  describe "Opal.Provider.Registry thinking level discovery" do
     test "copilot models include thinking_levels field" do
-      models = Opal.Models.list_copilot()
+      models = Opal.Provider.Registry.list_copilot()
       assert length(models) > 0
 
       for model <- models do
@@ -237,7 +237,7 @@ defmodule Opal.ReasoningEffortTest do
     end
 
     test "reasoning-capable models have non-empty thinking_levels" do
-      models = Opal.Models.list_copilot()
+      models = Opal.Provider.Registry.list_copilot()
       claude = Enum.find(models, &(&1.id == "claude-opus-4.6"))
       assert claude != nil
       assert claude.supports_thinking == true
@@ -246,7 +246,7 @@ defmodule Opal.ReasoningEffortTest do
     end
 
     test "non-reasoning models have empty thinking_levels" do
-      models = Opal.Models.list_copilot()
+      models = Opal.Provider.Registry.list_copilot()
       gpt4o = Enum.find(models, &(&1.id == "gpt-4o"))
       assert gpt4o != nil
       assert gpt4o.supports_thinking == false
@@ -254,7 +254,7 @@ defmodule Opal.ReasoningEffortTest do
     end
 
     test "thinking_levels never includes xhigh" do
-      models = Opal.Models.list_copilot()
+      models = Opal.Provider.Registry.list_copilot()
 
       for model <- models do
         refute "xhigh" in model.thinking_levels,
@@ -263,7 +263,7 @@ defmodule Opal.ReasoningEffortTest do
     end
 
     test "direct provider models also include thinking_levels" do
-      models = Opal.Models.list_provider(:anthropic)
+      models = Opal.Provider.Registry.list_provider(:anthropic)
       assert length(models) > 0
 
       claude = Enum.find(models, &(&1.id == "claude-opus-4-6"))

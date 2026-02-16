@@ -11,7 +11,7 @@ defmodule Opal.Agent.UsageTrackerTest do
 
       state = %State{
         session_id: session_id,
-        model: Opal.Model.coerce({:copilot, "claude-sonnet-4"}),
+        model: Opal.Provider.Model.coerce({:copilot, "claude-sonnet-4"}),
         working_dir: File.cwd!(),
         config: Opal.Config.new(),
         messages: []
@@ -103,7 +103,7 @@ defmodule Opal.Agent.UsageTrackerTest do
       state = %State{
         session: nil,
         session_id: "no-session-#{System.unique_integer([:positive])}",
-        model: Opal.Model.coerce({:copilot, "claude-sonnet-4"}),
+        model: Opal.Provider.Model.coerce({:copilot, "claude-sonnet-4"}),
         working_dir: File.cwd!(),
         config: Opal.Config.new()
       }
@@ -120,7 +120,7 @@ defmodule Opal.Agent.UsageTrackerTest do
       state = %State{
         session: nil,
         session_id: session_id,
-        model: Opal.Model.coerce({:copilot, "claude-sonnet-4"}),
+        model: Opal.Provider.Model.coerce({:copilot, "claude-sonnet-4"}),
         working_dir: File.cwd!(),
         config: Opal.Config.new(%{features: %{debug: %{enabled: true}}})
       }
@@ -135,7 +135,7 @@ defmodule Opal.Agent.UsageTrackerTest do
     test "uses heuristic when no usage data" do
       state = %State{
         session_id: "est-#{System.unique_integer([:positive])}",
-        model: Opal.Model.coerce({:copilot, "claude-sonnet-4"}),
+        model: Opal.Provider.Model.coerce({:copilot, "claude-sonnet-4"}),
         working_dir: File.cwd!(),
         config: Opal.Config.new(),
         messages: [Opal.Message.user("Hello")]
@@ -148,7 +148,7 @@ defmodule Opal.Agent.UsageTrackerTest do
     test "uses hybrid estimate when usage data exists" do
       state = %State{
         session_id: "est-#{System.unique_integer([:positive])}",
-        model: Opal.Model.coerce({:copilot, "claude-sonnet-4"}),
+        model: Opal.Provider.Model.coerce({:copilot, "claude-sonnet-4"}),
         working_dir: File.cwd!(),
         config: Opal.Config.new(),
         messages: [Opal.Message.user("Hello"), Opal.Message.assistant("Hi")],

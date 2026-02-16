@@ -30,6 +30,7 @@ Thumbs.db
 
 # Node
 node_modules/
+*.tsbuildinfo
 
 # NPM release binaries (built artifacts)
 npm/opal/releases/

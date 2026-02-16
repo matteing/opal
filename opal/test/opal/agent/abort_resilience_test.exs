@@ -8,7 +8,7 @@ defmodule Opal.Agent.AbortResilienceTest do
 
   alias Opal.Agent
   alias Opal.Events
-  alias Opal.Model
+  alias Opal.Provider.Model
   alias Opal.Test.FixtureHelper
 
   # ── Providers ──────────────────────────────────────────────────────────

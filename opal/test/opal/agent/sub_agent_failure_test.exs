@@ -27,7 +27,7 @@ defmodule Opal.Agent.SubAgentFailureTest do
       context = %{
         agent_state: %Opal.Agent.State{
           session_id: "test",
-          model: Opal.Model.new(:test, "test"),
+          model: Opal.Provider.Model.new(:test, "test"),
           working_dir: "/tmp",
           config: config
         },
@@ -63,7 +63,7 @@ defmodule Opal.Agent.SubAgentFailureTest do
 
       state = %Opal.Agent.State{
         session_id: "sub-fail-#{System.unique_integer([:positive])}",
-        model: Opal.Model.new(:test, "test"),
+        model: Opal.Provider.Model.new(:test, "test"),
         working_dir: System.tmp_dir!(),
         config: config,
         tools: [],

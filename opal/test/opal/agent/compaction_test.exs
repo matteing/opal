@@ -1,9 +1,9 @@
 defmodule Opal.Agent.CompactionTest do
   use ExUnit.Case, async: true
 
-  alias Opal.Agent.Compaction
+  alias Opal.Agent.UsageTracker
   alias Opal.Agent.State
-  alias Opal.Model
+  alias Opal.Provider.Model
 
   defp base_state do
     %State{
@@ -17,7 +17,7 @@ defmodule Opal.Agent.CompactionTest do
   describe "update_usage/2" do
     test "stores prompt and completion tokens" do
       usage = %{"prompt_tokens" => 100, "completion_tokens" => 50}
-      state = Compaction.update_usage(usage, base_state())
+      state = UsageTracker.update_usage(usage, base_state())
       assert state.token_usage.prompt_tokens == 100
       assert state.token_usage.completion_tokens == 50
     end
@@ -26,8 +26,8 @@ defmodule Opal.Agent.CompactionTest do
       usage1 = %{"prompt_tokens" => 100, "completion_tokens" => 50}
       usage2 = %{"prompt_tokens" => 200, "completion_tokens" => 80}
 
-      state = Compaction.update_usage(usage1, base_state())
-      state = Compaction.update_usage(usage2, state)
+      state = UsageTracker.update_usage(usage1, base_state())
+      state = UsageTracker.update_usage(usage2, state)
 
       assert state.token_usage.prompt_tokens == 300
       assert state.token_usage.completion_tokens == 130
@@ -37,7 +37,7 @@ defmodule Opal.Agent.CompactionTest do
   describe "maybe_auto_compact/1" do
     test "returns state unchanged when under threshold" do
       state = base_state()
-      assert Compaction.maybe_auto_compact(state) == state
+      assert UsageTracker.maybe_auto_compact(state) == state
     end
   end
 end

@@ -3,7 +3,7 @@ defmodule Opal.Tool.SubAgentTest do
 
   alias Opal.Agent
   alias Opal.Events
-  alias Opal.Model
+  alias Opal.Provider.Model
   alias Opal.Tool.SubAgent, as: SubAgentTool
 
   # --- Test Provider ---

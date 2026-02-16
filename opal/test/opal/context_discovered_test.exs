@@ -19,7 +19,7 @@ defmodule Opal.ContextDiscoveredTest do
       {:ok, _agent} =
         Agent.start_link(
           session_id: session_id,
-          model: %Opal.Model{provider: :test, id: "test-model"},
+          model: %Opal.Provider.Model{provider: :test, id: "test-model"},
           working_dir: test_dir,
           tools: [],
           tool_supervisor: nil,
@@ -51,7 +51,7 @@ defmodule Opal.ContextDiscoveredTest do
       {:ok, _agent} =
         Agent.start_link(
           session_id: session_id,
-          model: %Opal.Model{provider: :test, id: "test-model"},
+          model: %Opal.Provider.Model{provider: :test, id: "test-model"},
           working_dir: test_dir,
           tools: [],
           tool_supervisor: nil,

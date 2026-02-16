@@ -32,7 +32,7 @@ defmodule Opal.SessionServerTest do
 
     base_opts = [
       session_id: session_id,
-      model: Opal.Model.new(:test, "test-model"),
+      model: Opal.Provider.Model.new(:test, "test-model"),
       working_dir: System.tmp_dir!(),
       system_prompt: "Test prompt",
       tools: [],
@@ -251,7 +251,7 @@ defmodule Opal.SessionServerTest do
           Opal.SessionSupervisor,
           {SessionServer,
            session_id: session_id,
-           model: Opal.Model.new(:test, "test-model"),
+           model: Opal.Provider.Model.new(:test, "test-model"),
            working_dir: System.tmp_dir!(),
            system_prompt: "",
            tools: [],

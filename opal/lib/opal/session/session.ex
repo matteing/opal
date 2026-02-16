@@ -125,7 +125,7 @@ defmodule Opal.Session do
 
     * `:summarize` — whether to generate a branch summary (default: `false`)
     * `:provider` — LLM provider module for summary generation
-    * `:model` — `%Opal.Model{}` for summary generation
+    * `:model` — `%Opal.Provider.Model{}` for summary generation
     * `:strategy` — set to `:skip` to disable summarization
   """
   @spec branch_with_summary(GenServer.server(), String.t(), keyword()) ::

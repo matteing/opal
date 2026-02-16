@@ -80,7 +80,7 @@ defmodule Opal.MixProject do
           Opal.Agent,
           Opal.Config,
           Opal.Events,
-          Opal.Model,
+          Opal.Provider.Model,
           Opal.Session
         ],
         "RPC Server": [
@@ -93,6 +93,9 @@ defmodule Opal.MixProject do
           Opal.Provider,
           Opal.Provider.Copilot,
           Opal.Provider.LLM,
+          Opal.Provider.Model,
+          Opal.Provider.Registry,
+          Opal.Auth,
           Opal.Auth.Copilot
         ],
         Tools: [

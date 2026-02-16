@@ -11,7 +11,7 @@ defmodule Opal.Agent.LifecycleTest do
 
   alias Opal.Agent
   alias Opal.Events
-  alias Opal.Model
+  alias Opal.Provider.Model
   alias Opal.Test.FixtureHelper
 
   defmodule LifecycleProvider do

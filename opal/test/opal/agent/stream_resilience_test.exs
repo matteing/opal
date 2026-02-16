@@ -11,7 +11,7 @@ defmodule Opal.Agent.StreamResilienceTest do
   defp base_state do
     %State{
       session_id: "stream-test",
-      model: Opal.Model.new(:test, "test-model"),
+      model: Opal.Provider.Model.new(:test, "test-model"),
       working_dir: "/tmp",
       config: Opal.Config.new(),
       current_text: "",
