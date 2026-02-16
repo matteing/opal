@@ -126,6 +126,8 @@ export interface OpalConfigGetParams {
 }
 
 export interface OpalConfigGetResult {
+  /** Erlang distribution state, or null if not active. */
+  distribution: Record<string, unknown>;
   /** Current runtime feature flags. */
   features: {
     debug: boolean;
@@ -138,6 +140,8 @@ export interface OpalConfigGetResult {
 }
 
 export interface OpalConfigSetParams {
+  /** Erlang distribution config. Set {name, cookie?} to start, null to stop. */
+  distribution?: Record<string, unknown>;
   /** Feature flags to update. */
   features?: {
     debug: boolean;
@@ -152,6 +156,8 @@ export interface OpalConfigSetParams {
 }
 
 export interface OpalConfigSetResult {
+  /** Erlang distribution state, or null if not active. */
+  distribution: Record<string, unknown>;
   /** Current runtime feature flags. */
   features: {
     debug: boolean;

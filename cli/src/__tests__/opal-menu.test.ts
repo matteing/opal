@@ -3,6 +3,7 @@ import { toggleFeature, toggleTool, type OpalRuntimeConfig } from "../lib/opal-m
 
 function makeConfig(overrides: Partial<OpalRuntimeConfig> = {}): OpalRuntimeConfig {
   return {
+    distribution: null,
     features: { subAgents: true, skills: true, mcp: true, debug: false },
     tools: {
       all: ["read_file", "write_file", "shell", "edit_file"],

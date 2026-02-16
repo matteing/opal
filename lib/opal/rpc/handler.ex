@@ -395,7 +395,8 @@ defmodule Opal.RPC.Handler do
     with {:ok, agent} <- lookup_agent(sid),
          {:ok, features} <- parse_feature_overrides(Map.get(params, "features")),
          {:ok, enabled_tools} <- parse_enabled_tools(Map.get(params, "tools")),
-         :ok <- validate_session_tool_names(agent, enabled_tools) do
+         :ok <- validate_session_tool_names(agent, enabled_tools),
+         {:ok, _dist} <- handle_distribution_config(Map.get(params, "distribution", :skip)) do
       config = %{
         features: features,
         enabled_tools: enabled_tools
@@ -661,8 +662,55 @@ defmodule Opal.RPC.Handler do
         all: all_tools,
         enabled: enabled_tools,
         disabled: state.disabled_tools
-      }
+      },
+      distribution: current_distribution()
     }
+  end
+
+  defp current_distribution do
+    if Node.alive?() do
+      %{node: Atom.to_string(Node.self()), cookie: Atom.to_string(Node.get_cookie())}
+    else
+      nil
+    end
+  end
+
+  defp handle_distribution_config(:skip), do: {:ok, :noop}
+
+  defp handle_distribution_config(nil) do
+    if Node.alive?() do
+      Node.stop()
+    end
+
+    {:ok, nil}
+  end
+
+  defp handle_distribution_config(%{"name" => name} = params) when is_binary(name) do
+    cookie =
+      case Map.get(params, "cookie") do
+        c when is_binary(c) and c != "" -> String.to_atom(c)
+        _ -> Opal.Application.generate_cookie()
+      end
+
+    if Node.alive?() do
+      {:ok, current_distribution()}
+    else
+      node_name = String.to_atom(name)
+
+      case Node.start(node_name, :shortnames) do
+        {:ok, _pid} ->
+          Node.set_cookie(cookie)
+          Opal.Application.write_node_file(Node.self(), cookie)
+          {:ok, current_distribution()}
+
+        {:error, reason} ->
+          {:error, "Failed to start distribution: #{inspect(reason)}", nil}
+      end
+    end
+  end
+
+  defp handle_distribution_config(_invalid) do
+    {:error, "Invalid distribution config: expected {name, cookie?} or null", nil}
   end
 
   defp serialize_session_info(info) do

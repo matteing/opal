@@ -79,6 +79,10 @@ export interface SessionOptions extends SessionStartParams {
   onStderr?: (data: string) => void;
   /** Called with every JSON-RPC message (for debug panel). */
   onRpcMessage?: (entry: RpcMessageEntry) => void;
+  /** Start Erlang distribution with this short name. */
+  sname?: string;
+  /** Erlang distribution cookie (random if omitted). */
+  cookie?: string;
 }
 
 // --- Session ---
@@ -119,6 +123,8 @@ export class Session {
       verbose,
       onStderr,
       onRpcMessage,
+      sname: _sname,
+      cookie: _cookie,
       ...startParams
     } = opts;
 
@@ -310,6 +316,20 @@ export class Session {
       sessionId: this.sessionId,
       ...params,
     });
+  }
+
+  /**
+   * Start or stop Erlang distribution for remote debugging.
+   * Returns the distribution state (node + cookie) or null.
+   */
+  async setDistribution(
+    config: { name: string; cookie?: string } | null,
+  ): Promise<{ node: string; cookie: string } | null> {
+    const result = await this.client.request("opal/config/set", {
+      sessionId: this.sessionId,
+      distribution: config as Record<string, unknown> | undefined,
+    });
+    return (result.distribution as { node: string; cookie: string } | null) ?? null;
   }
 
   /**

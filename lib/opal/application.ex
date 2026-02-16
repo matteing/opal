@@ -25,7 +25,7 @@ defmodule Opal.Application do
     opts = [strategy: :rest_for_one, name: Opal.Supervisor]
 
     with {:ok, pid} <- Supervisor.start_link(children, opts) do
-      if Application.get_env(:opal, :start_distribution, true) do
+      if Application.get_env(:opal, :start_distribution, false) do
         start_distribution()
       end
 
@@ -68,15 +68,20 @@ defmodule Opal.Application do
     end
   end
 
+  @doc """
+  Generates a cryptographically random cookie for Erlang distribution.
+  """
+  @spec generate_cookie() :: atom()
+  def generate_cookie do
+    :crypto.strong_rand_bytes(18)
+    |> Base.url_encode64(padding: false)
+    |> String.to_atom()
+  end
+
   defp distribution_cookie do
     case Application.get_env(:opal, :distribution_cookie, :random) do
-      :random ->
-        :crypto.strong_rand_bytes(18)
-        |> Base.url_encode64(padding: false)
-        |> String.to_atom()
-
-      cookie when is_atom(cookie) ->
-        cookie
+      :random -> generate_cookie()
+      cookie when is_atom(cookie) -> cookie
     end
   end
 
@@ -109,12 +114,17 @@ defmodule Opal.Application do
     end
   end
 
-  defp write_node_file(node_name, cookie) do
+  @doc """
+  Writes node name and cookie to the node file for discovery.
+  """
+  @spec write_node_file(node(), atom()) :: :ok
+  def write_node_file(node_name, cookie) do
     path = node_file_path()
     File.mkdir_p!(Path.dirname(path))
     File.write!(path, "#{node_name}\n#{cookie}\n")
     # Best-effort permission restriction — chmod is unsupported on Windows
     _ = File.chmod(path, 0o600)
+    :ok
   end
 
   defp node_file_path do

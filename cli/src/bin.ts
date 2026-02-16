@@ -47,6 +47,14 @@ const argv = await yargs(hideBin(process.argv))
         default: false,
         describe: "Enable debug feature/tools for this session",
       })
+      .option("sname", {
+        type: "string",
+        describe: "Start Erlang distribution with this short name",
+      })
+      .option("cookie", {
+        type: "string",
+        describe: "Erlang distribution cookie (random if omitted)",
+      })
       .option("no-tui", {
         type: "boolean",
         default: false,
@@ -170,6 +178,9 @@ if (command === "auth") {
     if (argv.debug) {
       opts.features = { debug: true } as SessionOptions["features"];
     }
+
+    if (argv.sname) opts.sname = argv.sname as string;
+    if (argv.cookie) opts.cookie = argv.cookie as string;
 
     if (!opts.workingDir) {
       opts.workingDir = process.env["OPAL_CWD"] || process.env["INIT_CWD"] || process.cwd();

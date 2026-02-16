@@ -273,7 +273,36 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
         setState((s) => ({ ...s, currentModel: buildDisplaySpec(res.model) }));
       })
       .catch(() => {});
-  }, []);
+
+    // Start Erlang distribution if --sname was provided
+    if (opts.sname) {
+      const distConfig: { name: string; cookie?: string } = { name: opts.sname };
+      if (opts.cookie) distConfig.cookie = opts.cookie;
+      session
+        .setDistribution(distConfig)
+        .then((dist) => {
+          if (dist) {
+            setState((s) => ({
+              ...s,
+              main: {
+                ...s.main,
+                timeline: [
+                  ...s.main.timeline,
+                  {
+                    kind: "message" as const,
+                    message: {
+                      role: "assistant" as const,
+                      content: `Instance exposed at **${dist.node}** (cookie: \`${dist.cookie}\`)\n\nConnect with: \`iex --sname debug --cookie ${dist.cookie} --remsh ${dist.node}\``,
+                    },
+                  },
+                ],
+              },
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const flushEvents = useCallback(() => {
     flushTimerRef.current = null;
@@ -488,7 +517,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
           session
             .getOpalConfig()
             .then((cfg) => {
-              setState((s) => ({ ...s, opalMenu: cfg }));
+              setState((s) => ({ ...s, opalMenu: cfg as OpalRuntimeConfig }));
             })
             .catch((e: unknown) => addSystemMessage(`Error: ${errorMessage(e)}`));
           break;
@@ -564,7 +593,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
             features: { ...cfg.features, [key]: enabled },
           }),
         )
-        .then((cfg) => setState((s) => ({ ...s, opalMenu: cfg })))
+        .then((cfg) => setState((s) => ({ ...s, opalMenu: cfg as OpalRuntimeConfig })))
         .catch((e: unknown) => addSystemMessage(`Error: ${errorMessage(e)}`));
     },
     [addSystemMessage],
@@ -590,7 +619,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
           const ordered = cfg.tools.all.filter((t) => next.has(t));
           return session.setOpalConfig({ tools: ordered });
         })
-        .then((cfg) => setState((s) => ({ ...s, opalMenu: cfg })))
+        .then((cfg) => setState((s) => ({ ...s, opalMenu: cfg as OpalRuntimeConfig })))
         .catch((e: unknown) => addSystemMessage(`Error: ${errorMessage(e)}`));
     },
     [addSystemMessage],

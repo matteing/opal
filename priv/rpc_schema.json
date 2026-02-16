@@ -849,6 +849,31 @@
         },
         "result": {
           "properties": {
+            "distribution": {
+              "description": "Erlang distribution state, or null if not active.",
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "properties": {
+                    "cookie": {
+                      "description": "Distribution cookie.",
+                      "type": "string"
+                    },
+                    "node": {
+                      "description": "Full node name (e.g. opal@hostname).",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "cookie",
+                    "node"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
             "features": {
               "description": "Current runtime feature flags.",
               "properties": {
@@ -904,6 +929,7 @@
             }
           },
           "required": [
+            "distribution",
             "features",
             "tools"
           ],
@@ -914,6 +940,30 @@
         "description": "Update runtime feature and tool configuration for a session.",
         "params": {
           "properties": {
+            "distribution": {
+              "description": "Erlang distribution config. Set {name, cookie?} to start, null to stop.",
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "properties": {
+                    "cookie": {
+                      "description": "Distribution cookie. Generated randomly if omitted.",
+                      "type": "string"
+                    },
+                    "name": {
+                      "description": "Short node name (e.g. opal).",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
             "features": {
               "description": "Feature flags to update.",
               "properties": {
@@ -957,6 +1007,31 @@
         },
         "result": {
           "properties": {
+            "distribution": {
+              "description": "Erlang distribution state, or null if not active.",
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "properties": {
+                    "cookie": {
+                      "description": "Distribution cookie.",
+                      "type": "string"
+                    },
+                    "node": {
+                      "description": "Full node name (e.g. opal@hostname).",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "cookie",
+                    "node"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
             "features": {
               "description": "Current runtime feature flags.",
               "properties": {
@@ -1012,6 +1087,7 @@
             }
           },
           "required": [
+            "distribution",
             "features",
             "tools"
           ],

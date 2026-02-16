@@ -1,6 +1,7 @@
 // Extracted from hooks/use-opal.ts for testability
 
 export interface OpalRuntimeConfig {
+  distribution: { node: string; cookie: string } | null;
   features: {
     subAgents: boolean;
     skills: boolean;

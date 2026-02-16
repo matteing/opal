@@ -239,7 +239,7 @@ export class OpalClient extends EventEmitter {
       direction: "outgoing",
       timestamp: Date.now(),
       raw: msg,
-      method: "method" in msg ? (msg as JsonRpcRequest).method : undefined,
+      method: "method" in msg ? msg.method : undefined,
       kind: "method" in msg ? "request" : "response",
     };
     this.emit("rpc:message", entry);
