@@ -9,6 +9,10 @@ erl_crash.dump
 tmp/
 *.dets
 
+# Escript binary
+/opal-server
+opal-*.tar
+
 # Context dumps
 opal-context-*.json
 
@@ -23,19 +27,20 @@ Thumbs.db
 .lexical/
 .opal/
 .copilot/
-# Nx
-.nx/
+
+# Node
 node_modules/
 
 # NPM release binaries (built artifacts)
 npm/opal/releases/
 
 # Burrito build output
-packages/cli/burrito_out/
+burrito_out/
 
 # CLI build artifacts
-packages/cli/dist/
-packages/cli/bin/
+cli/dist/
+cli/bin/
 
-# Prevent npm lockfile from returning
+# Prevent npm/pnpm lockfile at root
 package-lock.json
+/pnpm-lock.yaml

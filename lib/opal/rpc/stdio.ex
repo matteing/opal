@@ -202,7 +202,11 @@ defmodule Opal.RPC.Stdio do
         state
 
       {:error, :invalid_request} ->
-        write_stdout(state, Opal.RPC.encode_error(nil, Opal.RPC.invalid_request(), "Invalid request"))
+        write_stdout(
+          state,
+          Opal.RPC.encode_error(nil, Opal.RPC.invalid_request(), "Invalid request")
+        )
+
         state
     end
   end

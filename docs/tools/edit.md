@@ -102,11 +102,11 @@ The hashline format gives the model a cheap, verifiable anchor. If it can recall
 
 ## Source files
 
-- `packages/core/lib/opal/tool/hashline.ex` — Hash computation, line tagging, anchor parsing, hash validation
-- `packages/core/lib/opal/tool/edit.ex` — Hashline edit tool (`edit_file`)
-- `packages/core/lib/opal/tool/read.ex` — File reading with hashline-tagged output
-- `packages/core/lib/opal/tool/encoding.ex` — BOM and CRLF handling
-- `packages/core/lib/opal/tool/file_helper.ex` — Shared path resolution and file I/O helpers
+- `lib/opal/tool/hashline.ex` — Hash computation, line tagging, anchor parsing, hash validation
+- `lib/opal/tool/edit.ex` — Hashline edit tool (`edit_file`)
+- `lib/opal/tool/read.ex` — File reading with hashline-tagged output
+- `lib/opal/tool/encoding.ex` — BOM and CRLF handling
+- `lib/opal/tool/file_helper.ex` — Shared path resolution and file I/O helpers
 
 ## References
 

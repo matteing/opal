@@ -6,8 +6,8 @@
 
 This is an Elixir monorepo with two main components:
 
-- **`packages/core/`** - The Opal SDK (Elixir library) providing the agent engine, tools, providers, and MCP bridge
-- **`packages/cli/`** - Terminal UI application that consumes the core library for interactive agent sessions
+- **`lib/`** - The Opal SDK (Elixir library) providing the agent engine, tools, providers, and MCP bridge
+- **`cli/`** - Terminal UI application that consumes the core library for interactive agent sessions
 
 The project leverages Elixir/OTP's strengths: supervision trees, GenServers, process isolation, and fault tolerance.
 
@@ -42,16 +42,16 @@ All tools implement `Opal.Tool` behavior:
 
 ```bash
 # Install dependencies
-nx run-many -t deps
+mise run deps
 
 # Run TUI in dev mode
-nx run cli:dev
+mise run dev
 
 # Run tests
-nx run-many -t test
+mise run test
 
 # Build CLI
-nx run cli:build
+mise run build
 ```
 
 ### Verifying Your Work
@@ -60,13 +60,13 @@ After completing any task, always run these checks before considering the work d
 
 ```bash
 # Lint — checks formatting + code quality for all projects
-pnpm lint
+mise run lint
 
 # Fix — auto-fix formatting and lint issues
-pnpm format
+mise run format
 
 # Build — compile everything (includes codegen for CLI)
-pnpm build
+mise run build
 ```
 
 These checks are enforced by pre-commit hooks (via Lefthook) and in CI. If `lint` fails, run `format` to auto-fix.
@@ -148,7 +148,7 @@ end
 ## File Structure
 
 ```
-packages/core/lib/opal/
+lib/opal/
 ├── agent.ex              # Main agent GenServer
 ├── agent/                # Agent loop internals (stream, tool_runner, retry, etc.)
 ├── auth.ex               # Authentication system
@@ -162,7 +162,7 @@ packages/core/lib/opal/
 ├── mcp/                  # MCP bridge components
 └── rpc/                  # JSON-RPC server
 
-packages/cli/src/
+cli/src/
 ├── app.tsx               # TUI application (React/Ink)
 ├── bin.ts                # Entry point
 ├── components/           # UI components

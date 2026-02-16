@@ -7,15 +7,15 @@ Two modules expose this tool to the LLM under the same `ask_user` name — one f
 ## Module Structure
 
 ```
-packages/core/lib/opal/tool/
+lib/opal/tool/
 ├── ask.ex          # Shared spec (name, description, parameters, meta) + RPC helper
 ├── ask_user.ex     # Top-level agent tool — delegates to Ask, calls RPC directly
 └── ask_parent.ex   # Sub-agent tool — tries question_handler callback, falls back to RPC
 ```
 
-- **`Opal.Tool.Ask`** (`packages/core/lib/opal/tool/ask.ex`) — Not a tool itself. Holds the shared `name/0`, `description/0`, `parameters/0`, `meta/1`, and `ask_via_rpc/2` so the two real tools stay DRY.
-- **`Opal.Tool.AskUser`** (`packages/core/lib/opal/tool/ask_user.ex`) — Registered in the default tool list for top-level agents. Delegates its spec callbacks to `Ask` and calls `Ask.ask_via_rpc/2` in `execute/2`.
-- **`Opal.Tool.AskParent`** (`packages/core/lib/opal/tool/ask_parent.ex`) — Injected for sub-agents (replacing `AskUser`). Delegates its spec to `Ask`, but `execute/2` first tries a `question_handler` callback from the tool context. If no handler exists (standalone sub-agent), it falls back to `Ask.ask_via_rpc/2`.
+- **`Opal.Tool.Ask`** (`lib/opal/tool/ask.ex`) — Not a tool itself. Holds the shared `name/0`, `description/0`, `parameters/0`, `meta/1`, and `ask_via_rpc/2` so the two real tools stay DRY.
+- **`Opal.Tool.AskUser`** (`lib/opal/tool/ask_user.ex`) — Registered in the default tool list for top-level agents. Delegates its spec callbacks to `Ask` and calls `Ask.ask_via_rpc/2` in `execute/2`.
+- **`Opal.Tool.AskParent`** (`lib/opal/tool/ask_parent.ex`) — Injected for sub-agents (replacing `AskUser`). Delegates its spec to `Ask`, but `execute/2` first tries a `question_handler` callback from the tool context. If no handler exists (standalone sub-agent), it falls back to `Ask.ask_via_rpc/2`.
 
 ## Interface
 
@@ -118,7 +118,7 @@ end
 
 ### Protocol: `client/ask_user`
 
-Server→client request method in `Opal.RPC.Protocol` (`packages/core/lib/opal/rpc/protocol.ex`):
+Server→client request method in `Opal.RPC.Protocol` (`lib/opal/rpc/protocol.ex`):
 
 ```elixir
 %{
@@ -192,7 +192,7 @@ sequenceDiagram
 
 ### Tool Registration
 
-`AskUser` is in the default tool list (`packages/core/lib/opal/config.ex`). When spawning sub-agents, `Opal.SubAgent.do_spawn` removes `AskUser` and injects `AskParent` in its place, along with a `question_handler` callback:
+`AskUser` is in the default tool list (`lib/opal/config.ex`). When spawning sub-agents, `Opal.SubAgent.do_spawn` removes `AskUser` and injects `AskParent` in its place, along with a `question_handler` callback:
 
 ```elixir
 tools =
@@ -205,13 +205,13 @@ tools =
 
 ### CLI Integration
 
-**Session SDK** (`packages/cli/src/sdk/session.ts`) — handles `client/ask_user` in `onServerRequest`, exposes `onAskUser` callback in `SessionOptions`.
+**Session SDK** (`src/sdk/session.ts`) — handles `client/ask_user` in `onServerRequest`, exposes `onAskUser` callback in `SessionOptions`.
 
-**State** (`packages/cli/src/hooks/use-opal.ts`) — `askUser` state field + `resolveAskUser` action, wired with a promise-based resolver ref.
+**State** (`src/hooks/use-opal.ts`) — `askUser` state field + `resolveAskUser` action, wired with a promise-based resolver ref.
 
-**Component** (`packages/cli/src/components/ask-user-dialog.tsx`) — Ink component with arrow-key choice navigation, freeform text input, and combined mode.
+**Component** (`src/components/ask-user-dialog.tsx`) — Ink component with arrow-key choice navigation, freeform text input, and combined mode.
 
-**App** (`packages/cli/src/app.tsx`) — conditionally renders `<AskUserDialog>` when `state.askUser` is non-null.
+**App** (`src/app.tsx`) — conditionally renders `<AskUserDialog>` when `state.askUser` is non-null.
 
 ## Edge Cases
 

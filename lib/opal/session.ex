@@ -231,12 +231,14 @@ defmodule Opal.Session do
             {:ok, stat} ->
               title = read_session_title(path)
 
-              [%{
-                id: id,
-                path: path,
-                title: title,
-                modified: stat.mtime |> NaiveDateTime.from_erl!()
-              }]
+              [
+                %{
+                  id: id,
+                  path: path,
+                  title: title,
+                  modified: stat.mtime |> NaiveDateTime.from_erl!()
+                }
+              ]
 
             {:error, _} ->
               # File was deleted between ls and stat — skip it

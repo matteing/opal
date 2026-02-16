@@ -29,12 +29,10 @@ if [ -f "$HOME/.asdf/asdf.sh" ]; then
   . "$HOME/.asdf/asdf.sh"
 fi
 
-# --- Node.js dependencies (pnpm monorepo: root + cli workspace) ---
-pnpm install
+# --- Node.js dependencies (CLI) ---
+cd cli && pnpm install && cd ..
 
 # --- Elixir dependencies ---
-cd packages/core
 mix local.hex --force --if-missing
 mix deps.get
 mix compile
-cd ../..

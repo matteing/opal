@@ -54,11 +54,11 @@ defmodule Opal.Agent.Retry do
   ]
 
   @permanent_patterns Opal.Agent.Overflow.overflow_patterns() ++
-                         [
-                           "unauthorized",
-                           "invalid_api_key",
-                           "authentication"
-                         ]
+                        [
+                          "unauthorized",
+                          "invalid_api_key",
+                          "authentication"
+                        ]
 
   # ── Public API ──────────────────────────────────────────────────────────
 

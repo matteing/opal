@@ -1,7 +1,7 @@
 ---
 name: codegen-sync
-description: Verifies TypeScript codegen is in sync with Elixir protocol definitions. Use this skill after modifying Elixir structs, protocol messages, or RPC types in packages/core/ to regenerate and verify the TypeScript client SDK types.
-globs: "{packages/core/lib/opal/rpc/**,packages/core/lib/opal/agent/**,packages/cli/src/sdk/**}"
+description: Verifies TypeScript codegen is in sync with Elixir protocol definitions. Use this skill after modifying Elixir structs, protocol messages, or RPC types in lib/opal/ to regenerate and verify the TypeScript client SDK types.
+globs: "{lib/opal/rpc/**,lib/opal/agent/**,cli/src/sdk/**}"
 ---
 
 # Codegen Sync Skill
@@ -10,8 +10,8 @@ This project uses code generation to keep TypeScript SDK types in sync with Elix
 
 ## When to act
 
-- After modifying any Elixir structs, message types, or RPC definitions in `packages/core/`.
-- After adding or changing tool schemas in `packages/core/lib/opal/tool/`.
+- After modifying any Elixir structs, message types, or RPC definitions in `lib/opal/`.
+- After adding or changing tool schemas in `lib/opal/tool/`.
 - When CI fails with a codegen drift error.
 - When the user asks to sync or regenerate types.
 
@@ -19,16 +19,16 @@ This project uses code generation to keep TypeScript SDK types in sync with Elix
 
 ```bash
 # Run codegen (Elixir -> TypeScript)
-pnpm codegen
+mix run scripts/codegen_ts.exs
 
 # Verify codegen is up to date (what CI runs)
-pnpm nx run cli:codegen:check
+mix run scripts/codegen_ts.exs --check
 ```
 
 ## Workflow
 
-1. After modifying Elixir protocol types, run `pnpm codegen`.
-2. Review the generated diff in `packages/cli/src/sdk/` to verify correctness.
+1. After modifying Elixir protocol types, run `mix run scripts/codegen_ts.exs`.
+2. Review the generated diff in `cli/src/sdk/` to verify correctness.
 3. Include the regenerated files in the same commit as the Elixir changes.
 
 ## Rules

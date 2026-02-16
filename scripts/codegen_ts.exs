@@ -3,11 +3,11 @@
 # Generates cli/src/protocol.ts from Opal.RPC.Protocol.spec().
 #
 # Usage:
-#   cd packages/core && mix run ../../scripts/codegen_ts.exs [--check]
+#   mix run scripts/codegen_ts.exs [--check]
 #
 
 defmodule Codegen.TS do
-  @output_path "../cli/src/sdk/protocol.ts"
+  @output_path "cli/src/sdk/protocol.ts"
 
   def run(args) do
     spec = Opal.RPC.Protocol.spec()
@@ -19,7 +19,7 @@ defmodule Codegen.TS do
       if existing != ts do
         IO.puts(
           :stderr,
-          "protocol.ts is out of date. Run: cd packages/core && mix run ../../scripts/codegen_ts.exs"
+          "protocol.ts is out of date. Run: mix run scripts/codegen_ts.exs"
         )
 
         System.halt(1)

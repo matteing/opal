@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Opal is a coding agent harness built on Elixir/OTP. The core (`packages/core/`) provides the agent runtime, and the CLI (`packages/cli/`) provides a TypeScript terminal UI connected via JSON-RPC over stdio.
+Opal is a coding agent harness built on Elixir/OTP. The core (`lib/opal/`) provides the agent runtime, and the CLI (`cli/`) provides a TypeScript terminal UI connected via JSON-RPC over stdio.
 
 ## Process Model
 
@@ -83,7 +83,7 @@ graph LR
 ## Source Layout
 
 ```
-packages/core/lib/opal/
+lib/opal/
 ├── agent/agent.ex           # Agent loop :gen_statem
 ├── agent/state.ex           # Agent runtime state struct
 ├── agent/                   # Stream/tools/retry/compaction/reducer helpers

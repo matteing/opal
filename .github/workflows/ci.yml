@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 env:
-  ELIXIR_VERSION: "1.18.4"
-  OTP_VERSION: "28.0"
+  ELIXIR_VERSION: "1.19"
+  OTP_VERSION: "28.3.1"
 
 jobs:
   ci:
@@ -19,40 +19,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: erlef/setup-beam@v1
-        with:
-          elixir-version: ${{ env.ELIXIR_VERSION }}
-          otp-version: ${{ env.OTP_VERSION }}
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+      - uses: jdx/mise-action@v3
 
       - name: Cache Elixir deps
         uses: actions/cache@v4
         with:
           path: |
-            packages/core/deps
-            packages/core/_build
-          key: mix-${{ runner.os }}-${{ hashFiles('packages/core/mix.lock') }}
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
           restore-keys: mix-${{ runner.os }}-
 
       - name: Install deps
         run: |
-          cd packages/core && mix deps.get && cd ../..
-          pnpm install --frozen-lockfile
+          mix deps.get
+          cd cli && pnpm install --frozen-lockfile
 
       - name: Codegen check
-        run: pnpm nx run cli:codegen:check
+        run: mix run scripts/codegen_ts.exs --check
 
       - name: Lint
-        run: pnpm lint
+        run: mise run lint
 
       - name: Build
-        run: pnpm build
+        run: mise run build
 
       - name: Test
-        run: pnpm test
+        run: mise run test

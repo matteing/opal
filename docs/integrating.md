@@ -433,7 +433,7 @@ The `opal-server` binary is available as a pre-built release for each platform:
 During development, you can also run from source:
 
 ```bash
-cd packages/core && elixir --erl "-noinput" -S mix run --no-halt
+elixir --erl "-noinput" -S mix run --no-halt
 ```
 
 ### Wire Protocol
@@ -878,7 +878,7 @@ The SDK automatically locates `opal-server` using this fallback chain:
 
 1. `opal-server` in `PATH` (user-installed binary)
 2. Bundled platform binary in `releases/` (npm package distribution)
-3. Monorepo dev mode (`elixir -S mix run --no-halt` in `packages/core/`)
+3. Monorepo dev mode (`elixir -S mix run --no-halt` at repo root)
 
 Override with an explicit path:
 
@@ -890,12 +890,12 @@ const client = new OpalClient({
 
 ## Source Files
 
-- `packages/core/lib/opal.ex` — Elixir public API
-- `packages/core/lib/opal/tool.ex` — Tool behaviour definition
-- `packages/core/lib/opal/events.ex` — Registry-based pub/sub
-- `packages/core/lib/opal/config.ex` — Configuration struct and defaults
-- `packages/core/lib/opal/model.ex` — Model spec parsing and coercion
-- `packages/core/lib/opal/rpc/stdio.ex` — JSON-RPC stdio transport
-- `packages/core/lib/opal/rpc/protocol.ex` — Method and event schema definitions
-- `packages/core/lib/opal/rpc/handler.ex` — RPC request dispatch
-- `packages/cli/src/sdk/` — TypeScript SDK (client, session, protocol types, transforms)
+- `lib/opal.ex` — Elixir public API
+- `lib/opal/tool.ex` — Tool behaviour definition
+- `lib/opal/events.ex` — Registry-based pub/sub
+- `lib/opal/config.ex` — Configuration struct and defaults
+- `lib/opal/model.ex` — Model spec parsing and coercion
+- `lib/opal/rpc/stdio.ex` — JSON-RPC stdio transport
+- `lib/opal/rpc/protocol.ex` — Method and event schema definitions
+- `lib/opal/rpc/handler.ex` — RPC request dispatch
+- `src/sdk/` — TypeScript SDK (client, session, protocol types, transforms)

@@ -106,7 +106,7 @@ flush()
 
 ## Source Files
 
-- `packages/core/lib/opal/inspect.ex` — Watch loop and event formatting
-- `packages/core/lib/opal/events.ex` — Registry-based pub/sub
-- `packages/core/lib/opal/application.ex` — Distribution startup and `~/.opal/node` file
+- `lib/opal/inspect.ex` — Watch loop and event formatting
+- `lib/opal/events.ex` — Registry-based pub/sub
+- `lib/opal/application.ex` — Distribution startup and `~/.opal/node` file
 - `scripts/inspect.exs` — Auto-run script for `pnpm inspect`

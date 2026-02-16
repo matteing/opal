@@ -44,7 +44,7 @@ state = repair_orphaned_tool_calls(state)
 
 The key fix: `find_orphaned_calls` scans **every** assistant message in the conversation, not just the most recent. This catches "deep orphans" — orphaned tool_calls buried in history with valid turns after them.
 
-**Source:** `packages/core/lib/opal/agent/agent.ex` — `repair_orphaned_tool_calls/1`, `find_orphaned_calls/3`
+**Source:** `lib/opal/agent/agent.ex` — `repair_orphaned_tool_calls/1`, `find_orphaned_calls/3`
 
 ### Layer 2: Positional Validation in `build_messages`
 
@@ -61,7 +61,7 @@ Even after Layer 1 repairs orphans by appending results, the appended results en
 [system_msg | ensure_tool_results(Enum.reverse(messages))]
 ```
 
-**Source:** `packages/core/lib/opal/agent/agent.ex` — `ensure_tool_results/1`
+**Source:** `lib/opal/agent/agent.ex` — `ensure_tool_results/1`
 
 ### Layer 3: Stream Error Guard
 
@@ -83,7 +83,7 @@ end
 
 Without this guard, `finalize_response` would override `status: :idle` (set by the error handler) back to `:running`, create an assistant message from partial/empty stream data, and potentially start tool execution on malformed tool calls.
 
-**Source:** `packages/core/lib/opal/agent/agent.ex` (SSE handle_info), `packages/core/lib/opal/agent/stream.ex` (error event handler), `packages/core/lib/opal/agent/state.ex` (`stream_errored` field)
+**Source:** `lib/opal/agent/agent.ex` (SSE handle_info), `lib/opal/agent/stream.ex` (error event handler), `lib/opal/agent/state.ex` (`stream_errored` field)
 
 ## Additional Hardening
 
@@ -95,13 +95,13 @@ Without this guard, `finalize_response` would override `status: :idle` (set by t
 |> Enum.reject(fn tc -> tc.call_id == "" or tc.name == "" end)
 ```
 
-**Source:** `packages/core/lib/opal/agent/agent.ex` — `finalize_tool_calls/1`
+**Source:** `lib/opal/agent/agent.ex` — `finalize_tool_calls/1`
 
 ### Session Deserialization Validation
 
 `json_to_message` filters nil `call_id` or `name` entries when deserializing tool_calls from saved sessions. An assistant message whose tool_calls all had nil fields gets `tool_calls: nil` (treated as a plain text response).
 
-**Source:** `packages/core/lib/opal/session.ex` — `json_to_message/1`
+**Source:** `lib/opal/session.ex` — `json_to_message/1`
 
 ## How It Works End-to-End
 
@@ -151,8 +151,8 @@ The conversation integrity test suite (`test/opal/agent/conversation_integrity_t
 
 ## Source
 
-- `packages/core/lib/opal/agent/agent.ex` — `repair_orphaned_tool_calls`, `find_orphaned_calls`, `ensure_tool_results`, `finalize_tool_calls`, stream error handling
-- `packages/core/lib/opal/agent/stream.ex` — `stream_errored` flag on error events
-- `packages/core/lib/opal/agent/state.ex` — `stream_errored` field
-- `packages/core/lib/opal/session.ex` — `json_to_message` validation
-- `packages/core/test/opal/agent/conversation_integrity_test.exs` — test suite
+- `lib/opal/agent/agent.ex` — `repair_orphaned_tool_calls`, `find_orphaned_calls`, `ensure_tool_results`, `finalize_tool_calls`, stream error handling
+- `lib/opal/agent/stream.ex` — `stream_errored` flag on error events
+- `lib/opal/agent/state.ex` — `stream_errored` field
+- `lib/opal/session.ex` — `json_to_message` validation
+- `test/opal/agent/conversation_integrity_test.exs` — test suite

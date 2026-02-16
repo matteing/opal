@@ -1,0 +1,99 @@
+# .mise.toml — tool versions + task orchestration (replaces Nx)
+min_version = "2025.1"
+
+[tools]
+erlang = "28.3.1"
+elixir = "1.19-otp-28"
+node = { version = "22", postinstall = "corepack enable" }
+
+# ── Build pipeline ────────────────────────────────────────────
+# sources/outputs enable skip-if-unchanged
+
+[tasks."build:core"]
+description = "Compile Elixir core"
+run = "mix compile --warnings-as-errors"
+sources = ["lib/**/*.ex", "mix.exs", "mix.lock"]
+outputs = ["_build/dev/**/*.beam"]
+
+[tasks.codegen]
+description = "Generate TS types from Elixir schemas"
+depends = ["build:core"]
+run = "mix run scripts/codegen_ts.exs"
+sources = ["lib/opal/rpc/**/*.ex", "scripts/codegen_ts.exs"]
+outputs = ["cli/src/sdk/protocol.ts"]
+
+[tasks."build:cli"]
+description = "Compile TypeScript CLI"
+depends = ["codegen"]
+dir = "cli"
+run = "npx tsc"
+sources = ["cli/src/**/*.{ts,tsx}", "cli/tsconfig.json"]
+outputs = ["cli/dist/**/*.js"]
+
+[tasks.build]
+description = "Full build: core → codegen → CLI"
+depends = ["build:cli"]
+
+# ── Test (independent — wildcard runs them in parallel) ───────
+
+[tasks."test:core"]
+description = "Run Elixir tests"
+run = "mix test"
+
+[tasks."test:cli"]
+description = "Run CLI tests"
+dir = "cli"
+run = "npx vitest run"
+
+[tasks.test]
+description = "Run all tests"
+depends = ["test:*"]
+
+# ── Lint & Format ─────────────────────────────────────────────
+
+[tasks."lint:core"]
+description = "Check Elixir formatting"
+run = "mix format --check-formatted"
+
+[tasks."lint:cli"]
+description = "Lint and format-check CLI"
+dir = "cli"
+run = ["pnpm lint", "pnpm format:check"]
+
+[tasks.lint]
+description = "Lint all projects"
+depends = ["lint:*"]
+
+[tasks."format:core"]
+description = "Format Elixir code"
+run = "mix format"
+
+[tasks."format:cli"]
+description = "Format CLI code"
+dir = "cli"
+run = ["pnpm lint:fix", "pnpm format"]
+
+[tasks.format]
+description = "Format all projects"
+depends = ["format:*"]
+
+# ── Dev & Setup ───────────────────────────────────────────────
+
+[tasks."deps:core"]
+description = "Install Elixir dependencies"
+run = "mix deps.get"
+
+[tasks."deps:cli"]
+description = "Install CLI dependencies"
+dir = "cli"
+run = "pnpm install"
+
+[tasks.deps]
+description = "Install all dependencies"
+depends = ["deps:*"]
+
+[tasks.dev]
+description = "Build and launch the CLI"
+depends = ["build"]
+dir = "cli"
+run = "node dist/bin.js"

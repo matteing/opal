@@ -1,1 +1,0 @@
-# Opal Core

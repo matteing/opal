@@ -56,8 +56,8 @@ This shared module is used by `Read`, `Edit`, and `Write` to prevent encoding co
 
 ## Source
 
-- `packages/core/lib/opal/tool.ex` — Behaviour definition
-- `packages/core/lib/opal/tool/` — All tool implementations
-- `packages/core/lib/opal/tool/hashline.ex` — Hash computation and line tagging
-- `packages/core/lib/opal/tool/encoding.ex` — BOM and CRLF handling
-- `packages/core/lib/opal/tool/file_helper.ex` — Shared path resolution and file I/O helpers
+- `lib/opal/tool.ex` — Behaviour definition
+- `lib/opal/tool/` — All tool implementations
+- `lib/opal/tool/hashline.ex` — Hash computation and line tagging
+- `lib/opal/tool/encoding.ex` — BOM and CRLF handling
+- `lib/opal/tool/file_helper.ex` — Shared path resolution and file I/O helpers

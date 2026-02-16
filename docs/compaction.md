@@ -23,10 +23,10 @@ graph TD
 ```
 
 **Key files:**
-- `packages/core/lib/opal/session/compaction.ex` — cut point, summarization, file-op tracking
-- `packages/core/lib/opal/agent/usage_tracker.ex` — auto-compact trigger, hybrid estimation
-- `packages/core/lib/opal/agent/overflow.ex` — overflow pattern matching and emergency compaction
-- `packages/core/lib/opal/token.ex` — token estimation heuristics
+- `lib/opal/session/compaction.ex` — cut point, summarization, file-op tracking
+- `lib/opal/agent/usage_tracker.ex` — auto-compact trigger, hybrid estimation
+- `lib/opal/agent/overflow.ex` — overflow pattern matching and emergency compaction
+- `lib/opal/token.ex` — token estimation heuristics
 
 ## Token Metrics
 

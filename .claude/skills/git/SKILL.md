@@ -6,7 +6,7 @@ globs: "**/*"
 
 # Git Conventional Commit Skill
 
-You enforce [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) on every commit in this repository. This is critical because the project uses `nx release` with `conventionalCommits: true` to auto-generate changelogs and determine semantic version bumps.
+You enforce [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) on every commit in this repository. This is critical for consistent changelogs and semantic version bumps.
 
 ## Commit message format
 
@@ -41,8 +41,8 @@ Use a scope to identify the affected area:
 
 | Scope    | Meaning                                     |
 |----------|---------------------------------------------|
-| `core`   | Elixir core (`packages/core/` directory)             |
-| `cli`    | TypeScript CLI (`packages/cli/` directory)           |
+| `core`   | Elixir core (`lib/opal/` directory)             |
+| `cli`    | TypeScript CLI (`cli/` directory)           |
 | `rpc`    | JSON-RPC protocol layer                     |
 | `agent`  | Agent loop / GenServer                      |
 | `tools`  | Built-in tool implementations               |

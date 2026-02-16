@@ -156,9 +156,9 @@ flush()
 
 ## Source Files
 
-- `packages/core/lib/opal/application.ex` — `start_distribution/0`, node file read/write
-- `packages/core/lib/opal/inspect.ex` — Event watcher for `pnpm inspect`
-- `packages/core/lib/opal/events.ex` — Registry-based pub/sub
+- `lib/opal/application.ex` — `start_distribution/0`, node file read/write
+- `lib/opal/inspect.ex` — Event watcher for `pnpm inspect`
+- `lib/opal/events.ex` — Registry-based pub/sub
 - `scripts/inspect.sh` — Wrapper script that reads `~/.opal/node` and launches IEx
 
 ## References

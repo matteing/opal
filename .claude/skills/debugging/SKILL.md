@@ -125,7 +125,7 @@ The key difference: `debug_state` works within a turn and returns structured JSO
 
 Beyond unit tests (`mix test`) and the `debug_state` tool, you can spin up a real opal-server instance and interact with it programmatically. This lets you verify end-to-end behavior after making changes — e.g., "does session/start still work after I refactored config?"
 
-All commands run from `packages/core/`.
+All commands run from the repo root.
 
 ### One-off RPC calls
 
@@ -192,9 +192,9 @@ Both scripts boot the Opal OTP application in-process (no child process or stdio
 
 ## Source files
 
-- `packages/core/lib/opal/tool/debug.ex` — The `debug_state` tool implementation
-- `packages/core/lib/opal/agent/event_log.ex` — In-memory bounded event log (ETS ring buffer)
-- `packages/core/lib/opal/agent/tool_runner.ex` — Where feature flags filter active tools
-- `packages/core/lib/opal/config.ex` — `Opal.Config.Features` struct with `:debug` toggle
+- `lib/opal/tool/debug.ex` — The `debug_state` tool implementation
+- `lib/opal/agent/event_log.ex` — In-memory bounded event log (ETS ring buffer)
+- `lib/opal/agent/tool_runner.ex` — Where feature flags filter active tools
+- `lib/opal/config.ex` — `Opal.Config.Features` struct with `:debug` toggle
 - `scripts/opal-rpc.exs` — One-off RPC call script for integration testing
 - `scripts/opal-session.exs` — Full session lifecycle script with event streaming

@@ -22,26 +22,26 @@ Run these in order. Stop and fix issues at each step before proceeding.
 
 ```bash
 # Compile with warnings-as-errors (matches CI)
-pnpm nx run core:build
+mise run build:core
 
 # Check formatting
-pnpm nx run core:lint
+mise run lint:core
 
 # Run tests
-pnpm nx run core:test
+mise run test:core
 ```
 
 ### 2. TypeScript CLI
 
 ```bash
 # Lint (ESLint)
-pnpm nx run cli:lint
+mise run lint:cli
 
 # Verify codegen is current
-pnpm nx run cli:codegen:check
+mix run scripts/codegen_ts.exs --check
 
 # Build (typecheck + compile)
-pnpm nx run cli:build
+mise run build:cli
 ```
 
 ### 3. Quick summary
@@ -49,7 +49,7 @@ pnpm nx run cli:build
 Or run everything at once:
 
 ```bash
-pnpm lint && pnpm build && pnpm test
+mise run lint && mise run build && mise run test
 ```
 
 ## Rules

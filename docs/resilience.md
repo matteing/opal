@@ -49,8 +49,8 @@ sequenceDiagram
 
 **Where it happens:**
 
-- `packages/cli/src/hooks/use-opal.ts` — `"error"` event sets `state.error`, but the UI only checks `state.error` when `!state.sessionReady` (`packages/cli/src/app.tsx`).
-- `packages/cli/src/sdk/client.ts` — on process exit, pending requests reject with `"opal-server exited"` but no reconnect is attempted.
+- `src/hooks/use-opal.ts` — `"error"` event sets `state.error`, but the UI only checks `state.error` when `!state.sessionReady` (`src/app.tsx`).
+- `src/sdk/client.ts` — on process exit, pending requests reject with `"opal-server exited"` but no reconnect is attempted.
 
 **What recovery looks like:** The CLI should detect the crash and display a clear message: *"The agent crashed and lost its current turn. Your conversation history is saved. Press Enter to continue."* The input should remain functional.
 
@@ -60,8 +60,8 @@ sequenceDiagram
 
 **Where it happens:**
 
-- `packages/core/lib/opal/agent/agent.ex` `init/1` — initializes fresh state, does not check for an existing `Session` process or load prior messages.
-- `packages/core/lib/opal/session_server.ex` — starts children in order but has no post-restart hook to reconnect the agent to the surviving session.
+- `lib/opal/agent/agent.ex` `init/1` — initializes fresh state, does not check for an existing `Session` process or load prior messages.
+- `lib/opal/session_server.ex` — starts children in order but has no post-restart hook to reconnect the agent to the surviving session.
 
 **What recovery looks like:** On init, the agent should detect whether a `Session` process already exists for its session ID. If so, it should call `Session.get_path/1` to reload the conversation history into its state. The user loses the in-flight turn but keeps the full conversation.
 
@@ -81,8 +81,8 @@ flowchart LR
 
 **Where it happens:**
 
-- `packages/core/lib/opal/events.ex` — no mechanism for broadcasting lifecycle events about the agent process itself (as opposed to events *from* the agent).
-- `packages/core/lib/opal/rpc/stdio.ex` — subscribes to events but has no monitor on the agent process.
+- `lib/opal/events.ex` — no mechanism for broadcasting lifecycle events about the agent process itself (as opposed to events *from* the agent).
+- `lib/opal/rpc/stdio.ex` — subscribes to events but has no monitor on the agent process.
 
 **What recovery looks like:** The `SessionServer` (or a dedicated monitor process) should detect agent termination and broadcast a recovery event:
 
@@ -98,8 +98,8 @@ Subscribers can then update their UI, flush pending state, and wait for the reco
 
 **Where it happens:**
 
-- `packages/core/lib/opal/rpc/stdio.ex` — reads stdin in a loop, writes to stdout. No periodic liveness signal.
-- `packages/cli/src/sdk/client.ts` — sends requests and waits for responses. No timeout on individual requests. Server→client requests use a 30s timeout, but client→server requests wait indefinitely.
+- `lib/opal/rpc/stdio.ex` — reads stdin in a loop, writes to stdout. No periodic liveness signal.
+- `src/sdk/client.ts` — sends requests and waits for responses. No timeout on individual requests. Server→client requests use a 30s timeout, but client→server requests wait indefinitely.
 
 **What recovery looks like:** A `ping` method (or periodic heartbeat notification) that the CLI can use to verify the backend is responsive. If N consecutive pings fail, surface a "backend unresponsive" message and offer to restart.
 
@@ -109,8 +109,8 @@ Subscribers can then update their UI, flush pending state, and wait for the reco
 
 **Where it happens:**
 
-- `packages/core/lib/opal/agent/agent.ex` — `maybe_auto_save/1` only runs on transition to `:idle`.
-- `packages/core/lib/opal/session.ex` — ETS table is owned by the `Session` GenServer. If that process dies, the table is deleted (`terminate/2` cleans up).
+- `lib/opal/agent/agent.ex` — `maybe_auto_save/1` only runs on transition to `:idle`.
+- `lib/opal/session.ex` — ETS table is owned by the `Session` GenServer. If that process dies, the table is deleted (`terminate/2` cleans up).
 
 **What recovery looks like:**
 
@@ -124,8 +124,8 @@ Subscribers can then update their UI, flush pending state, and wait for the reco
 
 **Where it happens:**
 
-- `packages/cli/src/sdk/client.ts` — `spawn` is called once in the constructor. The `"exit"` handler rejects pending requests but does not attempt recovery.
-- `packages/cli/src/bin.ts` — renders the app once, no top-level error boundary or restart wrapper.
+- `src/sdk/client.ts` — `spawn` is called once in the constructor. The `"exit"` handler rejects pending requests but does not attempt recovery.
+- `src/bin.ts` — renders the app once, no top-level error boundary or restart wrapper.
 
 **What recovery looks like:** The client should catch backend exits and attempt to respawn the process, re-establish the session (loading from the last auto-saved state), and resume. The UI should show a brief "reconnecting..." status rather than silently dying.
 
@@ -155,13 +155,13 @@ Three defense layers prevent this class of error:
 
 ## Source
 
-- `packages/core/lib/opal/agent/agent.ex` — Agent state machine, init, auto-save
-- `packages/core/lib/opal/session.ex` — Session GenServer, ETS storage, persistence
-- `packages/core/lib/opal/session_server.ex` — Per-session supervisor
-- `packages/core/lib/opal/rpc/stdio.ex` — Stdio transport
-- `packages/core/lib/opal/events.ex` — Event broadcasting
-- `packages/core/lib/opal/agent/tool_runner.ex` — Tool execution, cancel_all_tasks
-- `packages/core/lib/opal/agent/retry.ex` — Error classification (transient vs permanent)
-- `packages/cli/src/sdk/client.ts` — RPC client, process lifecycle
-- `packages/cli/src/hooks/use-opal.ts` — Agent state management in the UI
-- `packages/cli/src/app.tsx` — Error display logic
+- `lib/opal/agent/agent.ex` — Agent state machine, init, auto-save
+- `lib/opal/session.ex` — Session GenServer, ETS storage, persistence
+- `lib/opal/session_server.ex` — Per-session supervisor
+- `lib/opal/rpc/stdio.ex` — Stdio transport
+- `lib/opal/events.ex` — Event broadcasting
+- `lib/opal/agent/tool_runner.ex` — Tool execution, cancel_all_tasks
+- `lib/opal/agent/retry.ex` — Error classification (transient vs permanent)
+- `src/sdk/client.ts` — RPC client, process lifecycle
+- `src/hooks/use-opal.ts` — Agent state management in the UI
+- `src/app.tsx` — Error display logic

@@ -2,12 +2,11 @@
 # scripts/opal-session.exs — Boot a session, send a prompt, stream events.
 #
 # Usage:
-#   cd packages/core
-#   mix run --no-start ../../scripts/opal-session.exs -- "<prompt>"
-#   mix run --no-start ../../scripts/opal-session.exs -- "<prompt>" --timeout 30000
-#   mix run --no-start ../../scripts/opal-session.exs -- "<prompt>" --model copilot:gpt-4.1
-#   mix run --no-start ../../scripts/opal-session.exs -- "<prompt>" --working-dir /path/to/project
-#   mix run --no-start ../../scripts/opal-session.exs -- "<prompt>" --json
+#   mix run --no-start scripts/opal-session.exs -- "<prompt>"
+#   mix run --no-start scripts/opal-session.exs -- "<prompt>" --timeout 30000
+#   mix run --no-start scripts/opal-session.exs -- "<prompt>" --model copilot:gpt-4.1
+#   mix run --no-start scripts/opal-session.exs -- "<prompt>" --working-dir /path/to/project
+#   mix run --no-start scripts/opal-session.exs -- "<prompt>" --json
 #
 # Examples:
 #   # Simple prompt

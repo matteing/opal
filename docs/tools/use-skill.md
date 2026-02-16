@@ -48,4 +48,4 @@ This is a context-efficiency pattern. Instead of loading all skill instructions 
 
 ## Source
 
-`packages/core/lib/opal/tool/use_skill.ex`, `packages/core/lib/opal/skill.ex`
+`lib/opal/tool/use_skill.ex`, `lib/opal/skill.ex`

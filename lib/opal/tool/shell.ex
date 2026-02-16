@@ -288,9 +288,7 @@ defmodule Opal.Tool.Shell do
             System.cmd("kill", ["-9", "#{os_pid}"], stderr_to_stdout: true)
 
           {:win32, _} ->
-            System.cmd("taskkill", ["/PID", "#{os_pid}", "/T", "/F"],
-              stderr_to_stdout: true
-            )
+            System.cmd("taskkill", ["/PID", "#{os_pid}", "/T", "/F"], stderr_to_stdout: true)
         end
 
         :ok

@@ -1,6 +1,6 @@
 # Agent Loop
 
-`Opal.Agent` is the runtime loop that drives prompt handling, model streaming, tool execution, retries, and completion. The loop is now implemented as an OTP `:gen_statem` (`packages/core/lib/opal/agent/agent.ex`) with explicit lifecycle states, while helper modules under `packages/core/lib/opal/agent/` keep stream parsing, tool orchestration, retries, and compaction concerns separated.
+`Opal.Agent` is the runtime loop that drives prompt handling, model streaming, tool execution, retries, and completion. The loop is now implemented as an OTP `:gen_statem` (`lib/opal/agent/agent.ex`) with explicit lifecycle states, while helper modules under `lib/opal/agent/` keep stream parsing, tool orchestration, retries, and compaction concerns separated.
 
 ## Interface
 
@@ -116,7 +116,7 @@ flowchart LR
 
 ## Agent module layout
 
-The agent runtime now follows a responsibility-first layout under `packages/core/lib/opal/agent/`:
+The agent runtime now follows a responsibility-first layout under `lib/opal/agent/`:
 
 - `agent.ex` — `:gen_statem` loop and state transitions
 - `state.ex` — runtime state struct/types

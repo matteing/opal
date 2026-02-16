@@ -255,10 +255,14 @@ defmodule Opal.Tool.Tasks do
   end
 
   defp all_tasks(table) do
-    :dets.foldl(fn
-      {:__counter__, _}, acc -> acc
-      {_id, task}, acc -> [task | acc]
-    end, [], table)
+    :dets.foldl(
+      fn
+        {:__counter__, _}, acc -> acc
+        {_id, task}, acc -> [task | acc]
+      end,
+      [],
+      table
+    )
   end
 
   # Atomic counter — avoids duplicate IDs when concurrent with_dets calls overlap.

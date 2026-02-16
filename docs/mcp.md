@@ -69,7 +69,7 @@ mcp_servers: [
 
 ## Source
 
-- `packages/core/lib/opal/mcp/client.ex` — Server connection and tool/resource calls
-- `packages/core/lib/opal/mcp/bridge.ex` — Tool discovery and runtime module creation
-- `packages/core/lib/opal/mcp/supervisor.ex` — Process supervision
-- `packages/core/lib/opal/mcp/resources.ex` — Resource access
+- `lib/opal/mcp/client.ex` — Server connection and tool/resource calls
+- `lib/opal/mcp/bridge.ex` — Tool discovery and runtime module creation
+- `lib/opal/mcp/supervisor.ex` — Process supervision
+- `lib/opal/mcp/resources.ex` — Resource access

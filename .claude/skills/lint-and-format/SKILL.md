@@ -1,7 +1,7 @@
 ---
 name: lint-and-format
 description: Runs linting and formatting checks before committing. Use this skill after writing or modifying code to ensure it passes all linters and formatters before creating a commit.
-globs: "{packages/core,packages/cli}/**/*.{ex,exs,ts,tsx,js,json}"
+globs: "{lib,test,config}/**/*.{ex,exs},cli/**/*.{ts,tsx,js,json}"
 ---
 
 # Lint & Format Skill
@@ -16,40 +16,40 @@ You ensure all code passes the project's linters and formatters before it gets c
 
 ## Commands
 
-### Elixir (packages/core/)
+### Elixir (lib/, test/, config/)
 
 ```bash
 # Check formatting (what CI runs)
-pnpm nx run core:lint
+mise run lint:core
 
 # Auto-fix formatting
-pnpm nx run core:format
+mise run format:core
 ```
 
-### TypeScript/JavaScript (packages/cli/)
+### TypeScript/JavaScript (cli/)
 
 ```bash
 # ESLint check
-pnpm nx run cli:lint
+cd cli && pnpm lint
 
 # ESLint auto-fix
-pnpm nx run cli:lint:fix
+cd cli && pnpm lint:fix
 
 # Prettier check
-pnpm nx run cli:format:check
+cd cli && pnpm format:check
 
 # Prettier auto-fix
-pnpm nx run cli:format
+cd cli && pnpm format
 ```
 
 ### Run everything
 
 ```bash
 # Check all (what CI runs)
-pnpm lint
+mise run lint
 
 # Fix all
-pnpm format
+mise run format
 ```
 
 ## Workflow
@@ -62,6 +62,6 @@ pnpm format
 ## Rules
 
 1. **Never commit code that fails linting or formatting checks.**
-2. Prefer auto-fix (`pnpm format`, `lint:fix`) over manual edits when possible.
+2. Prefer auto-fix (`mise run format`, `lint:fix`) over manual edits when possible.
 3. If a lint rule seems wrong for a specific case, discuss with the user before adding a suppression comment.
 4. Do not disable or weaken lint rules without explicit approval.

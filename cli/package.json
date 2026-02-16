@@ -30,7 +30,15 @@
     "format": "prettier --write src/",
     "format:check": "prettier --check src/",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prepare": "cd .. && lefthook install"
+  },
+  "prettier": {
+    "semi": true,
+    "singleQuote": false,
+    "trailingComma": "all",
+    "printWidth": 100,
+    "tabWidth": 2
   },
   "dependencies": {
     "@types/yargs": "^17.0.35",
@@ -43,12 +51,20 @@
     "yargs": "^18.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
     "@types/marked-terminal": "^6.1.1",
     "@types/node": "^25.2.3",
     "@types/react": "^19.2.14",
     "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
     "ink-testing-library": "^4.0.0",
+    "lefthook": "^2.1.1",
+    "prettier": "^3.8.1",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.55.0",
     "vitest": "^4.0.18"
   }
 }

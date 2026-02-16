@@ -2,12 +2,11 @@
 # scripts/opal-rpc.exs — Send a one-off JSON-RPC call to opal-server in-process.
 #
 # Usage:
-#   cd packages/core
-#   mix run --no-start ../../scripts/opal-rpc.exs -- <method> [params_json]
+#   mix run --no-start scripts/opal-rpc.exs -- <method> [params_json]
 #
 # Examples:
 #   # Liveness check
-#   mix run --no-start ../../scripts/opal-rpc.exs -- opal/ping
+#   mix run --no-start scripts/opal-rpc.exs -- opal/ping
 #
 #   # Start a session
 #   mix run --no-start ../../scripts/opal-rpc.exs -- session/start '{"working_dir": "/tmp"}'

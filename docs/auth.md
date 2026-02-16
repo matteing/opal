@@ -148,7 +148,7 @@ If no auth check is done and credentials are missing, the agent will return an e
 
 ## Source Files
 
-- [`packages/core/lib/opal/auth.ex`](../packages/core/lib/opal/auth.ex) — Credential probe logic
-- [`packages/core/lib/opal/auth/copilot.ex`](../packages/core/lib/opal/auth/copilot.ex) — Copilot OAuth device-code flow
-- [`packages/core/lib/opal/rpc/handler.ex`](../packages/core/lib/opal/rpc/handler.ex) — RPC method handlers
-- [`packages/cli/src/components/device-auth.tsx`](../packages/cli/src/components/device-auth.tsx) — Setup wizard UI
+- [`lib/opal/auth.ex`](../lib/opal/auth.ex) — Credential probe logic
+- [`lib/opal/auth/copilot.ex`](../lib/opal/auth/copilot.ex) — Copilot OAuth device-code flow
+- [`lib/opal/rpc/handler.ex`](../lib/opal/rpc/handler.ex) — RPC method handlers
+- [`src/components/device-auth.tsx`](../src/components/device-auth.tsx) — Setup wizard UI
