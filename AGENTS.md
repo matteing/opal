@@ -4,9 +4,9 @@
 
 ## Project Overview
 
-This is an Elixir monorepo with two main components:
+This is a monorepo with two main components:
 
-- **`lib/`** - The Opal SDK (Elixir library) providing the agent engine, tools, providers, and MCP bridge
+- **`opal/`** - The Opal SDK (Elixir project) providing the agent engine, tools, providers, and MCP bridge
 - **`cli/`** - Terminal UI application that consumes the core library for interactive agent sessions
 
 The project leverages Elixir/OTP's strengths: supervision trees, GenServers, process isolation, and fault tolerance.
@@ -148,7 +148,7 @@ end
 ## File Structure
 
 ```
-lib/opal/
+opal/lib/opal/
 ├── agent.ex              # Main agent GenServer
 ├── agent/                # Agent loop internals (stream, tool_runner, retry, etc.)
 ├── auth.ex               # Authentication system

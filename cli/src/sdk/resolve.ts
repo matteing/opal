@@ -31,11 +31,14 @@ function detectMonorepo(): ServerResolution | null {
     // cli/{src,dist}/sdk/resolve.{ts,js} → repo root is 4 levels up
     const repoRoot = resolve(thisFile, "../../../..");
 
-    if (existsSync(join(repoRoot, "mix.exs")) && existsSync(join(repoRoot, "lib", "opal"))) {
+    if (
+      existsSync(join(repoRoot, "opal", "mix.exs")) &&
+      existsSync(join(repoRoot, "opal", "lib", "opal"))
+    ) {
       return {
         command: "mise",
         args: ["exec", "--", "elixir", "-S", "mix", "run", "--no-halt"],
-        cwd: repoRoot,
+        cwd: join(repoRoot, "opal"),
       };
     }
   } catch {

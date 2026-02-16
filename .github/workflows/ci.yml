@@ -25,18 +25,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            deps
-            _build
-          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+            opal/deps
+            opal/_build
+          key: mix-${{ runner.os }}-${{ hashFiles('opal/mix.lock') }}
           restore-keys: mix-${{ runner.os }}-
 
       - name: Install deps
         run: |
-          mix deps.get
-          cd cli && pnpm install --frozen-lockfile
+          cd opal && mix deps.get
+          cd ../cli && pnpm install --frozen-lockfile
 
       - name: Codegen check
-        run: mix run scripts/codegen_ts.exs --check
+        run: cd opal && mix run ../scripts/codegen_ts.exs --check
 
       - name: Lint
         run: mise run lint

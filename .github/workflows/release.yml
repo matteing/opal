@@ -64,10 +64,10 @@ jobs:
           otp-version: ${{ env.OTP_VERSION }}
 
       - name: Install deps
-        run: mix deps.get --only prod
+        run: cd opal && mix deps.get --only prod
 
       - name: Build release (${{ matrix.target }})
-        run: mix release opal_server --overwrite
+        run: cd opal && mix release opal_server --overwrite
         env:
           BURRITO_TARGET: ${{ matrix.target }}
 
@@ -75,7 +75,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.binary }}
-          path: burrito_out/*
+          path: opal/burrito_out/*
           retention-days: 1
 
   # ---------------------------------------------------------------------------
@@ -91,8 +91,8 @@ jobs:
 
       - name: Install deps
         run: |
-          mix deps.get
-          cd cli && pnpm install --frozen-lockfile
+          cd opal && mix deps.get
+          cd ../cli && pnpm install --frozen-lockfile
 
       - name: Codegen + Build
         run: mise run build
@@ -152,12 +152,12 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Install Elixir deps
-        run: mix deps.get
+        run: cd opal && mix deps.get
         env:
           MIX_ENV: dev
 
       - name: Publish to Hex
-        run: mix hex.publish --yes
+        run: cd opal && mix hex.publish --yes
         env:
           MIX_ENV: dev
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}

@@ -103,8 +103,8 @@ describe("resolveServer", () => {
   it("detects monorepo and uses mise exec", async () => {
     vi.mocked(existsSync).mockImplementation((path) => {
       const p = String(path);
-      if (p.endsWith("mix.exs")) return true;
-      if (p.endsWith(join("lib", "opal"))) return true;
+      if (p.includes(join("opal", "mix.exs"))) return true;
+      if (p.includes(join("opal", "lib", "opal"))) return true;
       return false;
     });
 
@@ -113,14 +113,15 @@ describe("resolveServer", () => {
     expect(result.command).toBe("mise");
     expect(result.args).toEqual(["exec", "--", "elixir", "-S", "mix", "run", "--no-halt"]);
     expect(result.cwd).toBeDefined();
+    expect(result.cwd).toContain("opal");
   });
 
   it("prefers monorepo over opal-server in PATH", async () => {
     vi.mocked(execFileSync).mockReturnValue("/usr/local/bin/opal-server\n");
     vi.mocked(existsSync).mockImplementation((path) => {
       const p = String(path);
-      if (p.endsWith("mix.exs")) return true;
-      if (p.endsWith(join("lib", "opal"))) return true;
+      if (p.includes(join("opal", "mix.exs"))) return true;
+      if (p.includes(join("opal", "lib", "opal"))) return true;
       if (p.includes("opal-server")) return true;
       return false;
     });

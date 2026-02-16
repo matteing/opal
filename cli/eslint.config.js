@@ -70,6 +70,19 @@ export default tseslint.config(
     },
   },
 
+  // Test files get relaxed type-safety rules (mock objects are loosely typed)
+  {
+    files: ["**/__tests__/**"],
+    rules: {
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "no-control-regex": "off",
+    },
+  },
+
   // Prettier must be last to override formatting rules
   prettierConfig,
 );

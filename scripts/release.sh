@@ -52,13 +52,13 @@ if [ "$BRANCH" != "main" ]; then
 fi
 
 # 1. Update mix.exs
-sed -i '' "s/@version \".*\"/@version \"$VERSION\"/" mix.exs
+sed -i '' "s/@version \".*\"/@version \"$VERSION\"/" opal/mix.exs
 
 # 2. Update cli/package.json
 cd cli && npm version "$VERSION" --no-git-tag-version --allow-same-version && cd ..
 
 # 3. Commit and tag
-git add mix.exs cli/package.json
+git add opal/mix.exs cli/package.json
 git commit -m "release: v${VERSION}"
 git tag -a "v${VERSION}" -m "v${VERSION}"
 

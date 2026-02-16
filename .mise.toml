@@ -11,24 +11,26 @@ node = { version = "22", postinstall = "corepack enable" }
 
 [tasks."build:core"]
 description = "Compile Elixir core"
+dir = "opal"
 run = "mix compile --warnings-as-errors"
 sources = ["lib/**/*.ex", "mix.exs", "mix.lock"]
 outputs = ["_build/dev/**/*.beam"]
 
 [tasks.codegen]
 description = "Generate TS types from Elixir schemas"
+dir = "opal"
 depends = ["build:core"]
-run = "mix run scripts/codegen_ts.exs"
-sources = ["lib/opal/rpc/**/*.ex", "scripts/codegen_ts.exs"]
-outputs = ["cli/src/sdk/protocol.ts"]
+run = "mix run ../scripts/codegen_ts.exs"
+sources = ["lib/opal/rpc/**/*.ex", "../scripts/codegen_ts.exs"]
+outputs = ["../cli/src/sdk/protocol.ts"]
 
 [tasks."build:cli"]
 description = "Compile TypeScript CLI"
 depends = ["codegen"]
 dir = "cli"
-run = "npx tsc"
-sources = ["cli/src/**/*.{ts,tsx}", "cli/tsconfig.json"]
-outputs = ["cli/dist/**/*.js"]
+run = "npx tsc -p tsconfig.build.json"
+sources = ["src/**/*.{ts,tsx}", "tsconfig.json"]
+outputs = ["dist/**/*.js"]
 
 [tasks.build]
 description = "Full build: core → codegen → CLI"
@@ -38,6 +40,7 @@ depends = ["build:cli"]
 
 [tasks."test:core"]
 description = "Run Elixir tests"
+dir = "opal"
 run = "mix test"
 
 [tasks."test:cli"]
@@ -53,6 +56,7 @@ depends = ["test:*"]
 
 [tasks."lint:core"]
 description = "Check Elixir formatting"
+dir = "opal"
 run = "mix format --check-formatted"
 
 [tasks."lint:cli"]
@@ -66,6 +70,7 @@ depends = ["lint:*"]
 
 [tasks."format:core"]
 description = "Format Elixir code"
+dir = "opal"
 run = "mix format"
 
 [tasks."format:cli"]
@@ -81,6 +86,7 @@ depends = ["format:*"]
 
 [tasks."deps:core"]
 description = "Install Elixir dependencies"
+dir = "opal"
 run = "mix deps.get"
 
 [tasks."deps:cli"]
@@ -107,4 +113,5 @@ run = "bash scripts/release.sh"
 
 [tasks.server]
 description = "Start opal-server with Erlang distribution"
+dir = "opal"
 run = "elixir --sname opal -S mix run --no-halt"

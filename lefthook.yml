@@ -2,6 +2,7 @@ pre-commit:
   parallel: false
   commands:
     format-elixir:
+      root: "opal/"
       glob: "**/*.{ex,exs}"
       run: mix format {staged_files}
       stage_fixed: true
