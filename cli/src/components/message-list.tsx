@@ -343,6 +343,16 @@ const ContextLines: FC<{ context: Context; rootDir: string }> = ({ context, root
           </Text>
         </Box>
       ))}
+      {context.distribution && (
+        <Box>
+          <Text>
+            <Text color="yellow">●</Text>{" "}
+            <Text dimColor>
+              Debug: {context.distribution.node} (cookie: {context.distribution.cookie})
+            </Text>
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 };

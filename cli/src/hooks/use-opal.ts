@@ -289,10 +289,13 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
                 timeline: [
                   ...s.main.timeline,
                   {
-                    kind: "message" as const,
-                    message: {
-                      role: "assistant" as const,
-                      content: `Instance exposed at **${dist.node}** (cookie: \`${dist.cookie}\`)\n\nConnect with: \`iex --sname debug --cookie ${dist.cookie} --remsh ${dist.node}\``,
+                    kind: "context" as const,
+                    context: {
+                      files: [],
+                      skills: [],
+                      mcpServers: [],
+                      distribution: dist,
+                      status: "discovered" as const,
                     },
                   },
                 ],

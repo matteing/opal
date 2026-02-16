@@ -191,14 +191,16 @@ Opal has two binaries: **`opal`** (the TypeScript TUI client) and **`opal-server
 
 ### Current: `opal-server` (Elixir backend)
 
-**Entry point:** `Opal.Application` — a pure OTP app. No CLI arg parsing, no escript main, no `OptionParser`. Started via `mix run --no-halt` (dev) or as a Burrito-wrapped native binary. Writes Erlang node info to `~/.opal/node` for remote debugging.
+**Entry point:** `Opal.Application` — a pure OTP app. No CLI arg parsing, no escript main, no `OptionParser`. Started via `mix run --no-halt` (dev) or as a Burrito-wrapped native binary.
 
-**No flags at all.** Configuration is entirely via environment variables (`OPAL_DATA_DIR`, `OPAL_SHELL`, `OPAL_COPILOT_DOMAIN`) and runtime RPC calls.
+**No flags, by design.** `opal-server` is a pure JSON-RPC runtime. It boots, attaches to stdio, and speaks protocol. There are no subcommands, no `--verbose`, no `--data-dir`. Configuration that affects runtime behavior (`OPAL_DATA_DIR`, `OPAL_SHELL`, `OPAL_COPILOT_DOMAIN`) uses environment variables — the correct mechanism for process-level config set by the parent (the CLI). Everything else is controlled via RPC calls after the connection is established.
+
+This is intentional minimalism, not a gap. The server is a component managed by the CLI, not a user-facing tool. Adding CLI flags would create a second configuration surface that competes with the protocol. Any capability the server needs to expose — log level, diagnostics, Erlang node setup — should be an RPC method so all clients (TUI, SDK, scripts) can use it uniformly.
 
 **Resolution chain** (how the CLI finds the server):
 1. `opal-server` on `$PATH` (user-installed Burrito binary)
 2. Bundled platform binary in `releases/` (shipped with npm package)
-3. Monorepo dev mode: `elixir --sname opal -S mix run --no-halt` in `packages/core/`
+3. Monorepo dev mode: `elixir --sname opal -S mix run --no-halt` in `opal/`
 
 ### RPC Protocol Surface
 
@@ -226,8 +228,8 @@ All capabilities are exposed as JSON-RPC 2.0 methods, defined in `Opal.RPC.Proto
 | `tasks/list` | List active tasks for a session |
 | `settings/get` | Get all persistent user settings |
 | `settings/save` | Save user settings (merged) |
-| `opal/config/get` | Get runtime feature flags and tool config for a session |
-| `opal/config/set` | Update runtime feature flags and tools for a session |
+| `opal/config/get` | Get runtime config for a session (feature flags, tools, distribution) |
+| `opal/config/set` | Update runtime config (feature flags, tools, distribution) |
 | `opal/ping` | Liveness check |
 
 **Server → Client Requests (3):**
@@ -262,7 +264,7 @@ All capabilities are exposed as JSON-RPC 2.0 methods, defined in `Opal.RPC.Proto
 
 5. **No `opal config` subcommand.** Settings/config is only accessible via the `/opal` slash command or raw RPC calls. Should be: `opal config get`, `opal config set <key> <value>`.
 
-6. **`opal-server` accepts no arguments.** Can't set log level, data directory, or transport via CLI flags. Everything is env vars, which is fine for programmatic use but hostile for debugging. At minimum: `opal-server --verbose`, `opal-server --data-dir <path>`.
+6. **Erlang distribution not exposed via config.** Today, connecting an IEx shell to a running Opal node requires knowing the node name and cookie, which are written to `~/.opal/node` at boot and require the `scripts/inspect.sh` helper. This should be controllable via the existing `opal/config/set` method: setting `distribution: {name: "opal", cookie: "abc"}` starts distribution, setting `distribution: null` stops it, and `opal/config/get` returns the current state. The CLI can then offer `opal --sname` without the user needing to know Erlang internals.
 
 7. **No `--prompt` / positional arg for quick one-shots.** `opal "What is this project?"` doesn't work — the TUI always starts. A positional arg could start the TUI pre-loaded with that prompt, or in `--no-tui` mode just run it headlessly.
 
@@ -281,6 +283,8 @@ opal -C <dir>                       # Working directory
 opal --auto-confirm                 # Skip confirmations
 opal --verbose                      # Verbose output
 opal --version                      # Print opal + server versions
+opal --sname <name>                 # Start with Erlang distribution (short name)
+opal --cookie <cookie>              # Set Erlang cookie (default: random)
 
 opal auth login                     # Device-code OAuth login
 opal auth status                    # Show auth state
@@ -412,10 +416,10 @@ description = "Install all dependencies"
 depends = ["deps:*"]
 
 [tasks.dev]
-description = "Build and launch the CLI"
+description = "Build and launch the CLI (with Erlang distribution for debugging)"
 depends = ["build"]
 dir = "cli"
-run = "node dist/bin.js"
+run = "node dist/bin.js --sname opal"
 ```
 
 ### Why mise
@@ -584,6 +588,17 @@ New subcommands and modes for `opal`. Each ships independently.
 
 **Exit criteria:** `opal --version` prints versions. `opal auth status` works without starting the TUI. Headless mode exits cleanly with output on stdout.
 
+### Phase 4.5: Remote debugging
+
+Expose Erlang distribution setup via the existing `opal/config/set` / `opal/config/get` RPC methods and wire it into the CLI. No new RPC methods needed — distribution is just runtime config with a side effect.
+
+1. **Distribution as config.** `opal/config/set` accepts a `distribution` key. Setting `{"distribution": {"name": "opal", "cookie": "abc123"}}` calls `Node.start/2` and `Node.set_cookie/2` as a side effect, then returns `{"distribution": {"node": "opal@hostname", "cookie": "abc123"}}`. Setting `{"distribution": null}` calls `Node.stop/0`. `opal/config/get` returns the current distribution state (or `null` if not active).
+2. **`--sname` / `--cookie` CLI flags.** The CLI passes these to `opal/config/set` with the `distribution` key immediately after the RPC connection is established. If `--sname` is provided without `--cookie`, a random cookie is generated.
+3. **TUI status message.** When distribution is enabled, the CLI emits a system message in the skills/context area: `Instance exposed at opal@hostname (cookie: abc123)`. This gives the user the exact incantation for `iex --remsh`.
+4. **`mise run dev` defaults.** The dev task passes `--sname opal` by default, so `mise run dev` always starts with distribution enabled. The TUI shows the connection info on startup.
+
+**Exit criteria:** `mise run dev` shows node connection info. `iex --sname debug --cookie <cookie> --remsh opal@hostname` connects successfully. `opal --sname mynode` works for production installs.
+
 ### Phase 5: Packaging (when demand warrants)
 
 1. **Extract `@opal/sdk`** from `cli/src/sdk/` into its own npm package.
@@ -597,12 +612,14 @@ New subcommands and modes for `opal`. Each ships independently.
 ```
 Phase 0 ──→ Phase 1 ──→ Phase 2 ──→ Phase 3
                │                       │
-               └── Phase 4 ───────────→│
-                                       │
-                                       └──→ Phase 5
+               ├── Phase 4 ───────────→│
+               │      │                │
+               │      └─ Phase 4.5 ───→│
+               │                       │
+               └───────────────────────└──→ Phase 5
 ```
 
-Phase 0 must land first (clean edges). Phase 1 depends on it. After Phase 1, Phases 2 and 4 can run in parallel. Phase 3 depends on Phase 2 (needs the kernel/batteries boundary for `use Opal.Tool`). Phase 5 is gated on demand, not on a technical prerequisite.
+Phase 0 must land first (clean edges). Phase 1 depends on it. After Phase 1, Phases 2 and 4 can run in parallel. Phase 4.5 depends on Phase 4 (needs the CLI flag infrastructure). Phase 3 depends on Phase 2 (needs the kernel/batteries boundary for `use Opal.Tool`). Phase 5 is gated on demand, not on a technical prerequisite.
 
 ---
 

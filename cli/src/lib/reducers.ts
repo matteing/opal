@@ -27,6 +27,7 @@ export interface Context {
   files: string[];
   skills: string[];
   mcpServers: string[];
+  distribution?: { node: string; cookie: string };
   status: "discovered";
 }
 
