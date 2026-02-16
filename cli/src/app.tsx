@@ -17,10 +17,11 @@ import type { SessionOptions } from "./sdk/session.js";
 
 export interface AppProps {
   sessionOpts: SessionOptions;
+  initialPrompt?: string;
   onSessionId?: (id: string) => void;
 }
 
-export const App: FC<AppProps> = ({ sessionOpts, onSessionId }) => {
+export const App: FC<AppProps> = ({ sessionOpts, initialPrompt, onSessionId }) => {
   const [state, actions] = useOpal(sessionOpts);
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -42,6 +43,15 @@ export const App: FC<AppProps> = ({ sessionOpts, onSessionId }) => {
   useEffect(() => {
     if (state.sessionId) onSessionId?.(state.sessionId);
   }, [state.sessionId, onSessionId]);
+
+  // Send initial prompt once the session is ready.
+  const initialPromptSent = useRef(false);
+  useEffect(() => {
+    if (initialPrompt && state.sessionId && !initialPromptSent.current) {
+      initialPromptSent.current = true;
+      actions.submitPrompt(initialPrompt);
+    }
+  }, [initialPrompt, state.sessionId, actions]);
 
   // Resolve the active agent view (main or a sub-agent tab)
   const activeView =
@@ -161,7 +171,7 @@ export const App: FC<AppProps> = ({ sessionOpts, onSessionId }) => {
   if (!state.sessionReady) {
     return (
       <Box flexDirection="column" padding={1} minHeight={rows}>
-        <ShimmerText>Starting opal-server…</ShimmerText>
+        <ShimmerText>Starting Opal…</ShimmerText>
         {state.serverLogs.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             {state.serverLogs.slice(-8).map((line, i) => (

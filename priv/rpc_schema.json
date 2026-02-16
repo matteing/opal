@@ -32,6 +32,53 @@
             "const": "agent_end",
             "description": "Event type discriminator.",
             "type": "string"
+          },
+          "usage": {
+            "description": "Cumulative token usage for the session.",
+            "properties": {
+              "completion_tokens": {
+                "type": "integer"
+              },
+              "context_window": {
+                "type": "integer"
+              },
+              "current_context_tokens": {
+                "type": "integer"
+              },
+              "prompt_tokens": {
+                "type": "integer"
+              },
+              "total_tokens": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "completion_tokens",
+              "context_window",
+              "current_context_tokens",
+              "prompt_tokens",
+              "total_tokens"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "session_id"
+        ],
+        "type": "object"
+      },
+      "agent_recovered": {
+        "description": "Agent process crashed and was restarted by the supervisor. Conversation history was reloaded from the surviving session.",
+        "properties": {
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "agent_recovered",
+            "description": "Event type discriminator.",
+            "type": "string"
           }
         },
         "required": [
@@ -56,6 +103,33 @@
         "required": [
           "type",
           "session_id"
+        ],
+        "type": "object"
+      },
+      "context_discovered": {
+        "description": "Project context files were discovered during session initialization.",
+        "properties": {
+          "files": {
+            "description": "Paths of discovered context files.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "context_discovered",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "files"
         ],
         "type": "object"
       },
@@ -155,6 +229,64 @@
         ],
         "type": "object"
       },
+      "status_update": {
+        "description": "Short status message describing what the agent is currently working on.",
+        "properties": {
+          "message": {
+            "description": "Brief human-readable status.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "status_update",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "message"
+        ],
+        "type": "object"
+      },
+      "sub_agent_event": {
+        "description": "An event forwarded from a spawned sub-agent.",
+        "properties": {
+          "inner": {
+            "description": "The wrapped agent event from the sub-agent (contains a type field and event-specific data).",
+            "type": "object"
+          },
+          "parent_call_id": {
+            "description": "The call_id of the parent sub_agent tool invocation.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "sub_session_id": {
+            "description": "The sub-agent's session ID.",
+            "type": "string"
+          },
+          "type": {
+            "const": "sub_agent_event",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "parent_call_id",
+          "sub_session_id",
+          "inner"
+        ],
+        "type": "object"
+      },
       "thinking_delta": {
         "description": "A chunk of LLM thinking/reasoning text.",
         "properties": {
@@ -206,21 +338,7 @@
             "type": "string"
           },
           "result": {
-            "description": "Tool execution result.",
-            "properties": {
-              "error": {
-                "type": "string"
-              },
-              "ok": {
-                "type": "boolean"
-              },
-              "output": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "ok"
-            ],
+            "description": "Tool execution result object. Includes ok plus tool-specific payload fields.",
             "type": "object"
           },
           "session_id": {
@@ -308,6 +426,54 @@
           "message"
         ],
         "type": "object"
+      },
+      "usage_update": {
+        "description": "Live token usage update during a turn.",
+        "properties": {
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "type": {
+            "const": "usage_update",
+            "description": "Event type discriminator.",
+            "type": "string"
+          },
+          "usage": {
+            "description": "Current token usage snapshot.",
+            "properties": {
+              "completion_tokens": {
+                "type": "integer"
+              },
+              "context_window": {
+                "type": "integer"
+              },
+              "current_context_tokens": {
+                "type": "integer"
+              },
+              "prompt_tokens": {
+                "type": "integer"
+              },
+              "total_tokens": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "completion_tokens",
+              "context_window",
+              "current_context_tokens",
+              "prompt_tokens",
+              "total_tokens"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "usage"
+        ],
+        "type": "object"
       }
     },
     "methods": {
@@ -326,15 +492,7 @@
           "type": "object"
         },
         "result": {
-          "properties": {
-            "ok": {
-              "description": "Always true on success.",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "ok"
-          ],
+          "properties": {},
           "type": "object"
         }
       },
@@ -358,15 +516,7 @@
           "type": "object"
         },
         "result": {
-          "properties": {
-            "ok": {
-              "description": "Always true on success.",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "ok"
-          ],
+          "properties": {},
           "type": "object"
         }
       },
@@ -398,11 +548,15 @@
                 },
                 "provider": {
                   "type": "string"
+                },
+                "thinking_level": {
+                  "type": "string"
                 }
               },
               "required": [
+                "id",
                 "provider",
-                "id"
+                "thinking_level"
               ],
               "type": "object"
             },
@@ -452,15 +606,7 @@
           "type": "object"
         },
         "result": {
-          "properties": {
-            "ok": {
-              "description": "Always true on success.",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "ok"
-          ],
+          "properties": {},
           "type": "object"
         }
       },
@@ -498,16 +644,29 @@
           "type": "object"
         }
       },
-      "auth/status": {
-        "description": "Check whether the server is authenticated.",
+      "auth/poll": {
+        "description": "Poll for device-code authorization and exchange for a Copilot token.",
         "params": {
-          "properties": {},
+          "properties": {
+            "device_code": {
+              "description": "Device code from auth/login.",
+              "type": "string"
+            },
+            "interval": {
+              "description": "Polling interval in seconds.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "device_code",
+            "interval"
+          ],
           "type": "object"
         },
         "result": {
           "properties": {
             "authenticated": {
-              "description": "True if a valid token exists.",
+              "description": "True once the user has authorized.",
               "type": "boolean"
             }
           },
@@ -517,16 +676,151 @@
           "type": "object"
         }
       },
-      "models/list": {
-        "description": "List available LLM models.",
+      "auth/set_key": {
+        "description": "Save an API key for a provider. Takes effect immediately.",
+        "params": {
+          "properties": {
+            "api_key": {
+              "description": "The API key to save.",
+              "type": "string"
+            },
+            "provider": {
+              "description": "Provider ID (e.g. 'anthropic', 'openai').",
+              "type": "string"
+            }
+          },
+          "required": [
+            "provider",
+            "api_key"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "ok": {
+              "description": "True if the key was saved.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ],
+          "type": "object"
+        }
+      },
+      "auth/status": {
+        "description": "Probe all credential sources and return auth readiness.",
         "params": {
           "properties": {},
           "type": "object"
         },
         "result": {
           "properties": {
+            "auth": {
+              "description": "Full probe result with provider list and readiness.",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "providers": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider",
+                "providers",
+                "status"
+              ],
+              "type": "object"
+            },
+            "authenticated": {
+              "description": "True if any provider has credentials.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "authenticated",
+            "auth"
+          ],
+          "type": "object"
+        }
+      },
+      "model/set": {
+        "description": "Change the model for a running session.",
+        "params": {
+          "properties": {
+            "model_id": {
+              "description": "Model ID to switch to.",
+              "type": "string"
+            },
+            "session_id": {
+              "description": "Target session ID.",
+              "type": "string"
+            },
+            "thinking_level": {
+              "description": "Reasoning effort: off, low, medium, high.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id",
+            "model_id"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "model": {
+              "description": "The new active model.",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "thinking_level": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "provider",
+                "thinking_level"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "model"
+          ],
+          "type": "object"
+        }
+      },
+      "models/list": {
+        "description": "List available LLM models. Copilot models are always included. Pass providers to also list direct provider models.",
+        "params": {
+          "properties": {
+            "providers": {
+              "description": "Optional list of direct providers to include (e.g. [\"anthropic\", \"openai\"]).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "result": {
+          "properties": {
             "models": {
-              "description": "Array of {id, name}.",
+              "description": "Array of {id, name, provider, supports_thinking}.",
               "items": {
                 "type": "object"
               },
@@ -535,6 +829,226 @@
           },
           "required": [
             "models"
+          ],
+          "type": "object"
+        }
+      },
+      "opal/config/get": {
+        "description": "Get runtime feature and tool configuration for a session.",
+        "params": {
+          "properties": {
+            "session_id": {
+              "description": "Target session ID.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "features": {
+              "description": "Current runtime feature flags.",
+              "properties": {
+                "debug": {
+                  "type": "boolean"
+                },
+                "mcp": {
+                  "type": "boolean"
+                },
+                "skills": {
+                  "type": "boolean"
+                },
+                "sub_agents": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "debug",
+                "mcp",
+                "skills",
+                "sub_agents"
+              ],
+              "type": "object"
+            },
+            "tools": {
+              "description": "Tool availability for the session.",
+              "properties": {
+                "all": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "disabled": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "enabled": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "all",
+                "disabled",
+                "enabled"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "features",
+            "tools"
+          ],
+          "type": "object"
+        }
+      },
+      "opal/config/set": {
+        "description": "Update runtime feature and tool configuration for a session.",
+        "params": {
+          "properties": {
+            "features": {
+              "description": "Feature flags to update.",
+              "properties": {
+                "debug": {
+                  "type": "boolean"
+                },
+                "mcp": {
+                  "type": "boolean"
+                },
+                "skills": {
+                  "type": "boolean"
+                },
+                "sub_agents": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "debug",
+                "mcp",
+                "skills",
+                "sub_agents"
+              ],
+              "type": "object"
+            },
+            "session_id": {
+              "description": "Target session ID.",
+              "type": "string"
+            },
+            "tools": {
+              "description": "Exact list of enabled tool names.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "session_id"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "features": {
+              "description": "Current runtime feature flags.",
+              "properties": {
+                "debug": {
+                  "type": "boolean"
+                },
+                "mcp": {
+                  "type": "boolean"
+                },
+                "skills": {
+                  "type": "boolean"
+                },
+                "sub_agents": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "debug",
+                "mcp",
+                "skills",
+                "sub_agents"
+              ],
+              "type": "object"
+            },
+            "tools": {
+              "description": "Tool availability for the session.",
+              "properties": {
+                "all": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "disabled": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "enabled": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "all",
+                "disabled",
+                "enabled"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "features",
+            "tools"
+          ],
+          "type": "object"
+        }
+      },
+      "opal/ping": {
+        "description": "Liveness check. Returns immediately.",
+        "params": {
+          "properties": {},
+          "type": "object"
+        },
+        "result": {
+          "properties": {},
+          "type": "object"
+        }
+      },
+      "opal/version": {
+        "description": "Return server and protocol version information.",
+        "params": {
+          "properties": {},
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "protocol_version": {
+              "description": "RPC protocol version (e.g. 0.1.0).",
+              "type": "string"
+            },
+            "server_version": {
+              "description": "Opal server version (e.g. 0.1.10).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "server_version",
+            "protocol_version"
           ],
           "type": "object"
         }
@@ -559,15 +1073,7 @@
           "type": "object"
         },
         "result": {
-          "properties": {
-            "ok": {
-              "description": "Always true on success.",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "ok"
-          ],
+          "properties": {},
           "type": "object"
         }
       },
@@ -590,9 +1096,28 @@
           "type": "object"
         },
         "result": {
+          "properties": {},
+          "type": "object"
+        }
+      },
+      "session/delete": {
+        "description": "Delete a saved session by ID.",
+        "params": {
+          "properties": {
+            "session_id": {
+              "description": "ID of the session to delete.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id"
+          ],
+          "type": "object"
+        },
+        "result": {
           "properties": {
             "ok": {
-              "description": "Always true on success.",
+              "description": "True if deleted successfully.",
               "type": "boolean"
             }
           },
@@ -628,6 +1153,30 @@
         "description": "Start a new agent session.",
         "params": {
           "properties": {
+            "features": {
+              "description": "Boot-time feature toggles.",
+              "properties": {
+                "debug": {
+                  "type": "boolean"
+                },
+                "mcp": {
+                  "type": "boolean"
+                },
+                "skills": {
+                  "type": "boolean"
+                },
+                "sub_agents": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "debug",
+                "mcp",
+                "skills",
+                "sub_agents"
+              ],
+              "type": "object"
+            },
             "mcp_servers": {
               "description": "MCP server configurations.",
               "items": {
@@ -646,14 +1195,18 @@
                 }
               },
               "required": [
-                "provider",
-                "id"
+                "id",
+                "provider"
               ],
               "type": "object"
             },
             "session": {
               "description": "If true, enable session persistence.",
               "type": "boolean"
+            },
+            "session_id": {
+              "description": "Resume an existing session by ID. Implies session=true. The session is loaded from disk.",
+              "type": "string"
             },
             "system_prompt": {
               "description": "System prompt for the agent.",
@@ -675,9 +1228,28 @@
         },
         "result": {
           "properties": {
-            "agent_pid": {
-              "description": "Erlang PID (for debugging).",
-              "type": "string"
+            "auth": {
+              "description": "Auth probe result: status is 'ready' or 'setup_required', provider is auto-selected ID or null, providers lists all known options with readiness.",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "providers": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider",
+                "providers",
+                "status"
+              ],
+              "type": "object"
             },
             "available_skills": {
               "description": "Names of discovered skills (not yet loaded).",
@@ -693,6 +1265,21 @@
               },
               "type": "array"
             },
+            "mcp_servers": {
+              "description": "Names of connected MCP servers.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "node_name": {
+              "description": "Erlang node name of the server (for debugging).",
+              "type": "string"
+            },
+            "session_dir": {
+              "description": "Filesystem path to the session's data directory.",
+              "type": "string"
+            },
             "session_id": {
               "description": "The new session's unique ID.",
               "type": "string"
@@ -700,9 +1287,58 @@
           },
           "required": [
             "session_id",
-            "agent_pid",
+            "session_dir",
             "context_files",
-            "available_skills"
+            "available_skills",
+            "mcp_servers",
+            "node_name",
+            "auth"
+          ],
+          "type": "object"
+        }
+      },
+      "settings/get": {
+        "description": "Get all persistent user settings.",
+        "params": {
+          "properties": {},
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "settings": {
+              "description": "Map of setting key-value pairs.",
+              "type": "object"
+            }
+          },
+          "required": [
+            "settings"
+          ],
+          "type": "object"
+        }
+      },
+      "settings/save": {
+        "description": "Save user settings (merged with existing).",
+        "params": {
+          "properties": {
+            "settings": {
+              "description": "Map of setting key-value pairs to save.",
+              "type": "object"
+            }
+          },
+          "required": [
+            "settings"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "settings": {
+              "description": "The full settings after merge.",
+              "type": "object"
+            }
+          },
+          "required": [
+            "settings"
           ],
           "type": "object"
         }
@@ -736,10 +1372,81 @@
           ],
           "type": "object"
         }
+      },
+      "thinking/set": {
+        "description": "Change the reasoning effort level for the current model.",
+        "params": {
+          "properties": {
+            "level": {
+              "description": "Reasoning effort: off, low, medium, high.",
+              "type": "string"
+            },
+            "session_id": {
+              "description": "Target session ID.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id",
+            "level"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "thinking_level": {
+              "description": "The new thinking level.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "thinking_level"
+          ],
+          "type": "object"
+        }
       }
     },
     "notification_method": "agent/event",
     "server_requests": {
+      "client/ask_user": {
+        "description": "Ask the user a question with optional multiple-choice answers.",
+        "params": {
+          "properties": {
+            "choices": {
+              "description": "Optional multiple-choice options.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "question": {
+              "description": "The question to display.",
+              "type": "string"
+            },
+            "session_id": {
+              "description": "Session this question belongs to.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id",
+            "question"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "properties": {
+            "answer": {
+              "description": "The user's response text.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "answer"
+          ],
+          "type": "object"
+        }
+      },
       "client/confirm": {
         "description": "Ask the user for confirmation (e.g., before executing a tool).",
         "params": {

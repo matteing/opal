@@ -76,7 +76,15 @@ defmodule Mix.Tasks.Opal.Gen.JsonSchema do
 
   defp build_events(event_types) do
     Map.new(event_types, fn e ->
-      fields_schema = fields_to_json_schema(e.fields)
+      properties =
+        Map.new(e.fields, fn f ->
+          {f.name, type_to_json_schema(f.type, f.description)}
+        end)
+
+      required =
+        e.fields
+        |> Enum.reject(fn f -> Map.get(f, :required) == false end)
+        |> Enum.map(& &1.name)
 
       base = %{
         "type" => "object",
@@ -93,9 +101,9 @@ defmodule Mix.Tasks.Opal.Gen.JsonSchema do
                 "description" => "Session this event belongs to."
               }
             },
-            fields_schema["properties"] || %{}
+            properties
           ),
-        "required" => ["type", "session_id"] ++ (fields_schema["required"] || []),
+        "required" => ["type", "session_id"] ++ required,
         "description" => e.description
       }
 
@@ -103,14 +111,32 @@ defmodule Mix.Tasks.Opal.Gen.JsonSchema do
     end)
   end
 
-  # -- Type String → JSON Schema --
+  # -- Type → JSON Schema --
 
   @doc false
-  def type_to_json_schema(type_str, description \\ "") do
-    schema = parse_type(type_str)
+  def type_to_json_schema(type, description \\ "") do
+    schema = parse_type(type)
     if description != "", do: Map.put(schema, "description", description), else: schema
   end
 
+  # Atom types (used by Opal.RPC.Protocol)
+  defp parse_type(:string), do: %{"type" => "string"}
+  defp parse_type(:boolean), do: %{"type" => "boolean"}
+  defp parse_type(:integer), do: %{"type" => "integer"}
+  defp parse_type(:number), do: %{"type" => "number"}
+  defp parse_type(:object), do: %{"type" => "object"}
+
+  defp parse_type({:array, inner}),
+    do: %{"type" => "array", "items" => parse_type(inner)}
+
+  defp parse_type({:object, fields}) when is_map(fields) do
+    properties = Map.new(fields, fn {name, type} -> {name, parse_type(type)} end)
+    required = Map.keys(fields) |> Enum.sort()
+    schema = %{"type" => "object", "properties" => properties}
+    if required == [], do: schema, else: Map.put(schema, "required", required)
+  end
+
+  # String types (legacy/fallback)
   defp parse_type("string"), do: %{"type" => "string"}
   defp parse_type("boolean"), do: %{"type" => "boolean"}
   defp parse_type("integer"), do: %{"type" => "integer"}
@@ -121,8 +147,6 @@ defmodule Mix.Tasks.Opal.Gen.JsonSchema do
   defp parse_type("object[]"), do: %{"type" => "array", "items" => %{"type" => "object"}}
 
   defp parse_type("object{" <> rest) do
-    # Parse inline object type like "object{provider:string, id:string}"
-    # Supports optional fields with ? suffix: "object{ok:boolean, output?:string}"
     fields_str = String.trim_trailing(rest, "}")
 
     pairs =
@@ -152,6 +176,7 @@ defmodule Mix.Tasks.Opal.Gen.JsonSchema do
     if required == [], do: schema, else: Map.put(schema, "required", required)
   end
 
-  # Fallback for types we can't parse — keep as-is in description
-  defp parse_type(other), do: %{"type" => "object", "description" => "Complex type: #{other}"}
+  # Fallback for types we can't parse
+  defp parse_type(other),
+    do: %{"type" => "object", "description" => "Complex type: #{inspect(other)}"}
 end

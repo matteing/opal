@@ -17,6 +17,7 @@ vi.mock("node:os", () => ({
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { platform, arch } from "node:os";
+import { join } from "node:path";
 
 // We need to re-import resolveServer fresh for each test
 // because it uses these at call time (not import time)
@@ -97,5 +98,35 @@ describe("resolveServer", () => {
     const resolveServer = await getResolveServer();
     const result = resolveServer();
     expect(result.command).toContain("opal_server_linux_x64");
+  });
+
+  it("detects monorepo and uses mise exec", async () => {
+    vi.mocked(existsSync).mockImplementation((path) => {
+      const p = String(path);
+      if (p.endsWith("mix.exs")) return true;
+      if (p.endsWith(join("lib", "opal"))) return true;
+      return false;
+    });
+
+    const resolveServer = await getResolveServer();
+    const result = resolveServer();
+    expect(result.command).toBe("mise");
+    expect(result.args).toEqual(["exec", "--", "elixir", "-S", "mix", "run", "--no-halt"]);
+    expect(result.cwd).toBeDefined();
+  });
+
+  it("prefers monorepo over opal-server in PATH", async () => {
+    vi.mocked(execFileSync).mockReturnValue("/usr/local/bin/opal-server\n");
+    vi.mocked(existsSync).mockImplementation((path) => {
+      const p = String(path);
+      if (p.endsWith("mix.exs")) return true;
+      if (p.endsWith(join("lib", "opal"))) return true;
+      if (p.includes("opal-server")) return true;
+      return false;
+    });
+
+    const resolveServer = await getResolveServer();
+    const result = resolveServer();
+    expect(result.command).toBe("mise");
   });
 });

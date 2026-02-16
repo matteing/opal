@@ -13,19 +13,49 @@ const PLATFORM_MAP: Record<string, string> = {
 };
 
 export interface ServerResolution {
-  /** Command to spawn (binary path) */
+  /** Command to spawn (binary path or executable name) */
   command: string;
   /** Arguments to pass to the command */
   args: string[];
+  /** Working directory for the spawned process */
+  cwd?: string;
+}
+
+/**
+ * Detect if we're running from the Opal monorepo source tree.
+ * If so, use `mise exec` to launch the server with the correct tool versions.
+ */
+function detectMonorepo(): ServerResolution | null {
+  try {
+    const thisFile = fileURLToPath(import.meta.url);
+    // cli/{src,dist}/sdk/resolve.{ts,js} → repo root is 4 levels up
+    const repoRoot = resolve(thisFile, "../../../..");
+
+    if (existsSync(join(repoRoot, "mix.exs")) && existsSync(join(repoRoot, "lib", "opal"))) {
+      return {
+        command: "mise",
+        args: ["exec", "--", "elixir", "-S", "mix", "run", "--no-halt"],
+        cwd: repoRoot,
+      };
+    }
+  } catch {
+    // not in monorepo
+  }
+  return null;
 }
 
 /**
  * Resolve the opal-server binary.
  *
+ * 0. Monorepo dev mode via `mise exec` (when running from source tree)
  * 1. `opal-server` in PATH (user-installed or dev build)
  * 2. Bundled platform binary in `releases/` (npm distribution)
  */
 export function resolveServer(): ServerResolution {
+  // 0. Monorepo dev mode
+  const monorepo = detectMonorepo();
+  if (monorepo) return monorepo;
+
   // 1. Check PATH
   try {
     const cmd = process.platform === "win32" ? "where" : "which";

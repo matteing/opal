@@ -558,6 +558,40 @@ defmodule Opal.RPC.Protocol do
       description: "Liveness check. Returns immediately.",
       params: [],
       result: []
+    },
+    %{
+      method: "opal/version",
+      direction: :client_to_server,
+      description: "Return server and protocol version information.",
+      params: [],
+      result: [
+        %{
+          name: "server_version",
+          type: :string,
+          description: "Opal server version (e.g. 0.1.10)."
+        },
+        %{
+          name: "protocol_version",
+          type: :string,
+          description: "RPC protocol version (e.g. 0.1.0)."
+        }
+      ]
+    },
+    %{
+      method: "session/delete",
+      direction: :client_to_server,
+      description: "Delete a saved session by ID.",
+      params: [
+        %{
+          name: "session_id",
+          type: :string,
+          required: true,
+          description: "ID of the session to delete."
+        }
+      ],
+      result: [
+        %{name: "ok", type: :boolean, description: "True if deleted successfully."}
+      ]
     }
   ]
 

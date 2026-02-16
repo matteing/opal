@@ -421,6 +421,30 @@ defmodule Opal.RPC.Handler do
     {:ok, %{}}
   end
 
+  def handle("opal/version", _params) do
+    {:ok,
+     %{
+       server_version: Application.spec(:opal, :vsn) |> to_string(),
+       protocol_version: Opal.RPC.Protocol.spec().version
+     }}
+  end
+
+  def handle("session/delete", %{"session_id" => session_id}) do
+    config = Opal.Config.new()
+    dir = Opal.Config.sessions_dir(config)
+    path = Path.join(dir, "#{session_id}.jsonl")
+
+    case File.rm(path) do
+      :ok -> {:ok, %{ok: true}}
+      {:error, :enoent} -> {:error, Opal.RPC.invalid_params(), "Session not found", session_id}
+      {:error, reason} -> {:error, Opal.RPC.internal_error(), "Delete failed", inspect(reason)}
+    end
+  end
+
+  def handle("session/delete", _params) do
+    {:error, Opal.RPC.invalid_params(), "Missing required param: session_id", nil}
+  end
+
   # Catch-all for unknown methods
   def handle(method, _params) do
     {:error, Opal.RPC.method_not_found(), "Method not found: #{method}", nil}
