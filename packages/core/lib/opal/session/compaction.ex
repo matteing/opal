@@ -407,7 +407,7 @@ defmodule Opal.Session.Compaction do
                 path = tc.arguments["path"]
                 if path, do: %{inner | read: [path | inner.read]}, else: inner
 
-              name when name in ["write_file", "edit_file", "edit_file_lines"] ->
+              name when name in ["write_file", "edit_file"] ->
                 path = tc.arguments["path"]
                 if path, do: %{inner | modified: [path | inner.modified]}, else: inner
 

@@ -20,7 +20,7 @@ The agent converts tool modules to JSON Schema for the LLM. When the LLM request
 | Tool | Module | Purpose |
 |------|--------|---------|
 | `read_file` | `Opal.Tool.Read` | Read files with hashline-tagged output |
-| `edit_file` | `Opal.Tool.EditLines` | Edit by hash-anchored line references |
+| `edit_file` | `Opal.Tool.Edit` | Edit by hash-anchored line references |
 | `write_file` | `Opal.Tool.Write` | Create or overwrite files |
 | `shell` | `Opal.Tool.Shell` | Execute shell commands with streaming output |
 | `sub_agent` | `Opal.Tool.SubAgent` | Spawn parallel child agents |
@@ -52,7 +52,7 @@ External tools from MCP servers are discovered at session start and wrapped as r
 - **UTF-8 BOM** — stripped before matching/output, restored after edits
 - **CRLF line endings** — normalized to LF for processing, restored after edits
 
-This shared module is used by `Read`, `EditLines`, and `Write` to prevent encoding corruption.
+This shared module is used by `Read`, `Edit`, and `Write` to prevent encoding corruption.
 
 ## Source
 

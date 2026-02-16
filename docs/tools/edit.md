@@ -9,7 +9,7 @@ Opal exposes three file tools to the LLM:
 | Tool | Purpose | Module |
 |------|---------|--------|
 | `read_file` | Read file contents with hashline tags, offset/limit slicing, head-truncation | `Opal.Tool.Read` |
-| `edit_file` | Edit lines by hash-anchored references from `read_file` output | `Opal.Tool.EditLines` |
+| `edit_file` | Edit lines by hash-anchored references from `read_file` output | `Opal.Tool.Edit` |
 | `write_file` | Create or overwrite an entire file | `Opal.Tool.Write` |
 
 The **edit tool** is the primary way the agent modifies existing code. Instead of reproducing old content (str_replace), the model references lines by their `N:hash` tags from `read_file` output.
@@ -99,16 +99,11 @@ Selected results:
 
 The hashline format gives the model a cheap, verifiable anchor. If it can recall a 2-char hash, it knows what it's editing. No content reproduction needed.
 
-## Legacy: str_replace tool
-
-The old `Opal.Tool.Edit` module (str_replace with fuzzy fallback) still exists in the codebase but is no longer in the default tools list. It can be re-enabled by adding `Opal.Tool.Edit` to the config's `default_tools` list for models that work better with it.
-
 ## Source files
 
 - `packages/core/lib/opal/tool/hashline.ex` — Hash computation, line tagging, anchor parsing, hash validation
-- `packages/core/lib/opal/tool/edit_lines.ex` — Hashline edit tool (`edit_file`)
+- `packages/core/lib/opal/tool/edit.ex` — Hashline edit tool (`edit_file`)
 - `packages/core/lib/opal/tool/read.ex` — File reading with hashline-tagged output
-- `packages/core/lib/opal/tool/edit.ex` — Legacy str_replace tool (not in default tools)
 - `packages/core/lib/opal/tool/encoding.ex` — BOM and CRLF handling
 - `packages/core/lib/opal/tool/file_helper.ex` — Shared path resolution and file I/O helpers
 

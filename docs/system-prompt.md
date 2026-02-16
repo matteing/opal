@@ -65,10 +65,10 @@ graph TD
 
 At each directory level, Opal checks for these files (configurable via `Opal.Config.Features`):
 
-| File | Location variants |
-|------|-------------------|
+| File        | Location variants                                               |
+| ----------- | --------------------------------------------------------------- |
 | `AGENTS.md` | `dir/AGENTS.md`, `dir/.agents/AGENTS.md`, `dir/.opal/AGENTS.md` |
-| `OPAL.md` | `dir/OPAL.md`, `dir/.agents/OPAL.md`, `dir/.opal/OPAL.md` |
+| `OPAL.md`   | `dir/OPAL.md`, `dir/.agents/OPAL.md`, `dir/.opal/OPAL.md`       |
 
 **Ordering:** Files found closer to the filesystem root appear first; files closer to `working_dir` appear last (higher priority). This means project-specific instructions override organization-wide ones.
 
@@ -109,13 +109,13 @@ This follows the **progressive disclosure** pattern: only the name and one-line 
 
 `Opal.Context.discover_skills/2` scans these directories for subdirectories containing `SKILL.md`:
 
-| Directory | Scope |
-|-----------|-------|
-| `<working_dir>/.agents/skills/*/SKILL.md` | Project-local |
+| Directory                                 | Scope                             |
+| ----------------------------------------- | --------------------------------- |
+| `<working_dir>/.agents/skills/*/SKILL.md` | Project-local                     |
 | `<working_dir>/.github/skills/*/SKILL.md` | Project-local (GitHub convention) |
-| `~/.agents/skills/*/SKILL.md` | User-global |
-| `~/.opal/skills/*/SKILL.md` | User-global |
-| Additional dirs from config | Custom |
+| `~/.agents/skills/*/SKILL.md`             | User-global                       |
+| `~/.opal/skills/*/SKILL.md`               | User-global                       |
+| Additional dirs from config               | Custom                            |
 
 Each `SKILL.md` must have YAML frontmatter with at least `name` and `description`. Skills that fail to parse or validate are silently skipped.
 
@@ -147,14 +147,14 @@ flowchart LR
 
 ### Rule Pipeline
 
-| Rule Function | Triggers When | Guideline Produced |
-|---------------|---------------|--------------------|
-| `read_vs_shell` | `read_file` + any shell tool | "Use `read_file` to read files. Do NOT use `cat`, `head`, `tail`, or `less` via shell." + offset/limit hint |
-| `edit_vs_shell` | `edit_file` + any shell tool | "Use `edit_file` for all file modifications. Do NOT use `sed`, `awk`, `perl -i`, or shell redirects." |
-| `write_guidelines` | `write_file` present | "Use `write_file` to create new files. Do NOT use shell redirects or `tee`." |
-| `shell_display_warning` | Any shell tool present | "When summarizing, output plain text directly. Do NOT use `cat` or `echo` to display files." |
-| `search_guidelines` | Shell present but `read_file` absent | "Use shell commands like `cat`, `grep`, `find`, and `ls` for file exploration." |
-| `status_tags` | Any known tool present | Emit `<status>...</status>` tags during multi-step tasks. |
+| Rule Function           | Triggers When                        | Guideline Produced                                                                                          |
+| ----------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `read_vs_shell`         | `read_file` + any shell tool         | "Use `read_file` to read files. Do NOT use `cat`, `head`, `tail`, or `less` via shell." + offset/limit hint |
+| `edit_vs_shell`         | `edit_file` + any shell tool         | "Use `edit_file` for all file modifications. Do NOT use `sed`, `awk`, `perl -i`, or shell redirects."       |
+| `write_guidelines`      | `write_file` present                 | "Use `write_file` to create new files. Do NOT use shell redirects or `tee`."                                |
+| `shell_display_warning` | Any shell tool present               | "When summarizing, output plain text directly. Do NOT use `cat` or `echo` to display files."                |
+| `search_guidelines`     | Shell present but `read_file` absent | "Use shell commands like `cat`, `grep`, `find`, and `ls` for file exploration."                             |
+| `status_tags`           | Any known tool present               | Emit `<status>...</status>` tags during multi-step tasks.                                                   |
 
 **Shell detection** recognizes any of: `shell`, `bash`, `zsh`, `cmd`, `powershell`.
 
@@ -194,7 +194,7 @@ When a `Session` process is attached (i.e., this is a top-level agent, not a sub
 ## Planning
 
 For complex multi-step tasks, create a plan document at:
-  /home/user/.opal/sessions/<session_id>/plan.md
+/home/user/.opal/sessions/<session_id>/plan.md
 
 Write your plan before starting implementation. Update it as you
 complete steps. The user can review the plan at any time with Ctrl+Y.
@@ -251,22 +251,22 @@ sequenceDiagram
 
 Sub-agents (spawned via `Opal.Tool.SubAgent`) receive a stripped-down system prompt:
 
-| Component | Top-level Agent | Sub-Agent |
-|-----------|-----------------|-----------|
-| Base prompt | ✓ (from session config) | ✓ (custom task prompt) |
-| Project context | ✓ | ✓ (inherited from parent state) |
-| Skill menu | ✓ | ✓ (if skills discovered) |
-| Tool guidelines | ✓ | ✓ (based on sub-agent's tool set) |
-| Planning instructions | ✓ | ✗ (no session attached) |
+| Component             | Top-level Agent         | Sub-Agent                         |
+| --------------------- | ----------------------- | --------------------------------- |
+| Base prompt           | ✓ (from session config) | ✓ (custom task prompt)            |
+| Project context       | ✓                       | ✓ (inherited from parent state)   |
+| Skill menu            | ✓                       | ✓ (if skills discovered)          |
+| Tool guidelines       | ✓                       | ✓ (based on sub-agent's tool set) |
+| Planning instructions | ✓                       | ✗ (no session attached)           |
 
 ---
 
 ## Module Reference
 
-| Module | Role |
-|--------|------|
-| `Opal.Agent` | Assembles the final system message in `build_messages/1` |
-| `Opal.Agent.SystemPrompt` | Generates tool usage guidelines from active tools |
-| `Opal.Context` | Discovers context files and skills from the filesystem |
-| `Opal.Skill` | Parses and validates `SKILL.md` files |
-| `Opal.Config.Features` | Feature toggles for context and skill discovery |
+| Module                    | Role                                                     |
+| ------------------------- | -------------------------------------------------------- |
+| `Opal.Agent`              | Assembles the final system message in `build_messages/1` |
+| `Opal.Agent.SystemPrompt` | Generates tool usage guidelines from active tools        |
+| `Opal.Context`            | Discovers context files and skills from the filesystem   |
+| `Opal.Skill`              | Parses and validates `SKILL.md` files                    |
+| `Opal.Config.Features`    | Feature toggles for context and skill discovery          |
