@@ -47,7 +47,11 @@ defmodule Opal.Inspect do
 
   @doc """
   Returns the agent pid for the given session ID, or auto-selects
-  if there's exactly one running session.
+  the best candidate when no ID is given.
+
+  Heuristic (when multiple sessions exist): prefers a session that is
+  currently busy (running/streaming/executing_tools), then falls back
+  to the session with the most messages (likely the most recent).
 
   ## Examples
 
@@ -69,8 +73,7 @@ defmodule Opal.Inspect do
         raise "No active sessions. Start an Opal session first."
 
       many ->
-        ids = Enum.map_join(many, "\n  ", fn {id, _} -> id end)
-        raise "Multiple sessions active. Pass a session ID:\n  #{ids}"
+        pick_best_session(many)
     end
   end
 
@@ -79,6 +82,24 @@ defmodule Opal.Inspect do
       [{pid, _}] -> pid
       [] -> raise "No agent for session: #{session_id}"
     end
+  end
+
+  # Picks the best session from multiple candidates.
+  # Prefers busy sessions (running > streaming > executing_tools),
+  # then falls back to most messages (proxy for "most recent").
+  defp pick_best_session(candidates) do
+    scored =
+      Enum.map(candidates, fn {id, pid} ->
+        state = Opal.Agent.get_state(pid)
+        busy_score = if state.status != :idle, do: 1000, else: 0
+        msg_count = length(state.messages)
+        {busy_score + msg_count, id, pid}
+      end)
+
+    {_score, chosen_id, pid} = Enum.max_by(scored, &elem(&1, 0))
+    short = String.slice(chosen_id, 0, 12)
+    IO.puts(IO.ANSI.faint() <> "» Auto-selected session #{short}…" <> IO.ANSI.reset())
+    pid
   end
 
   # ── State Inspection ───────────────────────────────────────────────
