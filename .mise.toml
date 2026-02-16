@@ -101,6 +101,10 @@ run = "node cli/dist/bin.js --expose opal#opal"
 description = "Connect to a running dev instance via iex --remsh"
 run = "bash scripts/inspect.sh"
 
+[tasks.release]
+description = "Bump versions, commit, and tag (e.g. mise run release -- patch)"
+run = "bash scripts/release.sh"
+
 [tasks.server]
 description = "Start opal-server with Erlang distribution"
 run = "elixir --sname opal -S mix run --no-halt"
