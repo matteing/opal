@@ -39,6 +39,8 @@ interface ModelEntry {
 export interface Message {
   role: "user" | "assistant";
   content: string;
+  /** True when this message is queued while the agent is busy. */
+  queued?: boolean;
 }
 
 export interface Task {
@@ -392,7 +394,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
         ...s.main,
         timeline: [
           ...s.main.timeline,
-          { kind: "message", message: { role: "user", content: `[steer] ${text}` } },
+          { kind: "message", message: { role: "user", content: text, queued: true } },
         ],
       },
     }));

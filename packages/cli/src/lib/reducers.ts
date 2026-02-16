@@ -4,6 +4,8 @@ import type { AgentEvent, TokenUsage } from "../sdk/protocol.js";
 export interface Message {
   role: "user" | "assistant";
   content: string;
+  /** True when this message is queued while the agent is busy. */
+  queued?: boolean;
 }
 
 export interface Task {

@@ -172,6 +172,10 @@ Sub-agents? Processes. Steering? Mailbox. Fault isolation? Supervision tree. Liv
   - not sure if that would even work but whatevs
 - A toy OpenClaw reimplementation using Opal 
 
+## A note on token usage
+
+This has not been engineered with token limits in mind. My development Copilot subscription gives me unlimited tokens, so I've been building under the assumption that tokens are infinite. This allows for creative expression and engineering — but it's not the most efficient. In future versions I'll work to reduce token usage by optimizing the system prompt.
+
 ## Disclaimer
 
 This is a hobby project. I work at Microsoft Azure, and our GitHub Copilot subscription provides the LLM access I use for development.

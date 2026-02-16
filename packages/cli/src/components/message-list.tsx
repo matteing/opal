@@ -1,7 +1,5 @@
 import React, { type FC, useRef, useMemo, memo } from "react";
 import { Box, Text, useStdout } from "ink";
-import { Marked, type MarkedExtension } from "marked";
-import { markedTerminal } from "marked-terminal";
 import { TaskList, Task as InkTask } from "ink-task-list";
 import type {
   AgentView,
@@ -19,34 +17,25 @@ import {
   parseTaskNotes,
   type ParsedTask,
 } from "../lib/parsers.js";
-
-let _cachedWidth = 0;
-let _cachedMd: Marked | null = null;
+import { buildContextLoadedItems } from "../lib/formatting.js";
+import {
+  renderMarkdown,
+  shouldReuseRenderedMarkdown,
+  type MarkdownRenderCache,
+} from "../lib/markdown.js";
+import { USER_MESSAGE_BG_COLOR, USER_MESSAGE_TEXT_COLOR } from "../lib/message-theme.js";
 const MAX_RENDERED_ENTRIES = 400;
-
-function getMd(width: number): Marked {
-  if (_cachedMd && _cachedWidth === width) return _cachedMd;
-  _cachedWidth = width;
-  _cachedMd = new Marked(
-    markedTerminal({ width, reflowText: true, tableOptions: {} }) as MarkedExtension,
-  );
-  return _cachedMd;
-}
-
-function renderMarkdown(text: string, width: number): string {
-  const result = getMd(width).parse(text);
-  return typeof result === "string" ? result.trimEnd() : text;
-}
 
 export interface MessageListProps {
   view: AgentView;
   subAgents: Record<string, SubAgent>;
+  workingDir: string;
   showToolOutput?: boolean;
   sessionReady?: boolean;
 }
 
 export const MessageList: FC<MessageListProps> = memo(
-  ({ view, subAgents, showToolOutput = false, sessionReady: _sessionReady = true }) => {
+  ({ view, subAgents, workingDir, showToolOutput = false, sessionReady: _sessionReady = true }) => {
     const { stdout } = useStdout();
     const width = stdout?.columns ?? 80;
     const timeline = view.timeline;
@@ -78,7 +67,9 @@ export const MessageList: FC<MessageListProps> = memo(
             {visibleTimeline.map((entry: TimelineEntry, i: number) => {
               const timelineIndex = startIndex + i;
               if (entry.kind === "context") {
-                return <ContextLines key={timelineIndex} context={entry.context} />;
+                return (
+                  <ContextLines key={timelineIndex} context={entry.context} rootDir={workingDir} />
+                );
               }
               return null;
             })}
@@ -87,77 +78,72 @@ export const MessageList: FC<MessageListProps> = memo(
 
         {hasMessages && (
           <Box flexDirection="column" paddingX={1}>
-            {(() => {
-              let lastMessageRole: Message["role"] | null = null;
-              return visibleTimeline.map((entry: TimelineEntry, i: number) => {
-                const timelineIndex = startIndex + i;
-                if (entry.kind === "message") {
-                  const showBadge =
-                    entry.message.role === "assistant" ? lastMessageRole !== "assistant" : true;
-                  lastMessageRole = entry.message.role;
-                  const isStreaming =
-                    view.isRunning &&
-                    entry.message.role === "assistant" &&
-                    timelineIndex === timeline.length - 1;
+            {visibleTimeline.map((entry: TimelineEntry, i: number) => {
+              const timelineIndex = startIndex + i;
+              if (entry.kind === "message") {
+                const isStreaming =
+                  view.isRunning &&
+                  entry.message.role === "assistant" &&
+                  timelineIndex === timeline.length - 1;
+                return (
+                  <MessageBlock
+                    key={timelineIndex}
+                    message={entry.message}
+                    width={width}
+                    isStreaming={isStreaming}
+                  />
+                );
+              }
+              if (entry.kind === "tool") {
+                // Sub-agent tool: show collapsed summary
+                const subAgent =
+                  entry.task.tool === "sub_agent"
+                    ? (subAgentByCallId.get(entry.task.callId) ?? null)
+                    : null;
+                if (subAgent) {
                   return (
-                    <MessageBlock
-                      key={timelineIndex}
-                      message={entry.message}
-                      width={width}
-                      showBadge={showBadge}
-                      isStreaming={isStreaming}
-                    />
-                  );
-                }
-                if (entry.kind === "tool") {
-                  // Sub-agent tool: show collapsed summary
-                  const subAgent =
-                    entry.task.tool === "sub_agent"
-                      ? (subAgentByCallId.get(entry.task.callId) ?? null)
-                      : null;
-                  if (subAgent) {
-                    return (
-                      <SubAgentSummary
-                        key={entry.task.callId}
-                        task={entry.task}
-                        subAgent={subAgent}
-                      />
-                    );
-                  }
-                  return (
-                    <ToolBlock
+                    <SubAgentSummary
                       key={entry.task.callId}
                       task={entry.task}
-                      width={width}
-                      showOutput={showToolOutput}
+                      subAgent={subAgent}
                     />
                   );
                 }
-                if (entry.kind === "skill") {
-                  return (
-                    <Box key={timelineIndex}>
-                      <Text>
-                        <Text color="green">●</Text>{" "}
-                        <Text dimColor>Loaded skill: {entry.skill.name}</Text>
-                      </Text>
-                    </Box>
-                  );
-                }
-                if (entry.kind === "thinking" && showToolOutput) {
-                  return (
-                    <ThinkingBlock
-                      key={`thinking-${timelineIndex}`}
-                      text={entry.text}
-                      width={width}
-                    />
-                  );
-                }
-                if (entry.kind === "context") {
-                  return <ContextLines key={timelineIndex} context={entry.context} />;
-                }
-                return null;
-              });
-            })()}
+                return (
+                  <ToolBlock
+                    key={entry.task.callId}
+                    task={entry.task}
+                    width={width}
+                    showOutput={showToolOutput}
+                  />
+                );
+              }
+              if (entry.kind === "skill") {
+                return (
+                  <Box key={timelineIndex}>
+                    <Text>
+                      <Text color="green">●</Text>{" "}
+                      <Text dimColor>Loaded skill: {entry.skill.name}</Text>
+                    </Text>
+                  </Box>
+                );
+              }
+              if (entry.kind === "thinking" && showToolOutput) {
+                return (
+                  <ThinkingBlock
+                    key={`thinking-${timelineIndex}`}
+                    text={entry.text}
+                    width={width}
+                  />
+                );
+              }
+              if (entry.kind === "context") {
+                return (
+                  <ContextLines key={timelineIndex} context={entry.context} rootDir={workingDir} />
+                );
+              }
+              return null;
+            })}
           </Box>
         )}
       </Box>
@@ -166,45 +152,58 @@ export const MessageList: FC<MessageListProps> = memo(
   (prev, next) =>
     prev.view === next.view &&
     prev.subAgents === next.subAgents &&
+    prev.workingDir === next.workingDir &&
     prev.showToolOutput === next.showToolOutput,
 );
 
 const MessageBlock: FC<{
   message: Message;
   width: number;
-  showBadge?: boolean;
   isStreaming?: boolean;
 }> = memo(
-  ({ message, width, showBadge = true, isStreaming: _isStreaming = false }) => {
+  ({ message, width, isStreaming: _isStreaming = false }) => {
     const isUser = message.role === "user";
-    const badge = isUser ? "❯ You" : "✦ opal";
-    const color = isUser ? "cyan" : "magenta";
+    const rowWidth = Math.max(20, width - 2);
+    const assistantContentWidth = Math.max(16, rowWidth);
 
-    const cacheRef = useRef({ content: "", rendered: "" });
+    const cacheRef = useRef<MarkdownRenderCache>({ content: "", width: 0, rendered: "" });
 
     let rendered: string;
     if (isUser) {
       rendered = message.content;
     } else {
-      const contentWidth = Math.min(width - 4, 120);
       const cached = cacheRef.current;
-      if (cached.content === message.content) {
+      if (shouldReuseRenderedMarkdown(cached, message.content, assistantContentWidth)) {
         rendered = cached.rendered;
       } else {
-        rendered = renderMarkdown(message.content || "", contentWidth);
-        cacheRef.current = { content: message.content, rendered };
+        rendered = renderMarkdown(message.content || "", assistantContentWidth);
+        cacheRef.current = { content: message.content, width: assistantContentWidth, rendered };
       }
+    }
+
+    if (isUser) {
+      return (
+        <Box flexDirection="column" marginBottom={1}>
+          <Box width={rowWidth} paddingX={1} backgroundColor={USER_MESSAGE_BG_COLOR}>
+            <Text color={USER_MESSAGE_TEXT_COLOR} wrap="wrap">
+              {rendered}
+            </Text>
+          </Box>
+          {message.queued && (
+            <Box marginLeft={1}>
+              <Text dimColor>[queued]</Text>
+            </Box>
+          )}
+        </Box>
+      );
     }
 
     return (
       <Box flexDirection="column" marginBottom={1}>
-        {showBadge && (
-          <Text bold color={color}>
-            {badge}
-          </Text>
-        )}
-        <Box marginLeft={2} width={Math.min(width - 4, 120)}>
-          {isUser ? <Text wrap="wrap">{rendered}</Text> : <Text>{rendered}</Text>}
+        <Box width={rowWidth}>
+          <Box width={assistantContentWidth}>
+            <Text>{rendered}</Text>
+          </Box>
         </Box>
       </Box>
     );
@@ -213,8 +212,8 @@ const MessageBlock: FC<{
     return (
       prev.message.content === next.message.content &&
       prev.message.role === next.message.role &&
+      prev.message.queued === next.message.queued &&
       prev.width === next.width &&
-      prev.showBadge === next.showBadge &&
       prev.isStreaming === next.isStreaming
     );
   },
@@ -332,11 +331,8 @@ const ThinkingBlock: FC<{ text: string; width: number }> = ({ text, width }) => 
   );
 };
 
-const ContextLines: FC<{ context: Context }> = ({ context }) => {
-  const items: string[] = [];
-  for (const f of context.files) items.push(f);
-  for (const s of context.skills) items.push(`skill: ${s}`);
-  for (const m of context.mcpServers) items.push(`mcp: ${m}`);
+const ContextLines: FC<{ context: Context; rootDir: string }> = ({ context, rootDir }) => {
+  const items = buildContextLoadedItems(context, rootDir);
 
   return (
     <Box flexDirection="column" marginBottom={1}>

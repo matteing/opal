@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { formatTokens } from "../lib/formatting.js";
+import path from "node:path";
+import { formatTokens, toRootRelativePath, buildContextLoadedItems } from "../lib/formatting.js";
 
 describe("formatTokens", () => {
   it("returns '0' for undefined", () => {
@@ -22,5 +23,45 @@ describe("formatTokens", () => {
     expect(formatTokens(1499)).toBe("1k");
     expect(formatTokens(1501)).toBe("2k");
     expect(formatTokens(2500)).toBe("3k");
+  });
+});
+
+describe("toRootRelativePath", () => {
+  it("returns a root-relative path when file is under root", () => {
+    const root = path.resolve("repo-root");
+    const file = path.join(root, "AGENTS.md");
+    expect(toRootRelativePath(file, root)).toBe("AGENTS.md");
+  });
+
+  it("keeps absolute path when file is outside root", () => {
+    const root = path.resolve("repo-root");
+    const outside = path.resolve("outside", "AGENTS.md");
+    expect(toRootRelativePath(outside, root)).toBe(outside);
+  });
+
+  it("keeps relative paths unchanged", () => {
+    expect(toRootRelativePath("docs/guide.md", path.resolve("repo-root"))).toBe("docs/guide.md");
+  });
+});
+
+describe("buildContextLoadedItems", () => {
+  it("batches skills and keeps comma-separated output", () => {
+    const root = path.resolve("repo-root");
+    const file = path.join(root, "AGENTS.md");
+
+    const items = buildContextLoadedItems(
+      {
+        files: [file],
+        skills: ["ci-preflight", "debugging", "docs"],
+        mcpServers: ["github-mcp-server"],
+      },
+      root,
+    );
+
+    expect(items).toEqual([
+      "AGENTS.md",
+      "skill: ci-preflight, debugging, docs",
+      "mcp: github-mcp-server",
+    ]);
   });
 });

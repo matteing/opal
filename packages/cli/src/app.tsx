@@ -191,6 +191,7 @@ export const App: FC<AppProps> = ({ sessionOpts, onSessionId }) => {
       <MessageList
         view={activeView}
         subAgents={state.subAgents}
+        workingDir={state.workingDir}
         showToolOutput={showToolOutput}
         sessionReady={state.sessionReady}
       />
@@ -241,9 +242,7 @@ export const App: FC<AppProps> = ({ sessionOpts, onSessionId }) => {
 
       <BottomBar state={state} actions={actions} />
 
-      {state.showDebugPanel && (
-        <RpcPanel messages={state.rpcMessages} height={rpcPanelHeight} />
-      )}
+      {state.showDebugPanel && <RpcPanel messages={state.rpcMessages} height={rpcPanelHeight} />}
     </Box>
   );
 };

@@ -173,15 +173,16 @@ describe("useOpal hook", () => {
   });
 
   describe("submitSteer", () => {
-    it("adds steer message to timeline", async () => {
+    it("adds queued steer message to timeline", async () => {
       const { unmount } = render(React.createElement(HookWrapper));
       await tick(50);
       capturedActions?.submitSteer("Focus on tests");
       await tick();
       const msgs = capturedState?.main.timeline.filter(
-        (e) => e.kind === "message" && e.message.content.includes("[steer]"),
+        (e) => e.kind === "message" && e.message.queued === true,
       );
       expect(msgs?.length).toBeGreaterThanOrEqual(1);
+      expect(msgs?.[0]?.kind === "message" && msgs[0].message.content).toBe("Focus on tests");
       unmount();
     });
   });

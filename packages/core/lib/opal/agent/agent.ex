@@ -715,7 +715,8 @@ defmodule Opal.Agent do
            context: context,
            messages: messages,
            config: config,
-           available_skills: skills
+           available_skills: skills,
+           working_dir: working_dir
          } = state
        )
        when (prompt != "" and prompt != nil) or (context != "" and context != nil) do
@@ -734,11 +735,14 @@ defmodule Opal.Agent do
     tool_guidelines =
       Opal.Agent.SystemPrompt.build_guidelines(Opal.Agent.Tools.active_tools(state))
 
+    # Runtime instructions — tell the agent exactly where commands run.
+    runtime_context = runtime_context_instructions(working_dir)
+
     # Planning instructions — tell the agent where to write plan.md
     planning = planning_instructions(state)
 
     full_prompt =
-      [prompt || "", context || "", skill_menu, tool_guidelines, planning]
+      [prompt || "", context || "", runtime_context, skill_menu, tool_guidelines, planning]
       |> Enum.reject(&(&1 == ""))
       |> Enum.join("\n")
 
@@ -748,6 +752,20 @@ defmodule Opal.Agent do
   end
 
   defp build_messages(%State{messages: messages}), do: ensure_tool_results(Enum.reverse(messages))
+
+  defp runtime_context_instructions(working_dir)
+       when is_binary(working_dir) and working_dir != "" do
+    """
+
+    ## Runtime Context
+
+    Current working directory: `#{working_dir}`
+
+    Shell commands already run from this directory by default. Do not prepend `cd` to the same directory unless you intentionally need a different location.
+    """
+  end
+
+  defp runtime_context_instructions(_), do: ""
 
   # Returns planning instructions for the system prompt, or "" for sub-agents.
   defp planning_instructions(%State{config: config, session_id: session_id, session: session}) do
