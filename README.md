@@ -115,27 +115,59 @@ Add it to your supervision tree and you get everything — no external process, 
   working_dir: "/path/to/project"
 })
 
-:ok = Opal.prompt(agent, "List all Elixir files")
-:ok = Opal.steer(agent, "Actually, focus on the test files")
-:ok = Opal.set_model(agent, "copilot/claude-sonnet-4")
-:ok = Opal.stop_session(agent)
+Opal.stream(agent, "Refactor the auth module")
+|> Enum.each(fn
+  {:message_delta, %{delta: text}} -> IO.write(text)
+  {:tool_execution_start, info}    -> IO.puts("⚡ #{info.meta}")
+  {:agent_end, _}                  -> IO.puts("\n✓ Done")
+  _                                -> :ok
+end)
 ```
 
-### Observability
+`Opal.stream/2` returns a lazy Elixir `Stream` — every event the agent emits lands in your pipeline as it happens. Compose it with `Stream.filter/2`, `Enum.reduce/3`, or anything else in the standard library.
 
-Any process can subscribe to agent events in real time via `Registry`:
+For fire-and-forget or request/response patterns:
 
 ```elixir
-Opal.Events.subscribe(session_id)
+# Async — subscribe to Opal.Events for streaming output
+:ok = Opal.prompt(agent, "List all Elixir files")
 
-receive do
-  {:opal_event, ^session_id, {:message_delta, %{delta: text}}} ->
-    IO.write(text)
-  {:opal_event, ^session_id, {:tool_execution_start, %{name: name}}} ->
-    IO.puts("Running tool: #{name}")
-  {:opal_event, ^session_id, {:agent_end, _}} ->
-    IO.puts("Done.")
+# Sync — block until the agent finishes
+{:ok, response} = Opal.prompt_sync(agent, "What is 2 + 2?")
+```
+
+### Custom tools
+
+Define tools declaratively with `use Opal.Tool`:
+
+```elixir
+defmodule MyApp.SearchTool do
+  use Opal.Tool,
+    name: "search",
+    description: "Full-text search over the codebase"
+
+  @impl true
+  def parameters do
+    %{
+      "type" => "object",
+      "properties" => %{
+        "query" => %{"type" => "string", "description" => "Search query"}
+      },
+      "required" => ["query"]
+    }
+  end
+
+  @impl true
+  def execute(%{"query" => query}, context) do
+    results = MyApp.Search.run(query, context.working_dir)
+    {:ok, Enum.join(results, "\n")}
+  end
 end
+
+{:ok, agent} = Opal.start_session(%{
+  tools: [MyApp.SearchTool],
+  working_dir: "."
+})
 ```
 
 ## Development
