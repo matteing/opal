@@ -1,9 +1,228 @@
 defmodule Opal.Inspect do
   @moduledoc """
-  Helpers for the `pnpm inspect` IEx session.
+  Helpers for inspecting a running Opal agent from IEx.
 
-  Call `Opal.Inspect.watch()` to stream all agent events to the console.
+  Connect to a running instance with `mise run inspect` and use these
+  helpers to explore agent state, messages, and configuration.
+
+  ## Quick Start
+
+      # List all running sessions
+      Opal.Inspect.sessions()
+
+      # Get the agent pid (auto-selects if only one session)
+      agent = Opal.Inspect.agent()
+
+      # Inspect state
+      Opal.Inspect.state()
+      Opal.Inspect.system_prompt()
+      Opal.Inspect.messages()
+      Opal.Inspect.tools()
+      Opal.Inspect.model()
+
+      # Stream live events
+      Opal.Inspect.watch()
   """
+
+  alias Opal.Agent.State
+
+  # ── Session Discovery ──────────────────────────────────────────────
+
+  @doc """
+  Lists all active agent sessions.
+
+  Returns a list of `{session_id, pid}` tuples.
+
+  ## Examples
+
+      iex> Opal.Inspect.sessions()
+      [{"abc123def456", #PID<0.456.0>}]
+  """
+  @spec sessions() :: [{String.t(), pid()}]
+  def sessions do
+    Registry.select(Opal.Registry, [
+      {{{:agent, :"$1"}, :"$2", :_}, [], [{{:"$1", :"$2"}}]}
+    ])
+  end
+
+  @doc """
+  Returns the agent pid for the given session ID, or auto-selects
+  if there's exactly one running session.
+
+  ## Examples
+
+      iex> Opal.Inspect.agent()
+      #PID<0.456.0>
+
+      iex> Opal.Inspect.agent("abc123def456")
+      #PID<0.456.0>
+  """
+  @spec agent(String.t() | nil) :: pid()
+  def agent(session_id \\ nil)
+
+  def agent(nil) do
+    case sessions() do
+      [{_id, pid}] ->
+        pid
+
+      [] ->
+        raise "No active sessions. Start an Opal session first."
+
+      many ->
+        ids = Enum.map_join(many, "\n  ", fn {id, _} -> id end)
+        raise "Multiple sessions active. Pass a session ID:\n  #{ids}"
+    end
+  end
+
+  def agent(session_id) when is_binary(session_id) do
+    case Registry.lookup(Opal.Registry, {:agent, session_id}) do
+      [{pid, _}] -> pid
+      [] -> raise "No agent for session: #{session_id}"
+    end
+  end
+
+  # ── State Inspection ───────────────────────────────────────────────
+
+  @doc """
+  Returns the full `Opal.Agent.State` struct for a session.
+
+  Auto-selects the session if only one is active.
+
+  ## Examples
+
+      iex> state = Opal.Inspect.state()
+      %Opal.Agent.State{session_id: "abc123", status: :idle, ...}
+  """
+  @spec state(String.t() | nil) :: State.t()
+  def state(session_id \\ nil) do
+    Opal.Agent.get_state(agent(session_id))
+  end
+
+  @doc """
+  Returns the current system prompt (including discovered context,
+  skill menu, tool guidelines, and runtime instructions).
+
+  This is the *assembled* prompt sent to the LLM, not just the raw
+  `system_prompt` field — it includes everything `build_messages/1`
+  prepends.
+
+  ## Examples
+
+      iex> Opal.Inspect.system_prompt() |> IO.puts()
+      You are a coding assistant...
+      ## Runtime Context
+      ...
+  """
+  @spec system_prompt(String.t() | nil) :: String.t()
+  def system_prompt(session_id \\ nil) do
+    pid = agent(session_id)
+    messages = Opal.Agent.get_context(pid)
+
+    case messages do
+      [%{role: :system, content: prompt} | _] -> prompt
+      _ -> state(session_id).system_prompt
+    end
+  end
+
+  @doc """
+  Returns the conversation messages (newest first, as stored in state).
+
+  ## Options
+
+    * `:limit` — max messages to return (default: all)
+    * `:role` — filter by role (`:user`, `:assistant`, `:tool_result`, `:system`)
+
+  ## Examples
+
+      iex> Opal.Inspect.messages(limit: 5)
+      [%Opal.Message{role: :assistant, ...}, ...]
+
+      iex> Opal.Inspect.messages(role: :user)
+      [%Opal.Message{role: :user, content: "List files", ...}]
+  """
+  @spec messages(keyword()) :: [Opal.Message.t()]
+  def messages(opts \\ []) do
+    s = state(Keyword.get(opts, :session_id))
+    msgs = s.messages
+
+    msgs =
+      case Keyword.get(opts, :role) do
+        nil -> msgs
+        role -> Enum.filter(msgs, &(&1.role == role))
+      end
+
+    case Keyword.get(opts, :limit) do
+      nil -> msgs
+      n -> Enum.take(msgs, n)
+    end
+  end
+
+  @doc """
+  Returns the active tool modules and their names.
+
+  ## Examples
+
+      iex> Opal.Inspect.tools()
+      [{"read_file", Opal.Tool.Read}, {"shell", Opal.Tool.Shell}, ...]
+  """
+  @spec tools(String.t() | nil) :: [{String.t(), module()}]
+  def tools(session_id \\ nil) do
+    s = state(session_id)
+    Enum.map(s.tools, fn mod -> {mod.name(), mod} end)
+  end
+
+  @doc """
+  Returns the current model.
+
+  ## Examples
+
+      iex> Opal.Inspect.model()
+      %Opal.Provider.Model{provider: :copilot, id: "claude-sonnet-4"}
+  """
+  @spec model(String.t() | nil) :: Opal.Provider.Model.t()
+  def model(session_id \\ nil) do
+    state(session_id).model
+  end
+
+  @doc """
+  Returns a summary map of the current session state.
+
+  Useful for a quick overview without printing the full struct.
+
+  ## Examples
+
+      iex> Opal.Inspect.summary()
+      %{
+        session_id: "abc123",
+        status: :idle,
+        model: "copilot:claude-sonnet-4",
+        messages: 12,
+        tools: 8,
+        active_skills: [],
+        token_usage: %{prompt_tokens: 4200, ...}
+      }
+  """
+  @spec summary(String.t() | nil) :: map()
+  def summary(session_id \\ nil) do
+    s = state(session_id)
+
+    %{
+      session_id: s.session_id,
+      status: s.status,
+      model: "#{s.model.provider}:#{s.model.id}",
+      provider: s.provider,
+      messages: length(s.messages),
+      tools: length(s.tools),
+      active_skills: s.active_skills,
+      available_skills: Enum.map(s.available_skills, & &1.name),
+      context_files: s.context_files,
+      working_dir: s.working_dir,
+      token_usage: s.token_usage,
+      retry_count: s.retry_count
+    }
+  end
+
+  # ── Live Event Watching ────────────────────────────────────────────
 
   @doc """
   Subscribe to all session events and print them to the console.
@@ -22,13 +241,13 @@ defmodule Opal.Inspect do
       spawn_link(fn ->
         Opal.Events.subscribe_all()
         IO.puts(IO.ANSI.magenta() <> "✦ Watching all opal events..." <> IO.ANSI.reset())
-        loop()
+        watch_loop()
       end)
 
     {:ok, pid}
   end
 
-  defp loop do
+  defp watch_loop do
     receive do
       {:opal_event, session_id, event} ->
         short_sid = String.slice(session_id, 0, 8)
@@ -44,12 +263,14 @@ defmodule Opal.Inspect do
             if(data != "", do: " #{data}", else: "")
         )
 
-        loop()
+        watch_loop()
 
       _ ->
-        loop()
+        watch_loop()
     end
   end
+
+  # ── Event Formatting (private) ─────────────────────────────────────
 
   defp format_event({:agent_start}), do: {"agent_start", ""}
   defp format_event({:agent_abort}), do: {"agent_abort", ""}
@@ -96,6 +317,9 @@ defmodule Opal.Inspect do
     {inner_type, inner_data} = format_event(inner)
     {"sub_agent", "[#{String.slice(sub_sid, 0, 12)}] #{inner_type} #{inner_data}"}
   end
+
+  defp format_event({:context_discovered, files}),
+    do: {"context_discovered", Enum.join(files, ", ")}
 
   defp format_event({:skill_loaded, name, _desc}), do: {"skill_loaded", name}
   defp format_event({:turn_end, _msg, _results}), do: {"turn_end", ""}

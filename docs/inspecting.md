@@ -87,26 +87,31 @@ Tool events include the tool name and a truncated preview of arguments or output
 
 ## Ad-hoc Inspection from IEx
 
-Since the inspector is a full IEx session on the remote node, you can run any Elixir expression against the live agent:
+Since the inspector is a full IEx session on the remote node, you can use the `Opal.Inspect` helpers to explore agent state:
 
 ```elixir
-# List active agents (returns [{session_id, pid}, ...])
-Registry.select(Opal.Registry, [{{{:agent, :"$1"}, :"$2", :_}, [], [{{:"$1", :"$2"}}]}])
+# Quick overview
+Opal.Inspect.summary()
 
-# Look up a specific agent by session ID
-Registry.lookup(Opal.Registry, {:agent, "session-id"})
+# Full agent state
+Opal.Inspect.state()
 
-# Check agent state
-:sys.get_state(agent_pid)
+# Assembled system prompt (context + skills + guidelines)
+Opal.Inspect.system_prompt() |> IO.puts()
 
-# Subscribe to a single session
-Opal.Events.subscribe("session-id")
-flush()
+# Recent messages
+Opal.Inspect.messages(limit: 5)
+
+# Current model and tools
+Opal.Inspect.model()
+Opal.Inspect.tools()
 ```
+
+See [recipes.md](recipes.md) for more examples.
 
 ## Source Files
 
-- `lib/opal/inspect.ex` — Watch loop and event formatting
-- `lib/opal/events.ex` — Registry-based pub/sub
+- `lib/opal/util/inspect.ex` — Inspection helpers and event watch loop
+- `lib/opal/agent/events.ex` — Registry-based pub/sub
 - `lib/opal/application.ex` — Distribution startup and `~/.opal/node` file
 - `scripts/inspect.exs` — Auto-run script for `mise run inspect`
