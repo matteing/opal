@@ -81,6 +81,10 @@ export const MessageList: FC<MessageListProps> = memo(
             {visibleTimeline.map((entry: TimelineEntry, i: number) => {
               const timelineIndex = startIndex + i;
               if (entry.kind === "message") {
+                // Skip empty assistant messages (messageStart placeholder before deltas arrive)
+                if (entry.message.role === "assistant" && !entry.message.content) {
+                  return null;
+                }
                 const isStreaming =
                   view.isRunning &&
                   entry.message.role === "assistant" &&
@@ -120,7 +124,7 @@ export const MessageList: FC<MessageListProps> = memo(
               }
               if (entry.kind === "skill") {
                 return (
-                  <Box key={timelineIndex}>
+                  <Box key={timelineIndex} marginBottom={1}>
                     <Text>
                       <Text color={colors.success}>●</Text>{" "}
                       <Text dimColor>Loaded skill: {entry.skill.name}</Text>
@@ -339,7 +343,7 @@ const ContextLines: FC<{ context: Context; rootDir: string }> = ({ context, root
       {items.map((item, i) => (
         <Box key={i}>
           <Text>
-            <Text color={colors.success}>●</Text> <Text dimColor>Loaded {item}</Text>
+            <Text color={colors.success}>●</Text> <Text dimColor>Discovered {item}</Text>
           </Text>
         </Box>
       ))}
