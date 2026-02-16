@@ -440,4 +440,42 @@ defmodule Opal.RPC.HandlerTest do
       assert length(providers) >= 1
     end
   end
+
+  describe "handle/2 opal/version" do
+    test "returns server_version and protocol_version" do
+      assert {:ok, result} = Handler.handle("opal/version", %{})
+      assert is_binary(result.server_version)
+      assert is_binary(result.protocol_version)
+      assert result.server_version =~ ~r/^\d+\.\d+\.\d+/
+      assert result.protocol_version =~ ~r/^\d+\.\d+\.\d+/
+    end
+  end
+
+  describe "handle/2 session/delete" do
+    test "returns invalid_params when session_id is missing" do
+      assert {:error, -32602, "Missing required param: session_id", nil} =
+               Handler.handle("session/delete", %{})
+    end
+
+    test "returns error for nonexistent session" do
+      assert {:error, -32602, "Session not found", _} =
+               Handler.handle("session/delete", %{"session_id" => "nonexistent-id-12345"})
+    end
+
+    test "deletes an existing session file" do
+      config = Opal.Config.new()
+      dir = Opal.Config.sessions_dir(config)
+      File.mkdir_p!(dir)
+
+      session_id = "test-delete-#{System.unique_integer([:positive])}"
+      path = Path.join(dir, "#{session_id}.jsonl")
+      File.write!(path, "test data\n")
+      assert File.exists?(path)
+
+      assert {:ok, %{ok: true}} =
+               Handler.handle("session/delete", %{"session_id" => session_id})
+
+      refute File.exists?(path)
+    end
+  end
 end
