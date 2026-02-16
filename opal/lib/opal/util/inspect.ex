@@ -133,21 +133,42 @@ defmodule Opal.Inspect do
   `system_prompt` field — it includes everything `build_messages/1`
   prepends.
 
+  ## Options
+
+    * `:file` — write to a file path and open it (defaults to a temp `.md` file
+      when set to `true`)
+
   ## Examples
 
       iex> Opal.Inspect.system_prompt() |> IO.puts()
       You are a coding assistant...
-      ## Runtime Context
-      ...
+
+      iex> Opal.Inspect.system_prompt(file: true)
+      Wrote system prompt to /tmp/opal-system-prompt.md
+
+      iex> Opal.Inspect.system_prompt(file: "~/prompt.md")
+      Wrote system prompt to /Users/you/prompt.md
   """
-  @spec system_prompt(String.t() | nil) :: String.t()
-  def system_prompt(session_id \\ nil) do
-    pid = agent(session_id)
+  def system_prompt(opts \\ [])
+
+  def system_prompt(session_id) when is_binary(session_id) do
+    system_prompt(session_id: session_id)
+  end
+
+  def system_prompt(opts) when is_list(opts) do
+    pid = agent(Keyword.get(opts, :session_id))
     messages = Opal.Agent.get_context(pid)
 
-    case messages do
-      [%{role: :system, content: prompt} | _] -> prompt
-      _ -> state(session_id).system_prompt
+    prompt =
+      case messages do
+        [%{role: :system, content: p} | _] -> p
+        _ -> state(Keyword.get(opts, :session_id)).system_prompt
+      end
+
+    case Keyword.get(opts, :file) do
+      nil -> prompt
+      true -> write_and_open(prompt, Path.join(System.tmp_dir!(), "opal-system-prompt.md"))
+      path -> write_and_open(prompt, Path.expand(path))
     end
   end
 
@@ -372,4 +393,17 @@ defmodule Opal.Inspect do
   defp to_preview(val) when is_binary(val), do: val
   defp to_preview(nil), do: ""
   defp to_preview(val), do: inspect(val, limit: 3, printable_limit: 80)
+
+  defp write_and_open(content, path) do
+    File.write!(path, content)
+    IO.puts(IO.ANSI.green() <> "Wrote system prompt to #{path}" <> IO.ANSI.reset())
+
+    case :os.type() do
+      {:unix, :darwin} -> System.cmd("open", [path])
+      {:unix, _} -> System.cmd("xdg-open", [path])
+      {:win32, _} -> System.cmd("cmd", ["/c", "start", "", path])
+    end
+
+    :ok
+  end
 end
