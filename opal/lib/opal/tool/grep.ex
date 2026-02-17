@@ -29,12 +29,16 @@ defmodule Opal.Tool.Grep do
   parsed and applied during directory traversal, so ignored files and
   directories are skipped automatically.
 
+  Set `no_ignore: true` to bypass `.gitignore` rules and search all
+  non-binary files (hardcoded skip directories like `.git` are still
+  excluded).
+
   Binary files (containing null bytes) are silently skipped.
   """
 
   @behaviour Opal.Tool
 
-  @dialyzer {:no_opaque, [do_walk_dir: 5, walk_dir: 5]}
+  @dialyzer {:no_opaque, [do_walk_dir: 6, walk_dir: 6]}
 
   alias Opal.Tool.Encoding
   alias Opal.Tool.FileHelper
@@ -56,6 +60,10 @@ defmodule Opal.Tool.Grep do
   @max_context_default 2
   @max_output_bytes 50 * 1024
   @max_depth 25
+
+  # Parallelism: only fan out when there are enough files to justify it.
+  @parallel_threshold 4
+  @max_concurrency System.schedulers_online()
 
   @impl true
   @spec name() :: String.t()
@@ -100,6 +108,11 @@ defmodule Opal.Tool.Grep do
           "type" => "integer",
           "description" =>
             "Maximum number of matching lines returned across all files (default: 50)"
+        },
+        "no_ignore" => %{
+          "type" => "boolean",
+          "description" =>
+            "When true, search files even if they are excluded by .gitignore rules (default: false)"
         }
       },
       "required" => ["pattern"]
@@ -115,12 +128,13 @@ defmodule Opal.Tool.Grep do
         include = Map.get(args, "include")
         ctx_lines = Map.get(args, "context_lines", @max_context_default) |> max(0) |> min(10)
         max_results = Map.get(args, "max_results", @max_results_default) |> max(1) |> min(500)
+        no_ignore = Map.get(args, "no_ignore", false)
 
         allow_bases = FileHelper.allowed_bases(context)
 
         case FileHelper.resolve_path(search_path, working_dir, allow_bases: allow_bases) do
           {:ok, resolved} ->
-            do_search(resolved, regex, include, ctx_lines, max_results, working_dir)
+            do_search(resolved, regex, include, ctx_lines, max_results, working_dir, no_ignore)
 
           {:error, reason} ->
             {:error, reason}
@@ -136,10 +150,10 @@ defmodule Opal.Tool.Grep do
 
   # -- Search implementation --------------------------------------------------
 
-  defp do_search(resolved, regex, include, ctx_lines, max_results, working_dir) do
+  defp do_search(resolved, regex, include, ctx_lines, max_results, working_dir, no_ignore) do
     glob = Opal.Platform.compile_glob(include)
 
-    files = collect_files(resolved, glob)
+    files = collect_files(resolved, glob, no_ignore)
 
     {results, total_matches, capped?} =
       search_files(files, regex, ctx_lines, max_results, working_dir)
@@ -154,27 +168,28 @@ defmodule Opal.Tool.Grep do
 
   # -- File collection --------------------------------------------------------
 
-  defp collect_files(path, glob) do
+  defp collect_files(path, glob, no_ignore) do
     if File.regular?(path) do
       if Opal.Platform.matches_glob?(Path.basename(path), glob), do: [path], else: []
     else
-      gitignore = Gitignore.load(path)
-      walk_dir(path, glob, 0, MapSet.new(), gitignore)
+      gitignore = if no_ignore, do: %Gitignore{root: path}, else: Gitignore.load(path)
+      walk_dir(path, glob, 0, MapSet.new(), gitignore, no_ignore)
     end
   end
 
   # Walks directories with depth limiting and symlink-loop protection.
   # `visited` tracks real (resolved) directory paths to break cycles.
   # `gitignore` accumulates rules from nested .gitignore files.
-  defp walk_dir(dir, glob, depth, visited, gitignore) do
+  # `no_ignore` bypasses .gitignore rules when true.
+  defp walk_dir(dir, glob, depth, visited, gitignore, no_ignore) do
     if depth > @max_depth do
       []
     else
-      do_walk_dir(dir, glob, depth, visited, gitignore)
+      do_walk_dir(dir, glob, depth, visited, gitignore, no_ignore)
     end
   end
 
-  defp do_walk_dir(dir, glob, depth, visited, gitignore) do
+  defp do_walk_dir(dir, glob, depth, visited, gitignore, no_ignore) do
     # Resolve symlinks to detect cycles on all platforms
     real_dir = Path.expand(dir)
 
@@ -185,9 +200,9 @@ defmodule Opal.Tool.Grep do
 
       # Merge nested .gitignore when descending into subdirectories.
       # The root .gitignore is already loaded in collect_files, so skip
-      # re-reading it at depth 0.
+      # re-reading it at depth 0. Skip entirely when no_ignore is set.
       gitignore =
-        if depth > 0 do
+        if not no_ignore and depth > 0 do
           case File.read(Path.join(dir, ".gitignore")) do
             {:ok, content} ->
               child = Gitignore.parse(content, gitignore.root)
@@ -213,11 +228,11 @@ defmodule Opal.Tool.Grep do
               skip_dir?(entry) ->
                 []
 
-              Gitignore.ignored?(gitignore, rel, is_dir) ->
+              not no_ignore and Gitignore.ignored?(gitignore, rel, is_dir) ->
                 []
 
               is_dir ->
-                walk_dir(full, glob, depth + 1, visited, gitignore)
+                walk_dir(full, glob, depth + 1, visited, gitignore, no_ignore)
 
               Opal.Platform.matches_glob?(entry, glob) ->
                 [full]
@@ -241,8 +256,21 @@ defmodule Opal.Tool.Grep do
   defp skip_dir?(name), do: MapSet.member?(@skip_dirs, name)
 
   # -- Search across files ----------------------------------------------------
+  #
+  # Files are searched in parallel when there are enough to justify the
+  # overhead.  Each task is fully independent (read → regex → hashline),
+  # so there is no shared mutable state.  Results stream back in file
+  # order via `ordered: true`, then we apply the max_results cap.
 
   defp search_files(files, regex, ctx_lines, max_results, working_dir) do
+    if length(files) < @parallel_threshold do
+      search_files_sequential(files, regex, ctx_lines, max_results, working_dir)
+    else
+      search_files_parallel(files, regex, ctx_lines, max_results, working_dir)
+    end
+  end
+
+  defp search_files_sequential(files, regex, ctx_lines, max_results, working_dir) do
     Enum.reduce_while(files, {[], 0, false}, fn file, {acc, count, _capped?} ->
       case search_file(file, regex, ctx_lines, max_results - count, working_dir) do
         {:ok, matches, match_count} when match_count > 0 ->
@@ -259,6 +287,72 @@ defmodule Opal.Tool.Grep do
           {:cont, {acc, count, false}}
       end
     end)
+  end
+
+  defp search_files_parallel(files, regex, ctx_lines, max_results, working_dir) do
+    # Each task searches with the full max_results cap.  We trim after
+    # collecting, so individual tasks may do slightly more work than
+    # strictly necessary — but each one is bounded and the fan-out
+    # across schedulers more than compensates.
+    files
+    |> Task.async_stream(
+      fn file -> {file, search_file(file, regex, ctx_lines, max_results, working_dir)} end,
+      ordered: true,
+      max_concurrency: @max_concurrency
+    )
+    |> Enum.reduce_while({[], 0, false}, fn {:ok, {file, result}}, {acc, count, _capped?} ->
+      case result do
+        {:ok, matches, match_count} when match_count > 0 ->
+          # Trim this file's matches if adding all would exceed the cap.
+          trimmed_count = min(match_count, max_results - count)
+
+          matches =
+            if trimmed_count < match_count do
+              trim_matches(matches, trimmed_count)
+            else
+              matches
+            end
+
+          new_count = count + trimmed_count
+          new_acc = acc ++ [{file, matches}]
+
+          if new_count >= max_results do
+            {:halt, {new_acc, new_count, true}}
+          else
+            {:cont, {new_acc, new_count, false}}
+          end
+
+        _ ->
+          {:cont, {acc, count, false}}
+      end
+    end)
+  end
+
+  # Rebuild the tagged output keeping only the first `n` match lines.
+  # Context lines around kept matches are preserved.
+  defp trim_matches({rel_path, groups}, keep) do
+    {trimmed_groups, _remaining} =
+      Enum.reduce_while(groups, {[], keep}, fn group, {acc, remaining} ->
+        match_lines_in_group = Enum.count(group, fn {_tagged, is_match} -> is_match end)
+
+        if match_lines_in_group <= remaining do
+          {:cont, {acc ++ [group], remaining - match_lines_in_group}}
+        else
+          # Partial group: keep only enough match lines.
+          {partial, _} =
+            Enum.reduce(group, {[], remaining}, fn {tagged, is_match} = entry, {kept, rem} ->
+              cond do
+                not is_match -> {kept ++ [entry], rem}
+                rem > 0 -> {kept ++ [{tagged, true}], rem - 1}
+                true -> {kept, 0}
+              end
+            end)
+
+          {:halt, {acc ++ [partial], 0}}
+        end
+      end)
+
+    {rel_path, trimmed_groups}
   end
 
   defp search_file(file, regex, ctx_lines, remaining, working_dir) do

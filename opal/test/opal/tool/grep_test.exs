@@ -375,4 +375,120 @@ defmodule Opal.Tool.GrepTest do
       refute result =~ "deep.txt"
     end
   end
+
+  describe "execute/2 — no_ignore" do
+    test "gitignored files are skipped by default", %{tmp_dir: tmp_dir} do
+      File.write!(Path.join(tmp_dir, ".gitignore"), "secret.log\n")
+      File.write!(Path.join(tmp_dir, "secret.log"), "password123")
+      File.write!(Path.join(tmp_dir, "visible.txt"), "password123")
+
+      {:ok, result} =
+        Grep.execute(%{"pattern" => "password"}, %{working_dir: tmp_dir})
+
+      assert result =~ "visible.txt"
+      refute result =~ "secret.log"
+    end
+
+    test "no_ignore includes gitignored files", %{tmp_dir: tmp_dir} do
+      File.write!(Path.join(tmp_dir, ".gitignore"), "secret.log\n")
+      File.write!(Path.join(tmp_dir, "secret.log"), "password123")
+      File.write!(Path.join(tmp_dir, "visible.txt"), "password123")
+
+      {:ok, result} =
+        Grep.execute(
+          %{"pattern" => "password", "no_ignore" => true},
+          %{working_dir: tmp_dir}
+        )
+
+      assert result =~ "visible.txt"
+      assert result =~ "secret.log"
+    end
+
+    test "no_ignore still skips hardcoded dirs like .git", %{tmp_dir: tmp_dir} do
+      git_dir = Path.join(tmp_dir, ".git")
+      File.mkdir_p!(git_dir)
+      File.write!(Path.join(git_dir, "HEAD"), "ref: refs/heads/main")
+      File.write!(Path.join(tmp_dir, "real.txt"), "ref: refs/heads/main")
+
+      {:ok, result} =
+        Grep.execute(
+          %{"pattern" => "ref:", "no_ignore" => true},
+          %{working_dir: tmp_dir}
+        )
+
+      assert result =~ "real.txt"
+      refute result =~ ".git"
+    end
+
+    test "no_ignore includes files in gitignored subdirectories", %{tmp_dir: tmp_dir} do
+      File.write!(Path.join(tmp_dir, ".gitignore"), "build/\n")
+      build_dir = Path.join(tmp_dir, "build")
+      File.mkdir_p!(build_dir)
+      File.write!(Path.join(build_dir, "output.txt"), "compiled result")
+
+      {:ok, result} =
+        Grep.execute(
+          %{"pattern" => "compiled", "no_ignore" => true},
+          %{working_dir: tmp_dir}
+        )
+
+      assert result =~ "output.txt"
+    end
+  end
+
+  describe "execute/2 — parallel search" do
+    test "produces correct results with many files (parallel path)", %{tmp_dir: tmp_dir} do
+      # Create enough files to exceed @parallel_threshold (4)
+      for i <- 1..10 do
+        File.write!(Path.join(tmp_dir, "file_#{i}.txt"), "needle_#{i}\nhaystack")
+      end
+
+      {:ok, result} =
+        Grep.execute(%{"pattern" => "needle", "context_lines" => 0}, %{working_dir: tmp_dir})
+
+      # All 10 files should appear
+      for i <- 1..10 do
+        assert result =~ "file_#{i}.txt", "Expected file_#{i}.txt in results"
+      end
+
+      assert result =~ "10 matches found."
+    end
+
+    test "parallel search respects max_results cap", %{tmp_dir: tmp_dir} do
+      # Each file has 5 matches, 10 files = 50 total possible matches
+      for i <- 1..10 do
+        content = Enum.map_join(1..5, "\n", &"match_#{i}_#{&1}")
+        File.write!(Path.join(tmp_dir, "multi_#{i}.txt"), content)
+      end
+
+      {:ok, result} =
+        Grep.execute(
+          %{"pattern" => "match_", "max_results" => 7, "context_lines" => 0},
+          %{working_dir: tmp_dir}
+        )
+
+      assert result =~ "capped"
+    end
+
+    test "parallel search preserves file ordering", %{tmp_dir: tmp_dir} do
+      for name <- ~w(alpha.txt beta.txt gamma.txt delta.txt epsilon.txt) do
+        File.write!(Path.join(tmp_dir, name), "findme")
+      end
+
+      {:ok, result} =
+        Grep.execute(%{"pattern" => "findme", "context_lines" => 0}, %{working_dir: tmp_dir})
+
+      # Files should appear in sorted order (walk_dir sorts entries)
+      positions =
+        ~w(alpha.txt beta.txt delta.txt epsilon.txt gamma.txt)
+        |> Enum.map(fn name ->
+          case :binary.match(result, name) do
+            {pos, _} -> pos
+            :nomatch -> flunk("Expected #{name} in results")
+          end
+        end)
+
+      assert positions == Enum.sort(positions), "Files should appear in sorted order"
+    end
+  end
 end

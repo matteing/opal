@@ -13,6 +13,7 @@ Returns matching lines in the same `N:hash|content` format as `read_file`, so re
 | `include` | string | no | Glob to filter filenames (e.g. `*.ex`, `*.{ex,exs}`) |
 | `context_lines` | integer | no | Lines of surrounding context per match (default: 2) |
 | `max_results` | integer | no | Cap on total matches returned (default: 50, max: 500) |
+| `no_ignore` | boolean | no | When `true`, search files even if excluded by `.gitignore` (default: `false`) |
 
 ## Output Format
 
@@ -34,7 +35,7 @@ When results are capped, a `[Results capped]` hint is appended.
 
 ## Exclusions
 
-The following directories are always skipped:
+The following directories are always skipped (even with `no_ignore`):
 
 | Category | Directories |
 |----------|-------------|
@@ -42,6 +43,8 @@ The following directories are always skipped:
 | Build artifacts | `_build`, `deps`, `node_modules`, `vendor`, `.bundle` |
 | Editor metadata | `.elixir_ls`, `.vscode`, `.idea` |
 | Caches | `__pycache__`, `.mypy_cache`, `tmp` |
+
+`.gitignore` patterns are respected by default. Set `no_ignore: true` to bypass `.gitignore` rules and search all non-binary files.
 
 Binary files (containing null bytes in the first 8 KB) are silently skipped.
 
