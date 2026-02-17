@@ -36,10 +36,7 @@ defmodule Opal.Path do
   """
   @spec to_native(String.t()) :: String.t()
   def to_native(path) when is_binary(path) do
-    case :os.type() do
-      {:win32, _} -> String.replace(path, "/", "\\")
-      _ -> path
-    end
+    if Opal.Platform.windows?(), do: String.replace(path, "/", "\\"), else: path
   end
 
   @doc """

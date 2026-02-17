@@ -19,11 +19,16 @@ defmodule Opal.Agent.Tools do
   alias Opal.Agent.State
   alias Opal.Agent.ToolRunner
 
-  @spec start_tool_execution([map()], State.t()) :: {:noreply, State.t()}
+  @spec start_tool_execution([map()], State.t()) :: State.t()
   defdelegate start_tool_execution(tool_calls, state), to: ToolRunner
 
-  @spec handle_tool_result(reference(), map(), {:ok, term()} | {:error, term()}, State.t()) ::
-          {:noreply, State.t()}
+  @spec handle_tool_result(
+          reference(),
+          map(),
+          {:ok, term()} | {:error, term()} | {:effect, term()},
+          State.t()
+        ) ::
+          State.t()
   defdelegate handle_tool_result(ref, tc, result, state), to: ToolRunner
 
   @spec cancel_all_tasks(State.t()) :: State.t()

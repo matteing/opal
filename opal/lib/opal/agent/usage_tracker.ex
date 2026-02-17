@@ -91,11 +91,11 @@ defmodule Opal.Agent.UsageTracker do
 
   Without a session process we can't compact — surface the raw error.
   """
-  @spec handle_overflow_compaction(State.t(), term()) :: {:noreply, State.t()}
+  @spec handle_overflow_compaction(State.t(), term()) :: State.t()
   def handle_overflow_compaction(%State{session: nil} = state, reason) do
     Logger.error("Context overflow but no session attached — cannot compact")
     broadcast(state, {:error, {:overflow_no_session, reason}})
-    {:noreply, %{state | status: :idle}}
+    %{state | status: :idle}
   end
 
   def handle_overflow_compaction(%State{session: session, model: model} = state, reason) do
@@ -132,7 +132,7 @@ defmodule Opal.Agent.UsageTracker do
       {:error, compact_error} ->
         Logger.error("Overflow compaction failed: #{inspect(compact_error)}")
         broadcast(state, {:error, {:overflow_compact_failed, reason, compact_error}})
-        {:noreply, %{state | status: :idle}}
+        %{state | status: :idle}
     end
   end
 

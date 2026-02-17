@@ -15,14 +15,12 @@ defmodule Opal.Agent.ToolRunner do
   @doc """
   Starts parallel execution of a batch of tool calls.
 
-  All tool calls are spawned concurrently as supervised tasks. The GenServer
+  All tool calls are spawned concurrently as supervised tasks. The agent
   remains responsive to abort, steer, and other messages while tools run.
   Results are collected as each task completes; when all are done,
   `finalize_tool_batch/1` continues to the next turn.
-
-  Returns `{:noreply, state}` with status set to `:executing_tools`.
   """
-  @spec start_tool_execution([map()], State.t()) :: {:noreply, State.t()}
+  @spec start_tool_execution([map()], State.t()) :: State.t()
   def start_tool_execution(tool_calls, %State{} = state) do
     context = build_tool_context(state)
 
@@ -35,17 +33,25 @@ defmodule Opal.Agent.ToolRunner do
     }
 
     # Spawn all tool calls concurrently
-    state = Enum.reduce(tool_calls, state, &spawn_tool_task(&1, &2))
-
-    {:noreply, state}
+    Enum.reduce(tool_calls, state, &spawn_tool_task(&1, &2))
   end
 
   @doc """
   Handles a completed tool task. Records the result and finalizes
   the batch when all tasks are done.
   """
-  @spec handle_tool_result(reference(), map(), {:ok, term()} | {:error, term()}, State.t()) ::
-          {:noreply, State.t()}
+  @spec handle_tool_result(
+          reference(),
+          map(),
+          {:ok, term()} | {:error, term()} | {:effect, term()},
+          State.t()
+        ) ::
+          State.t()
+  def handle_tool_result(ref, tc, {:effect, effect}, %State{} = state) do
+    {result, state} = apply_effect(effect, state)
+    handle_tool_result(ref, tc, result, state)
+  end
+
   def handle_tool_result(ref, tc, result, %State{} = state) do
     broadcast(state, {:tool_execution_end, tc.name, tc.call_id, result})
 
@@ -58,7 +64,7 @@ defmodule Opal.Agent.ToolRunner do
     if map_size(state.pending_tool_tasks) == 0 do
       finalize_tool_batch(state)
     else
-      {:noreply, state}
+      state
     end
   end
 
@@ -68,7 +74,7 @@ defmodule Opal.Agent.ToolRunner do
   Converts tool results to messages, handles skill auto-loading, checks for
   steering, and starts the next turn.
   """
-  @spec finalize_tool_batch(State.t()) :: {:noreply, State.t()}
+  @spec finalize_tool_batch(State.t()) :: State.t()
   def finalize_tool_batch(%State{} = state) do
     results = Enum.reverse(state.tool_results)
 
@@ -259,6 +265,37 @@ defmodule Opal.Agent.ToolRunner do
 
   defp put_if(map, _key, nil), do: map
   defp put_if(map, key, value), do: Map.put(map, key, value)
+
+  # Applies a tool effect to the agent state, returning {result, state}.
+  # Effects let tools declare state mutations without re-entrant calls.
+  @spec apply_effect(term(), State.t()) :: {{:ok, String.t()} | {:error, String.t()}, State.t()}
+  defp apply_effect({:load_skill, skill_name}, %State{} = state) do
+    if skill_name in state.active_skills do
+      {{:ok, "Skill '#{skill_name}' is already loaded."}, state}
+    else
+      case Enum.find(state.available_skills, &(&1.name == skill_name)) do
+        nil ->
+          {{:error,
+            "Skill '#{skill_name}' not found. Available: #{Enum.map_join(state.available_skills, ", ", & &1.name)}"},
+           state}
+
+        skill ->
+          skill_msg = %Opal.Message{
+            id: "skill:#{skill_name}",
+            role: :user,
+            content:
+              "[System] Skill '#{skill.name}' activated. Instructions:\n\n#{skill.instructions}"
+          }
+
+          new_active = [skill_name | state.active_skills]
+          state = append_message(%{state | active_skills: new_active}, skill_msg)
+          broadcast(state, {:skill_loaded, skill_name, skill.description})
+
+          {{:ok, "Skill '#{skill_name}' loaded. Its instructions are now in your context."},
+           state}
+      end
+    end
+  end
 
   defp mcp_tool_module?(tool_mod) when is_atom(tool_mod) do
     tool_mod |> Atom.to_string() |> String.starts_with?("Elixir.Opal.MCP.Tool.")

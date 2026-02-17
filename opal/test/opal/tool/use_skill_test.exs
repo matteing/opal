@@ -33,14 +33,14 @@ defmodule Opal.Tool.UseSkillTest do
   end
 
   describe "execute/2" do
-    test "returns error when agent_pid missing" do
-      assert {:error, "Missing agent_pid in context."} =
+    test "returns load_skill effect with skill name" do
+      assert {:effect, {:load_skill, "git"}} =
                UseSkill.execute(%{"skill_name" => "git"}, %{})
     end
 
     test "returns error when skill_name missing" do
       assert {:error, "Missing required parameter: skill_name"} =
-               UseSkill.execute(%{}, %{agent_pid: self()})
+               UseSkill.execute(%{}, %{})
     end
   end
 end

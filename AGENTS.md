@@ -97,6 +97,44 @@ The agent automatically discovers project context:
 - `OPAL.md` - Opal-specific instructions
 - `.agents/` and `.opal/` hidden directory variants
 
+## Code Style
+
+### Prefer Named Maps Over Positional Tuples
+
+Use maps with named keys for function return values. Positional tuples are hard to read at call sites when the elements aren't self-evident.
+
+**Tuples are fine for:**
+
+- Idiomatic Elixir patterns: `{:ok, value}`, `{:error, reason}`, `{:noreply, state}`
+- `Enum.reduce` accumulators (internal, not returned to callers)
+- 2-element pairs where meaning is obvious from context
+
+**Use maps when:**
+
+- Returning 2+ related values from a helper function
+- The caller destructures the result — named keys document intent
+
+```elixir
+# Bad — caller sees {entries, files, skills} with no context
+defp discover_context(config, dir) do
+  {entries, file_paths, skills}
+end
+
+# Good — self-documenting at the call site
+defp discover_context(config, dir) do
+  %{entries: entries, files: file_paths, skills: skills}
+end
+
+# Fine — idiomatic {:ok, _} / {:error, _}
+def execute(args, ctx), do: {:ok, result}
+```
+
+### Specs and Types
+
+- Add `@spec` to all public functions and meaningful private helpers
+- Use `@type` / `@typep` to name complex types instead of inlining them in specs
+- Use `@typedoc` on public types
+
 ## Code Patterns
 
 ### Agent Interaction

@@ -784,9 +784,9 @@ defmodule Opal.AgentTest do
       assert %State{} = state
     end
 
-    test "platform/1 returns the current OS platform" do
-      %{pid: pid} = start_agent()
-      platform = Agent.platform(pid)
+    test "platform/0 returns the current OS platform" do
+      start_agent()
+      platform = Opal.Platform.os()
       assert platform in [:linux, :macos, :windows]
     end
 

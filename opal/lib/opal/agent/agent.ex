@@ -29,24 +29,57 @@ defmodule Opal.Agent do
 
   # --- Public API ---
 
-  @doc """
-  Starts the agent state machine.
+  @typedoc """
+  Options for starting an agent.
 
-  ## Options
+  ## Required
 
-    * `:session_id` — unique string identifier for this session (required)
+    * `:session_id` — unique string identifier for this session
+    * `:model` — an `Opal.Provider.Model.t()` struct
+    * `:working_dir` — base directory for tool execution
+    * `:tool_supervisor` — supervisor for spawning tool tasks
+
+  ## Optional
+
     * `:system_prompt` — the system prompt string (default: `""`)
-    * `:model` — an `Opal.Provider.Model.t()` struct (required)
     * `:tools` — list of modules implementing `Opal.Tool` (default: `[]`)
-    * `:working_dir` — base directory for tool execution (required)
-    * `:provider` — module implementing `Opal.Provider` (default: `Opal.Provider.Copilot`)
+    * `:disabled_tools` — tool names to disable at startup (default: `[]`)
+    * `:provider` — module implementing `Opal.Provider` (default: from config)
+    * `:config` — `Opal.Config.t()` (default: `Opal.Config.new()`)
+    * `:session` — `true` to look up via Registry, or a pid (default: `nil`)
+    * `:sub_agent_supervisor` — supervisor for child agents
+    * `:mcp_supervisor` — supervisor for MCP server connections
+    * `:mcp_servers` — MCP server config maps (default: `[]`)
+    * `:question_handler` — callback for interactive tool prompts
   """
-  @spec start_link(keyword()) :: GenServer.on_start()
+  @type start_opts :: [
+          {:session_id, String.t()}
+          | {:model, Opal.Provider.Model.t()}
+          | {:working_dir, String.t()}
+          | {:tool_supervisor, Supervisor.supervisor()}
+          | {:system_prompt, String.t()}
+          | {:tools, [module()]}
+          | {:disabled_tools, [String.t()]}
+          | {:provider, module()}
+          | {:config, Opal.Config.t()}
+          | {:session, boolean() | pid()}
+          | {:sub_agent_supervisor, Supervisor.supervisor()}
+          | {:mcp_supervisor, Supervisor.supervisor() | nil}
+          | {:mcp_servers, [map()]}
+          | {:question_handler, (map() -> {:ok, String.t()} | {:error, term()}) | nil}
+        ]
+
+  @doc """
+  Starts the agent state machine. See `t:start_opts/0` for available options.
+  """
+  @spec start_link(start_opts()) :: GenServer.on_start()
   def start_link(opts) do
     :gen_statem.start_link(__MODULE__, opts, [])
   end
 
-  @spec child_spec(keyword()) :: Supervisor.child_spec()
+  # Overrides the default child_spec so this module can be placed directly
+  # in a supervision tree, e.g. `{Opal.Agent, opts}`.
+  @spec child_spec(start_opts()) :: Supervisor.child_spec()
   def child_spec(opts) do
     %{
       id: __MODULE__,
@@ -104,53 +137,59 @@ defmodule Opal.Agent do
     :gen_statem.call(agent, :get_state)
   end
 
+  @doc """
+  Returns the full message list that would be sent to the provider,
+  including the system prompt and tool-result repairs.
+  """
   @spec get_context(GenServer.server()) :: [Opal.Message.t()]
   def get_context(agent) do
     :gen_statem.call(agent, :get_context)
   end
 
+  @doc """
+  Hot-swaps the LLM model for subsequent turns.
+  """
   @spec set_model(GenServer.server(), Opal.Provider.Model.t()) :: :ok
   def set_model(agent, %Opal.Provider.Model{} = model) do
     :gen_statem.call(agent, {:set_model, model})
   end
 
+  @doc """
+  Hot-swaps the provider module (e.g. `Opal.Provider.Copilot`) for subsequent turns.
+  """
   @spec set_provider(GenServer.server(), module()) :: :ok
   def set_provider(agent, provider_module) when is_atom(provider_module) do
     :gen_statem.call(agent, {:set_provider, provider_module})
   end
 
+  @doc """
+  Replaces the agent's conversation history with the given messages.
+
+  Used by the RPC layer to synchronize context when the client navigates
+  to a different branch in the session tree.
+  """
   @spec sync_messages(GenServer.server(), [Opal.Message.t()]) :: :ok
   def sync_messages(agent, messages) when is_list(messages) do
     :gen_statem.call(agent, {:sync_messages, messages})
   end
 
-  @spec configure(GenServer.server(), map()) :: :ok
+  @doc """
+  Applies runtime configuration changes (feature toggles, enabled tools).
+
+  ## Attrs
+
+    * `:features` — `%{optional(atom()) => boolean()}` toggling feature flags
+      (`:sub_agents`, `:skills`, `:mcp`, `:debug`)
+    * `:enabled_tools` — `[String.t()]` names of tools to keep enabled;
+      all others are disabled
+  """
+  @type config_attrs :: %{
+          optional(:features) => %{optional(atom()) => boolean()},
+          optional(:enabled_tools) => [String.t()]
+        }
+  @spec configure(GenServer.server(), config_attrs()) :: :ok
   def configure(agent, attrs) when is_map(attrs) do
     :gen_statem.call(agent, {:configure, attrs})
-  end
-
-  @doc """
-  Loads a skill by name into the agent's active context.
-
-  Returns `{:ok, skill_name}` if loaded, `{:already_loaded, skill_name}` if
-  already active, or `{:error, reason}` if the skill is not found.
-  """
-  @spec load_skill(GenServer.server(), String.t()) ::
-          {:ok, String.t()} | {:already_loaded, String.t()} | {:error, String.t()}
-  def load_skill(agent, skill_name) do
-    :gen_statem.call(agent, {:load_skill, skill_name})
-  end
-
-  @doc """
-  Returns the current platform as `:linux`, `:macos`, or `:windows`.
-  """
-  @spec platform(GenServer.server()) :: :linux | :macos | :windows
-  def platform(_agent) do
-    case :os.type() do
-      {:unix, :darwin} -> :macos
-      {:unix, _} -> :linux
-      {:win32, _} -> :windows
-    end
   end
 
   # --- :gen_statem callbacks ---
@@ -170,111 +209,131 @@ defmodule Opal.Agent do
       "Agent init session=#{session_id} model=#{model.provider}:#{model.id} dir=#{working_dir}"
     )
 
-    # Resolve session: the SessionServer passes session: true/false,
-    # and the Session process is registered via Opal.Registry.
-    session_pid =
-      case Keyword.get(opts, :session) do
-        true ->
-          case Registry.lookup(Opal.Registry, {:session, session_id}) do
-            [{pid, _}] -> pid
-            [] -> nil
-          end
+    session_pid = resolve_session(session_id, opts)
 
-        pid when is_pid(pid) ->
-          pid
+    %{entries: context_entries, files: context_files, skills: available_skills} =
+      discover_context(config, working_dir)
 
-        _ ->
-          nil
-      end
+    %{native: base_tools, mcp: mcp_tools} = resolve_tools(opts)
 
-    # Discover project context files and skills
-    {context_entries, context_files, available_skills} =
-      if config.features.context.enabled or config.features.skills.enabled do
-        ctx_files =
-          if config.features.context.enabled do
-            Opal.Context.discover_context(working_dir,
-              filenames: config.features.context.filenames
-            )
-          else
-            []
-          end
-
-        skills =
-          if config.features.skills.enabled do
-            Opal.Context.discover_skills(working_dir,
-              extra_dirs: config.features.skills.extra_dirs
-            )
-          else
-            []
-          end
-
-        file_paths = Enum.map(ctx_files, & &1.path)
-        {ctx_files, file_paths, skills}
-      else
-        {[], [], []}
-      end
-
-    mcp_servers = Keyword.get(opts, :mcp_servers, [])
-    mcp_supervisor = Keyword.get(opts, :mcp_supervisor)
-
-    # Discover MCP tools, passing native tool names for collision detection
-    base_tools = Keyword.get(opts, :tools, [])
-    native_names = base_tools |> Enum.map(& &1.name()) |> MapSet.new()
-    mcp_tools = discover_mcp_tools(mcp_servers, native_names)
-
-    state = %State{
-      session_id: session_id,
-      system_prompt: Keyword.get(opts, :system_prompt, ""),
-      model: model,
-      tools: base_tools ++ mcp_tools,
-      disabled_tools: Keyword.get(opts, :disabled_tools, []),
-      working_dir: working_dir,
-      config: config,
-      provider: provider,
-      session: session_pid,
-      tool_supervisor: Keyword.fetch!(opts, :tool_supervisor),
-      sub_agent_supervisor: Keyword.get(opts, :sub_agent_supervisor),
-      mcp_supervisor: mcp_supervisor,
-      mcp_servers: mcp_servers,
-      context_entries: context_entries,
-      context_files: context_files,
-      available_skills: available_skills,
-      active_skills: [],
-      question_handler: Keyword.get(opts, :question_handler),
-      token_usage: %{
-        prompt_tokens: 0,
-        completion_tokens: 0,
-        total_tokens: 0,
-        context_window: Opal.Provider.Registry.context_window(model),
-        current_context_tokens: 0
-      }
-    }
-
-    # On restart, reload conversation history from the surviving Session process
     state =
-      if session_pid && Opal.Session.current_id(session_pid) do
-        messages = Opal.Session.get_path(session_pid)
-        Logger.info("Agent recovered session=#{session_id} messages=#{length(messages)}")
-        broadcast(state, {:agent_recovered})
-        %{state | messages: Enum.reverse(messages)}
-      else
-        state
-      end
+      %State{
+        session_id: session_id,
+        system_prompt: Keyword.get(opts, :system_prompt, ""),
+        model: model,
+        tools: base_tools ++ mcp_tools,
+        disabled_tools: Keyword.get(opts, :disabled_tools, []),
+        working_dir: working_dir,
+        config: config,
+        provider: provider,
+        session: session_pid,
+        tool_supervisor: Keyword.fetch!(opts, :tool_supervisor),
+        sub_agent_supervisor: Keyword.get(opts, :sub_agent_supervisor),
+        mcp_supervisor: Keyword.get(opts, :mcp_supervisor),
+        mcp_servers: Keyword.get(opts, :mcp_servers, []),
+        context_entries: context_entries,
+        context_files: context_files,
+        available_skills: available_skills,
+        active_skills: [],
+        question_handler: Keyword.get(opts, :question_handler),
+        token_usage: %{
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          context_window: Opal.Provider.Registry.context_window(model),
+          current_context_tokens: 0
+        }
+      }
+      |> maybe_recover_session()
 
     Opal.Agent.EventLog.clear(session_id)
 
     tools_str = base_tools |> Enum.map(& &1.name()) |> Enum.join(", ")
 
     Logger.debug(
-      "Agent ready session=#{session_id} tools=[#{tools_str}] mcp_tools=#{length(mcp_tools)} skills=#{length(available_skills)}"
+      "Agent ready session=#{state.session_id} tools=[#{tools_str}] " <>
+        "mcp_tools=#{length(mcp_tools)} skills=#{length(state.available_skills)}"
     )
 
-    # Emit context discovered event if any context files were found
-    if context_files != [] do
-      broadcast(state, {:context_discovered, context_files})
-    end
+    if context_files != [], do: broadcast(state, {:context_discovered, context_files})
 
     {:ok, :idle, state}
+  end
+
+  # Resolves the Session process: the SessionServer passes session: true/false,
+  # and the Session process is registered via Opal.Registry.
+  @spec resolve_session(String.t(), keyword()) :: pid() | nil
+  defp resolve_session(session_id, opts) do
+    case Keyword.get(opts, :session) do
+      true ->
+        case Registry.lookup(Opal.Registry, {:session, session_id}) do
+          [{pid, _}] -> pid
+          [] -> nil
+        end
+
+      pid when is_pid(pid) ->
+        pid
+
+      _ ->
+        nil
+    end
+  end
+
+  # Discovers project context files and skills based on config feature flags.
+  @spec discover_context(Opal.Config.t(), String.t()) :: %{
+          entries: [%{path: String.t(), content: String.t()}],
+          files: [String.t()],
+          skills: [Opal.Skill.t()]
+        }
+  defp discover_context(config, working_dir) do
+    if config.features.context.enabled or config.features.skills.enabled do
+      entries =
+        if config.features.context.enabled do
+          Opal.Context.discover_context(working_dir,
+            filenames: config.features.context.filenames
+          )
+        else
+          []
+        end
+
+      skills =
+        if config.features.skills.enabled do
+          Opal.Context.discover_skills(working_dir,
+            extra_dirs: config.features.skills.extra_dirs
+          )
+        else
+          []
+        end
+
+      %{entries: entries, files: Enum.map(entries, & &1.path), skills: skills}
+    else
+      %{entries: [], files: [], skills: []}
+    end
+  end
+
+  # Discovers native and MCP tools, returning them separately for logging.
+  @spec resolve_tools(keyword()) :: %{native: [module()], mcp: [module()]}
+  defp resolve_tools(opts) do
+    native = Keyword.get(opts, :tools, [])
+    mcp_servers = Keyword.get(opts, :mcp_servers, [])
+    native_names = native |> Enum.map(& &1.name()) |> MapSet.new()
+    mcp = discover_mcp_tools(mcp_servers, native_names)
+    %{native: native, mcp: mcp}
+  end
+
+  # On restart, reloads conversation history from the surviving Session process.
+  @spec maybe_recover_session(State.t()) :: State.t()
+  defp maybe_recover_session(%State{session: nil} = state), do: state
+
+  defp maybe_recover_session(%State{session: session} = state) do
+    if Opal.Session.current_id(session) do
+      messages = Opal.Session.get_path(session)
+      Logger.info("Agent recovered session=#{state.session_id} messages=#{length(messages)}")
+      broadcast(state, {:agent_recovered})
+      %{state | messages: Enum.reverse(messages)}
+    else
+      state
+    end
   end
 
   @impl :gen_statem
@@ -297,25 +356,23 @@ defmodule Opal.Agent do
   end
 
   defp dispatch_state_event({:call, from}, message, state) do
-    case handle_call(message, from, state) do
-      {:reply, reply, new_state} ->
-        {:next_state, State.state_name(new_state), new_state, [{:reply, from, reply}]}
-    end
+    {reply, state} = handle_call(message, from, state)
+    {:next_state, State.state_name(state), state, [{:reply, from, reply}]}
   end
 
   defp dispatch_state_event(:cast, message, state) do
-    handle_cast(message, state)
-    |> Opal.Agent.Effects.from_legacy()
+    state = handle_cast(message, state)
+    {:next_state, State.state_name(state), state}
   end
 
   defp dispatch_state_event(:info, message, state) do
-    handle_info(message, state)
-    |> Opal.Agent.Effects.from_legacy()
+    state = handle_info(message, state)
+    {:next_state, State.state_name(state), state}
   end
 
   defp dispatch_state_event(_event_type, _event_content, state), do: {:keep_state, state}
 
-  def handle_cast({:prompt, text}, %State{status: :idle} = state) do
+  defp handle_cast({:prompt, text}, %State{status: :idle} = state) do
     Logger.debug(
       "Prompt received session=#{state.session_id} len=#{String.length(text)} chars=\"#{String.slice(text, 0, 80)}\""
     )
@@ -327,16 +384,16 @@ defmodule Opal.Agent do
     run_turn_internal(state)
   end
 
-  def handle_cast({:prompt, text}, %State{status: status} = state)
-      when status in [:running, :streaming, :executing_tools] do
+  defp handle_cast({:prompt, text}, %State{status: status} = state)
+       when status in [:running, :streaming, :executing_tools] do
     Logger.debug(
       "Prompt queued while busy session=#{state.session_id} status=#{status} len=#{String.length(text)}"
     )
 
-    {:noreply, %{state | pending_steers: state.pending_steers ++ [text]}}
+    %{state | pending_steers: state.pending_steers ++ [text]}
   end
 
-  def handle_cast({:steer, text}, %State{status: :idle} = state) do
+  defp handle_cast({:steer, text}, %State{status: :idle} = state) do
     # When idle, steering acts like a prompt
     user_msg = Opal.Message.user(text)
     state = append_message(state, user_msg)
@@ -345,46 +402,47 @@ defmodule Opal.Agent do
     run_turn_internal(state)
   end
 
-  def handle_cast({:steer, text}, %State{status: status} = state)
-      when status in [:running, :streaming, :executing_tools] do
+  defp handle_cast({:steer, text}, %State{status: status} = state)
+       when status in [:running, :streaming, :executing_tools] do
     # Queue steering message — drained between tool executions
-    {:noreply, %{state | pending_steers: state.pending_steers ++ [text]}}
+    %{state | pending_steers: state.pending_steers ++ [text]}
   end
 
-  def handle_cast(:abort, %State{} = state) do
+  defp handle_cast(:abort, %State{} = state) do
     state = cancel_streaming(state)
     state = cancel_tool_execution(state)
     broadcast(state, {:agent_abort})
-    {:noreply, %{state | status: :idle}}
+    %{state | status: :idle}
   end
 
-  def handle_call(:get_state, _from, state) do
-    {:reply, state, state}
+  defp handle_call(:get_state, _from, state) do
+    {state, state}
   end
 
-  def handle_call(:get_context, _from, state) do
-    {:reply, build_messages(state), state}
+  defp handle_call(:get_context, _from, state) do
+    {build_messages(state), state}
   end
 
-  def handle_call({:set_model, %Opal.Provider.Model{} = model}, _from, state) do
+  defp handle_call({:set_model, %Opal.Provider.Model{} = model}, _from, state) do
     Logger.debug(
       "Model changed session=#{state.session_id} from=#{state.model.id} to=#{model.id}"
     )
 
-    {:reply, :ok, %{state | model: model}}
+    {:ok, %{state | model: model}}
   end
 
-  def handle_call({:set_provider, provider_module}, _from, state) when is_atom(provider_module) do
+  defp handle_call({:set_provider, provider_module}, _from, state)
+       when is_atom(provider_module) do
     Logger.debug("Provider changed session=#{state.session_id} to=#{inspect(provider_module)}")
-    {:reply, :ok, %{state | provider: provider_module}}
+    {:ok, %{state | provider: provider_module}}
   end
 
-  def handle_call({:sync_messages, messages}, _from, state) do
+  defp handle_call({:sync_messages, messages}, _from, state) do
     Logger.debug("Messages synced session=#{state.session_id} count=#{length(messages)}")
-    {:reply, :ok, %{state | messages: Enum.reverse(messages)}}
+    {:ok, %{state | messages: Enum.reverse(messages)}}
   end
 
-  def handle_call({:configure, attrs}, _from, %State{} = state) do
+  defp handle_call({:configure, attrs}, _from, %State{} = state) do
     state =
       state
       |> maybe_update_feature(:sub_agents, get_in(attrs, [:features, :sub_agents]))
@@ -393,62 +451,34 @@ defmodule Opal.Agent do
       |> maybe_update_feature(:debug, get_in(attrs, [:features, :debug]))
       |> maybe_update_enabled_tools(Map.get(attrs, :enabled_tools))
 
-    {:reply, :ok, state}
+    {:ok, state}
   end
 
-  def handle_call({:load_skill, skill_name}, _from, %State{} = state) do
-    if skill_name in state.active_skills do
-      {:reply, {:already_loaded, skill_name}, state}
-    else
-      case Enum.find(state.available_skills, &(&1.name == skill_name)) do
-        nil ->
-          {:reply,
-           {:error,
-            "Skill '#{skill_name}' not found. Available: #{Enum.map_join(state.available_skills, ", ", & &1.name)}"},
-           state}
-
-        skill ->
-          # Inject instructions as a conversation message (ages out during compaction)
-          skill_msg = %Opal.Message{
-            id: "skill:#{skill_name}",
-            role: :user,
-            content:
-              "[System] Skill '#{skill.name}' activated. Instructions:\n\n#{skill.instructions}"
-          }
-
-          new_active = [skill_name | state.active_skills]
-          state = append_message(%{state | active_skills: new_active}, skill_msg)
-
-          broadcast(state, {:skill_loaded, skill_name, skill.description})
-
-          {:reply, {:ok, skill_name}, state}
-      end
-    end
-  end
+  @spec handle_info(term(), State.t()) :: State.t()
 
   # Tool task completed successfully — match ref against pending_tool_tasks map.
-  def handle_info(
-        {ref, result},
-        %State{
-          status: :executing_tools,
-          pending_tool_tasks: tasks
-        } = state
-      )
-      when is_reference(ref) and is_map_key(tasks, ref) do
+  defp handle_info(
+         {ref, result},
+         %State{
+           status: :executing_tools,
+           pending_tool_tasks: tasks
+         } = state
+       )
+       when is_reference(ref) and is_map_key(tasks, ref) do
     {task, tc} = Map.fetch!(tasks, ref)
     Process.demonitor(task.ref, [:flush])
     Opal.Agent.Tools.handle_tool_result(ref, tc, result, state)
   end
 
   # Tool task crashed — match ref against pending_tool_tasks map.
-  def handle_info(
-        {:DOWN, ref, :process, _pid, reason},
-        %State{
-          status: :executing_tools,
-          pending_tool_tasks: tasks
-        } = state
-      )
-      when is_map_key(tasks, ref) do
+  defp handle_info(
+         {:DOWN, ref, :process, _pid, reason},
+         %State{
+           status: :executing_tools,
+           pending_tool_tasks: tasks
+         } = state
+       )
+       when is_map_key(tasks, ref) do
     {_task, tc} = Map.fetch!(tasks, ref)
     error_msg = "Tool execution crashed: #{inspect(reason)}"
     Logger.error(error_msg)
@@ -456,10 +486,10 @@ defmodule Opal.Agent do
   end
 
   # Native event stream (from EventStream providers like Provider.LLM)
-  def handle_info(
-        {ref, {:events, events}},
-        %State{status: :streaming, streaming_ref: ref} = state
-      ) do
+  defp handle_info(
+         {ref, {:events, events}},
+         %State{status: :streaming, streaming_ref: ref} = state
+       ) do
     state = %{state | last_chunk_at: System.monotonic_time(:second)}
 
     state =
@@ -470,19 +500,19 @@ defmodule Opal.Agent do
     # If a stream error event was received, don't wait for :done
     if state.stream_errored do
       cancel_watchdog(state)
-      {:noreply, %{state | stream_errored: false}}
+      %{state | stream_errored: false}
     else
-      {:noreply, state}
+      state
     end
   end
 
-  def handle_info({ref, :done}, %State{status: :streaming, streaming_ref: ref} = state) do
+  defp handle_info({ref, :done}, %State{status: :streaming, streaming_ref: ref} = state) do
     finalize_response(state)
   end
 
   # SSE stream (from HTTP providers like Provider.Copilot)
-  def handle_info(message, %State{status: :streaming, streaming_resp: resp} = state)
-      when resp != nil do
+  defp handle_info(message, %State{status: :streaming, streaming_resp: resp} = state)
+       when resp != nil do
     case Req.parse_message(resp, message) do
       {:ok, chunks} when is_list(chunks) ->
         Logger.debug("SSE chunks received: #{inspect(chunks, limit: 3, printable_limit: 200)}")
@@ -501,13 +531,13 @@ defmodule Opal.Agent do
         cond do
           state.stream_errored ->
             cancel_watchdog(state)
-            {:noreply, %{state | status: :idle, stream_errored: false, streaming_resp: nil}}
+            %{state | status: :idle, stream_errored: false, streaming_resp: nil}
 
           :done in chunks ->
             finalize_response(state)
 
           true ->
-            {:noreply, state}
+            state
         end
 
       :unknown ->
@@ -515,14 +545,14 @@ defmodule Opal.Agent do
           "Req.parse_message returned :unknown for: #{inspect(message, limit: 3, printable_limit: 200)}"
         )
 
-        {:noreply, state}
+        state
     end
   end
 
   @stream_stall_warn_secs 10
 
-  def handle_info(:stream_watchdog, %State{status: :streaming, last_chunk_at: last} = state)
-      when last != nil do
+  defp handle_info(:stream_watchdog, %State{status: :streaming, last_chunk_at: last} = state)
+       when last != nil do
     elapsed = System.monotonic_time(:second) - last
 
     if elapsed >= @stream_stall_warn_secs do
@@ -530,36 +560,33 @@ defmodule Opal.Agent do
     end
 
     watchdog = Process.send_after(self(), :stream_watchdog, 5_000)
-    {:noreply, %{state | stream_watchdog: watchdog}}
+    %{state | stream_watchdog: watchdog}
   end
 
-  def handle_info(:stream_watchdog, state) do
-    {:noreply, state}
+  defp handle_info(:stream_watchdog, state) do
+    state
   end
 
   # Retry timer fired — resume the turn if the agent is still running.
   # If the agent was aborted during the retry wait (status changed to :idle),
   # the timer is silently discarded.
-  def handle_info(:retry_turn, %State{status: :running} = state) do
+  defp handle_info(:retry_turn, %State{status: :running} = state) do
     run_turn_internal(state)
   end
 
-  def handle_info(:retry_turn, state) do
-    {:noreply, state}
+  defp handle_info(:retry_turn, state) do
+    state
   end
 
-  def handle_info(message, state) do
+  defp handle_info(message, state) do
     Logger.debug(
       "handle_info (status=#{state.status}): #{inspect(message, limit: 3, printable_limit: 200)}"
     )
 
-    {:noreply, state}
+    state
   end
 
   # --- Internal Loop Logic ---
-
-  # Look up context window from LLMDB. Falls back to 128k if not found.
-  defp model_context_window(model), do: Opal.Provider.Registry.context_window(model)
 
   @doc """
   Builds messages for token estimation usage.
@@ -570,7 +597,7 @@ defmodule Opal.Agent do
     build_messages(state)
   end
 
-  @spec run_turn(State.t()) :: term()
+  @spec run_turn(State.t()) :: State.t()
   def run_turn(%State{} = state) do
     run_turn_internal(state)
   end
@@ -613,7 +640,7 @@ defmodule Opal.Agent do
             stream_watchdog: watchdog
         }
 
-        {:noreply, state}
+        state
 
       {:ok, resp} ->
         Logger.debug(
@@ -637,7 +664,7 @@ defmodule Opal.Agent do
             stream_watchdog: watchdog
         }
 
-        {:noreply, state}
+        state
 
       {:error, reason} ->
         Logger.error("Provider stream failed: #{inspect(reason)}")
@@ -665,11 +692,11 @@ defmodule Opal.Agent do
 
             broadcast(state, {:retry, attempt, delay, reason})
             Process.send_after(self(), :retry_turn, delay)
-            {:noreply, %{state | retry_count: attempt}}
+            %{state | retry_count: attempt}
 
           true ->
             broadcast(state, {:error, reason})
-            {:noreply, %{state | status: :idle, retry_count: 0}}
+            %{state | status: :idle, retry_count: 0}
         end
     end
   end
@@ -689,11 +716,6 @@ defmodule Opal.Agent do
   # the context window, we aggressively compact (keeping only ~20% of
   # context) and auto-retry the turn. This is NOT counted as a retry
   # attempt — it's a structural recovery, not a transient-error retry.
-
-  # Without a session process we can't compact — surface the raw error.
-  defp handle_overflow_compaction(%State{session: nil} = state, reason) do
-    Opal.Agent.UsageTracker.handle_overflow_compaction(state, reason)
-  end
 
   defp handle_overflow_compaction(%State{} = state, reason) do
     Opal.Agent.UsageTracker.handle_overflow_compaction(state, reason)
@@ -788,7 +810,7 @@ defmodule Opal.Agent do
         broadcast(state, {:turn_end, assistant_msg, []})
         run_turn_internal(state)
       else
-        context_window = model_context_window(state.model)
+        context_window = Opal.Provider.Registry.context_window(state.model)
 
         final_usage =
           Map.merge(state.token_usage, %{
@@ -798,7 +820,7 @@ defmodule Opal.Agent do
 
         broadcast(state, {:agent_end, Enum.reverse(state.messages), final_usage})
         maybe_auto_save(state)
-        {:noreply, %{state | status: :idle}}
+        %{state | status: :idle}
       end
     end
   end
@@ -946,7 +968,7 @@ defmodule Opal.Agent do
       |> Enum.filter(&is_binary/1)
       |> Enum.uniq()
 
-    {matched, rest} = take_tool_results_for_ids(rest, MapSet.new(expected_ids))
+    %{matched: matched, rest: rest} = take_tool_results_for_ids(rest, MapSet.new(expected_ids))
 
     missing =
       expected_ids
@@ -992,7 +1014,7 @@ defmodule Opal.Agent do
           {found, [msg | kept]}
       end)
 
-    {matched, Enum.reverse(kept_rev)}
+    %{matched: matched, rest: Enum.reverse(kept_rev)}
   end
 
   defp tool_call_id(%{call_id: call_id}) when is_binary(call_id), do: call_id

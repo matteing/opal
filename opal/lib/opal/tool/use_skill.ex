@@ -40,19 +40,9 @@ defmodule Opal.Tool.UseSkill do
   end
 
   @impl true
-  def execute(%{"skill_name" => skill_name}, %{agent_pid: agent_pid}) do
-    case Opal.Agent.load_skill(agent_pid, skill_name) do
-      {:ok, name} ->
-        {:ok, "Skill '#{name}' loaded. Its instructions are now in your context."}
-
-      {:already_loaded, name} ->
-        {:ok, "Skill '#{name}' is already loaded."}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+  def execute(%{"skill_name" => skill_name}, _context) do
+    {:effect, {:load_skill, skill_name}}
   end
 
-  def execute(%{"skill_name" => _}, _), do: {:error, "Missing agent_pid in context."}
   def execute(_, _), do: {:error, "Missing required parameter: skill_name"}
 end

@@ -97,8 +97,7 @@ Tool calls are run sequentially but non-blocking using `Task.Supervisor.async_no
 flowchart LR
     A[State function callback] --> B[dispatch_state_event]
     B --> C[handle_cast/call/info]
-    C --> D[Opal.Agent.Effects.from_legacy]
-    D --> E[next_state from Opal.Agent.Reducer]
+    C --> E[next_state transition]
 
     E --> F[streaming]
     F --> G[Opal.Agent.Stream]

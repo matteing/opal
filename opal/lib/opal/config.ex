@@ -166,12 +166,10 @@ defmodule Opal.Config do
   """
   @spec default_data_dir() :: String.t()
   def default_data_dir do
-    case :os.type() do
-      {:win32, _} ->
-        :filename.basedir(:user_data, ~c"opal") |> to_string()
-
-      {:unix, _} ->
-        Path.join(System.user_home!(), ".opal")
+    if Opal.Platform.windows?() do
+      :filename.basedir(:user_data, ~c"opal") |> to_string()
+    else
+      Path.join(System.user_home!(), ".opal")
     end
   end
 

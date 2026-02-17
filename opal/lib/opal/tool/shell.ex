@@ -139,10 +139,7 @@ defmodule Opal.Tool.Shell do
   @doc "Returns the default shell for the current platform."
   @spec default_shell() :: shell()
   def default_shell do
-    case :os.type() do
-      {:unix, _} -> :sh
-      {:win32, _} -> :cmd
-    end
+    if Opal.Platform.windows?(), do: :cmd, else: :sh
   end
 
   defp run_command(shell, args, opts, timeout, emit) do
@@ -286,13 +283,11 @@ defmodule Opal.Tool.Shell do
   defp kill_orphaned_process(ref) do
     receive do
       {^ref, os_pid} when is_integer(os_pid) and os_pid > 0 ->
-        case :os.type() do
-          {:unix, _} ->
-            # Kill process and its children
-            System.cmd("kill", ["-9", "#{os_pid}"], stderr_to_stdout: true)
-
-          {:win32, _} ->
-            System.cmd("taskkill", ["/PID", "#{os_pid}", "/T", "/F"], stderr_to_stdout: true)
+        if Opal.Platform.windows?() do
+          System.cmd("taskkill", ["/PID", "#{os_pid}", "/T", "/F"], stderr_to_stdout: true)
+        else
+          # Kill process and its children
+          System.cmd("kill", ["-9", "#{os_pid}"], stderr_to_stdout: true)
         end
 
         :ok

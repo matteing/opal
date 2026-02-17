@@ -125,7 +125,7 @@ defmodule Opal.Agent.UsageTrackerTest do
         config: Opal.Config.new(%{features: %{debug: %{enabled: true}}})
       }
 
-      {:noreply, new_state} = UsageTracker.handle_overflow_compaction(state, :overflow)
+      new_state = UsageTracker.handle_overflow_compaction(state, :overflow)
       assert new_state.status == :idle
       assert_receive {:opal_event, ^session_id, {:error, {:overflow_no_session, :overflow}}}
     end

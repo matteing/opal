@@ -82,7 +82,8 @@ defmodule Opal.Tool do
   @callback meta(args :: map()) :: String.t()
 
   @doc "Executes the tool with the given arguments and session context."
-  @callback execute(args :: map(), context :: map()) :: {:ok, String.t()} | {:error, String.t()}
+  @callback execute(args :: map(), context :: map()) ::
+              {:ok, String.t()} | {:error, String.t()} | {:effect, term()}
 
   @optional_callbacks [meta: 1]
 

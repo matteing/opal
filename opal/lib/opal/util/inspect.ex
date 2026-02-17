@@ -435,10 +435,10 @@ defmodule Opal.Inspect do
     File.write!(path, content)
     IO.puts(IO.ANSI.green() <> "Wrote system prompt to #{path}" <> IO.ANSI.reset())
 
-    case :os.type() do
-      {:unix, :darwin} -> System.cmd("open", [path])
-      {:unix, _} -> System.cmd("xdg-open", [path])
-      {:win32, _} -> System.cmd("cmd", ["/c", "start", "", path])
+    case Opal.Platform.os() do
+      :macos -> System.cmd("open", [path])
+      :linux -> System.cmd("xdg-open", [path])
+      :windows -> System.cmd("cmd", ["/c", "start", "", path])
     end
 
     :ok
