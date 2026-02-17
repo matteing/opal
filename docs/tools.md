@@ -22,6 +22,7 @@ The agent converts tool modules to JSON Schema for the LLM. When the LLM request
 | `read_file`   | `Opal.Tool.Read`     | Read files with hashline-tagged output                                 |
 | `edit_file`   | `Opal.Tool.Edit`     | Edit by hash-anchored line references                                  |
 | `write_file`  | `Opal.Tool.Write`    | Create or overwrite files                                              |
+| `grep`        | `Opal.Tool.Grep`     | Cross-platform regex search with hashline-tagged output                |
 | `shell`       | `Opal.Tool.Shell`    | Execute shell commands with streaming output                           |
 | `sub_agent`   | `Opal.Tool.SubAgent` | Spawn parallel child agents                                            |
 | `tasks`       | `Opal.Tool.Tasks`    | DETS-backed task tracker                                               |
@@ -34,6 +35,7 @@ Each tool has a detailed doc in `docs/tools/`:
 - [**read_file**](tools/read.md) — Read with hashline-tagged output for edit anchoring
 - [**edit_file**](tools/edit.md) — Hash-anchored line editing (replace, insert, delete)
 - [**write_file**](tools/write.md) — Create/overwrite files with encoding preservation
+- [**grep**](tools/grep.md) — Cross-platform regex search with context and glob filtering
 - [**shell**](tools/shell.md) — Streaming shell execution with tail-truncation
 - [**sub_agent**](tools/sub-agent.md) — Spawn child agents with depth enforcement
 - [**tasks**](tools/tasks.md) — DETS-backed persistent task tracker
