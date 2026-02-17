@@ -4,12 +4,12 @@ Spawns a child agent for delegated tasks. The sub-agent runs in parallel under t
 
 ## Parameters
 
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `prompt` | string | yes | Task description for the sub-agent |
-| `tools` | string[] | no | Subset of tool names to make available (default: all parent tools) |
-| `model` | string | no | Model ID override (e.g. use a cheaper model for simple tasks) |
-| `system_prompt` | string | no | Custom system prompt override |
+| Param           | Type     | Required | Description                                                        |
+| --------------- | -------- | -------- | ------------------------------------------------------------------ |
+| `prompt`        | string   | yes      | Task description for the sub-agent                                 |
+| `tools`         | string[] | no       | Subset of tool names to make available (default: all parent tools) |
+| `model`         | string   | no       | Model ID override (e.g. use a cheaper model for simple tasks)      |
+| `system_prompt` | string   | no       | Custom system prompt override                                      |
 
 ## Behavior
 
