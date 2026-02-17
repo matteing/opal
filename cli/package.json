@@ -32,7 +32,7 @@
     "format:check": "prettier --check src/",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "prepare": "cd .. && lefthook install"
+    "prepare": "cd .. && lefthook install || true"
   },
   "prettier": {
     "semi": true,
