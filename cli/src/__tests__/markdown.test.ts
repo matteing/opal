@@ -16,6 +16,39 @@ describe("renderMarkdown", () => {
     expect(output).not.toContain("**bold text**");
   });
 
+  it("closes unclosed bold markers during streaming", () => {
+    const output = stripAnsi(renderMarkdown("I will **now", 80));
+    expect(output).not.toContain("**");
+    expect(output).toContain("now");
+  });
+
+  it("closes unclosed inline code during streaming", () => {
+    const output = stripAnsi(renderMarkdown("run `some command", 80));
+    expect(output).not.toContain("`");
+    expect(output).toContain("some command");
+  });
+
+  it("closes unclosed fenced code blocks during streaming", () => {
+    const output = stripAnsi(renderMarkdown("```js\nconsole.log(1)", 80));
+    expect(output).not.toContain("```");
+    expect(output).toContain("console.log(1)");
+  });
+
+  it("renders bold and code inside list items", () => {
+    const output = stripAnsi(renderMarkdown("* **`file.md`** — description", 80));
+    expect(output).not.toContain("**");
+    expect(output).not.toContain("`");
+    expect(output).toContain("file.md");
+    expect(output).toContain("description");
+  });
+
+  it("does not add stray markers to list items", () => {
+    const output = stripAnsi(renderMarkdown("* normal text", 80));
+    expect(output).toContain("normal text");
+    // Should not have extra * from closeOpenMarkers
+    expect(output.replace(/^\s*\*\s/, "")).not.toContain("*");
+  });
+
   it("renders GFM tables with terminal table output", () => {
     const output = stripAnsi(renderMarkdown("| a | b |\n| --- | --- |\n| 1 | 2 |", 80));
     expect(output).toContain("┌");

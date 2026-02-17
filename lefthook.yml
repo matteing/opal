@@ -7,6 +7,11 @@ pre-commit:
       run: mix format {staged_files}
       stage_fixed: true
 
+    dialyzer:
+      root: "opal/"
+      glob: "**/*.{ex,exs}"
+      run: mix dialyzer
+
     format-cli:
       root: "cli/"
       glob: "src/**/*.{ts,tsx}"

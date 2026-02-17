@@ -32,6 +32,7 @@ All tools implement `Opal.Tool` behavior:
 - `read_file` - File reading with hashline-tagged output (`N:hash|content`), offset/limit support
 - `write_file` - File writing with auto-created parent directories
 - `edit_file` - Hash-anchored line editing (replace, insert_after, insert_before) using tags from `read_file`
+- `grep` - Cross-platform regex search with hashline-tagged output, directory walking, glob filtering
 - `shell` - Cross-platform shell execution with streaming output
 - `sub_agent` - Spawn child agents for delegated tasks
 - `tasks` - DETS-backed task tracker

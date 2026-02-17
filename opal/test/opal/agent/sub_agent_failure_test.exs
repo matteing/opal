@@ -16,10 +16,13 @@ defmodule Opal.Agent.SubAgentFailureTest do
 
   describe "sub-agents disabled" do
     test "returns error when feature is disabled" do
+      %Opal.Config{} = base_config = Opal.Config.new()
+      %Opal.Config.Features{} = base_features = Opal.Config.Features.new()
+
       config = %Opal.Config{
-        Opal.Config.new()
+        base_config
         | features: %Opal.Config.Features{
-            Opal.Config.Features.new()
+            base_features
             | sub_agents: %{enabled: false}
           }
       }

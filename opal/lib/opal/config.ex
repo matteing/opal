@@ -54,9 +54,9 @@ defmodule Opal.Config do
         data_dir: "~/.opal",
         shell: :zsh,
         default_model: {"copilot", "claude-sonnet-4-5"},
-        default_tools: [Opal.Tool.Read, Opal.Tool.Write, Opal.Tool.Edit, Opal.Tool.Shell,
-                        Opal.Tool.SubAgent, Opal.Tool.Tasks, Opal.Tool.UseSkill, Opal.Tool.AskUser,
-                        Opal.Tool.Debug],
+        default_tools: [Opal.Tool.Read, Opal.Tool.Write, Opal.Tool.Edit, Opal.Tool.Grep,
+                        Opal.Tool.Shell, Opal.Tool.SubAgent, Opal.Tool.Tasks,
+                        Opal.Tool.UseSkill, Opal.Tool.AskUser, Opal.Tool.Debug],
         copilot: [
           client_id: "Iv1.b507a08c87ecfe98",
           domain: "github.com"
@@ -90,6 +90,7 @@ defmodule Opal.Config do
               Opal.Tool.Read,
               Opal.Tool.Write,
               Opal.Tool.Edit,
+              Opal.Tool.Grep,
               Opal.Tool.Shell,
               Opal.Tool.SubAgent,
               Opal.Tool.Tasks,

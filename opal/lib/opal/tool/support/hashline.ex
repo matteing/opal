@@ -46,10 +46,22 @@ defmodule Opal.Tool.Hashline do
     |> String.replace("\r\n", "\n")
     |> String.split("\n")
     |> Enum.with_index(start_line)
-    |> Enum.map_join("\n", fn {line, num} ->
-      hash = line_hash(line)
-      "#{num}:#{hash}|#{line}"
-    end)
+    |> Enum.map_join("\n", fn {line, num} -> tag_line(line, num) end)
+  end
+
+  @doc """
+  Tags a single line with its `N:hash|` prefix.
+
+  Useful when callers already have split lines and need to tag them
+  individually (e.g. grep results with context, sliced reads).
+
+      iex> Opal.Tool.Hashline.tag_line("  return 42;", 7)
+      "7:8a|  return 42;"  # hash depends on phash2
+  """
+  @spec tag_line(String.t(), pos_integer()) :: String.t()
+  def tag_line(line, line_num) do
+    hash = line_hash(line)
+    "#{line_num}:#{hash}|#{line}"
   end
 
   @doc """

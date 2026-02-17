@@ -14,8 +14,6 @@ jobs:
   ci:
     name: Lint, Build & Test
     runs-on: ubuntu-latest
-    env:
-      MIX_ENV: test
     steps:
       - uses: actions/checkout@v4
 
@@ -29,6 +27,13 @@ jobs:
             opal/_build
           key: mix-${{ runner.os }}-${{ hashFiles('opal/mix.lock') }}
           restore-keys: mix-${{ runner.os }}-
+
+      - name: Cache Dialyzer PLTs
+        uses: actions/cache@v4
+        with:
+          path: opal/_build/dev/dialyxir_*.plt*
+          key: plt-${{ runner.os }}-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('opal/mix.lock') }}
+          restore-keys: plt-${{ runner.os }}-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-
 
       - name: Install deps
         run: |

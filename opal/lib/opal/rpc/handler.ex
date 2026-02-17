@@ -419,6 +419,31 @@ defmodule Opal.RPC.Handler do
      }}
   end
 
+  def handle("session/history", %{"session_id" => sid}) do
+    case lookup_session(sid) do
+      {:ok, session} ->
+        messages = Opal.Session.get_path(session)
+        {:ok, %{messages: Enum.map(messages, &serialize_message/1)}}
+
+      {:error, _reason} ->
+        # No session process — try loading from disk as a fallback
+        case lookup_agent(sid) do
+          {:ok, agent} ->
+            # Agent exists but session persistence is off — return messages from agent state
+            state = Opal.Agent.get_state(agent)
+            path = Enum.reverse(state.messages)
+            {:ok, %{messages: Enum.map(path, &serialize_message/1)}}
+
+          {:error, reason} ->
+            {:error, Opal.RPC.invalid_params(), "Session not found", reason}
+        end
+    end
+  end
+
+  def handle("session/history", _params) do
+    {:error, Opal.RPC.invalid_params(), "Missing required param: session_id", nil}
+  end
+
   def handle("session/delete", %{"session_id" => session_id}) do
     config = Opal.Config.new()
     dir = Opal.Config.sessions_dir(config)
@@ -724,4 +749,34 @@ defmodule Opal.RPC.Handler do
   end
 
   defp parse_provider_name(_), do: :error
+
+  defp serialize_message(%Opal.Message{} = msg) do
+    base = %{
+      id: msg.id,
+      role: Atom.to_string(msg.role),
+      content: msg.content,
+      is_error: msg.is_error
+    }
+
+    base =
+      if msg.thinking, do: Map.put(base, :thinking, msg.thinking), else: base
+
+    base =
+      if msg.tool_calls && msg.tool_calls != [] do
+        Map.put(
+          base,
+          :tool_calls,
+          Enum.map(msg.tool_calls, fn tc ->
+            %{call_id: tc.call_id, name: tc.name, arguments: tc.arguments}
+          end)
+        )
+      else
+        base
+      end
+
+    base = if msg.call_id, do: Map.put(base, :call_id, msg.call_id), else: base
+    base = if msg.name, do: Map.put(base, :name, msg.name), else: base
+    base = if msg.metadata, do: Map.put(base, :metadata, msg.metadata), else: base
+    base
+  end
 end

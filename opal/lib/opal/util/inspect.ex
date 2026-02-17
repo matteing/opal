@@ -285,12 +285,12 @@ defmodule Opal.Inspect do
   ## Examples
 
       iex> prompt("List all files")
-      :ok
+      %{queued: false}
   """
-  @spec prompt(String.t()) :: :ok
+  @spec prompt(String.t()) :: %{queued: boolean()}
   def prompt(text), do: Opal.Agent.prompt(agent(), text)
 
-  @spec prompt(String.t(), String.t()) :: :ok
+  @spec prompt(String.t(), String.t()) :: %{queued: boolean()}
   def prompt(session_id, text), do: Opal.Agent.prompt(agent(session_id), text)
 
   @doc """
@@ -500,6 +500,449 @@ defmodule Opal.Inspect do
         :linux -> System.cmd("xdg-open", [path])
         :windows -> System.cmd("cmd", ["/c", "start", "", path])
       end
+    end
+  end
+
+  # ── Conversation Dump ─────────────────────────────────────────────
+
+  @doc """
+  Dumps the entire conversation to a folder of linked Markdown files.
+
+  Creates a directory containing:
+
+    * `index.md` — debug info + main conversation thread
+    * `system-prompt.md` — the full assembled system prompt
+    * `sub-agent-<N>.md` — one file per sub-agent invocation, linked
+      from `index.md` at the point where the sub-agent was called
+
+  Returns the folder path and prints it to the console. The `index.md`
+  file is opened automatically unless `:open` is `false`.
+
+  ## Options
+
+    * `:path` — custom folder path (default: auto-generated in tmp)
+    * `:open` — whether to open `index.md` after writing (default: `true`)
+
+  ## Examples
+
+      iex> Opal.Inspect.dump_conversation()
+      "/tmp/opal-conversation-abc123def456/"
+
+      iex> Opal.Inspect.dump_conversation(open: false)
+      "/tmp/opal-conversation-abc123def456/"
+
+      iex> Opal.Inspect.dump_conversation("session-id")
+      "/tmp/opal-conversation-session-id/"
+  """
+  @spec dump_conversation(keyword()) :: String.t()
+  def dump_conversation(opts \\ []) when is_list(opts) do
+    pid = agent()
+    do_dump_conversation(pid, Opal.Agent.get_state(pid), opts)
+  end
+
+  @spec dump_conversation(String.t(), keyword()) :: String.t()
+  def dump_conversation(session_id, opts) when is_binary(session_id) do
+    pid = agent(session_id)
+    do_dump_conversation(pid, Opal.Agent.get_state(pid), opts)
+  end
+
+  defp do_dump_conversation(pid, %State{} = s, opts) do
+    short_id = String.slice(s.session_id, 0, 12)
+    default_dir = Path.join(System.tmp_dir!(), "opal-conversation-#{short_id}")
+    dir = Keyword.get(opts, :path, default_dir)
+    open? = Keyword.get(opts, :open, true)
+
+    # Ensure a clean output directory
+    if File.exists?(dir), do: File.rm_rf!(dir)
+    File.mkdir_p!(dir)
+
+    context_messages = Opal.Agent.get_context(pid)
+    active = Opal.Agent.Tools.active_tools(s)
+
+    # Extract system prompt into its own file
+    {system_prompt, conversation_messages} = split_system_prompt(context_messages)
+    File.write!(Path.join(dir, "system-prompt.md"), render_system_prompt_file(system_prompt))
+
+    # Identify sub-agent calls and write each to a separate file.
+    # Returns a map of call_id → filename for linking from the index.
+    sub_agent_files = write_sub_agent_files(dir, conversation_messages)
+
+    # Write the main index
+    index_md = render_index(s, active, conversation_messages, sub_agent_files)
+    index_path = Path.join(dir, "index.md")
+    File.write!(index_path, index_md)
+
+    IO.puts(IO.ANSI.green() <> "Wrote conversation dump to #{dir}/" <> IO.ANSI.reset())
+
+    if open?, do: open_file(index_path)
+
+    dir
+  end
+
+  # ── System prompt ──────────────────────────────────────────────────
+
+  defp split_system_prompt([%Opal.Message{role: :system, content: content} | rest]),
+    do: {content, rest}
+
+  defp split_system_prompt(messages), do: {nil, messages}
+
+  defp render_system_prompt_file(nil), do: "# System Prompt\n\n_No system prompt._\n"
+
+  defp render_system_prompt_file(content) do
+    "# System Prompt\n\n" <>
+      "[← Back to conversation](index.md)\n\n" <>
+      "#{String.length(content)} characters\n\n---\n\n" <>
+      content <> "\n"
+  end
+
+  # ── Sub-agent extraction ───────────────────────────────────────────
+
+  # Scans messages for sub_agent tool calls and their corresponding
+  # tool results. Writes each pair to `sub-agent-<N>.md` and returns
+  # a map of %{call_id => filename} for linking.
+  defp write_sub_agent_files(dir, messages) do
+    # Build a lookup of call_id → tool_result content
+    result_by_call_id =
+      messages
+      |> Enum.filter(&(&1.role == :tool_result))
+      |> Map.new(&{&1.call_id, &1})
+
+    # Find all sub_agent tool calls (both in assistant.tool_calls and
+    # standalone :tool_call messages)
+    sub_agent_calls = collect_sub_agent_calls(messages)
+
+    sub_agent_calls
+    |> Enum.with_index(1)
+    |> Enum.reduce(%{}, fn {{call_id, prompt, args_json}, idx}, acc ->
+      filename = "sub-agent-#{idx}.md"
+      result_msg = Map.get(result_by_call_id, call_id)
+
+      md = render_sub_agent_file(idx, call_id, prompt, args_json, result_msg)
+      File.write!(Path.join(dir, filename), md)
+
+      Map.put(acc, call_id, filename)
+    end)
+  end
+
+  # Collects {call_id, prompt, args_json} tuples for every sub_agent invocation.
+  defp collect_sub_agent_calls(messages) do
+    Enum.flat_map(messages, fn
+      %Opal.Message{role: :assistant, tool_calls: tcs} when is_list(tcs) ->
+        tcs
+        |> Enum.filter(fn tc -> (tc[:name] || tc["name"]) == "sub_agent" end)
+        |> Enum.map(fn tc ->
+          cid = tc[:call_id] || tc["call_id"]
+          args = tc[:arguments] || tc["arguments"] || %{}
+          prompt = args["prompt"] || Map.get(args, :prompt, "")
+          {cid, prompt, args}
+        end)
+
+      %Opal.Message{role: :tool_call, name: "sub_agent", call_id: cid, content: content} ->
+        args = decode_json(content)
+        prompt = args["prompt"] || ""
+        [{cid, prompt, args}]
+
+      _ ->
+        []
+    end)
+  end
+
+  defp render_sub_agent_file(idx, call_id, prompt, args, result_msg) do
+    header =
+      "# Sub-Agent ##{idx}\n\n" <>
+        "[← Back to conversation](index.md)\n\n" <>
+        "| Key | Value |\n" <>
+        "|-----|-------|\n" <>
+        "| Call ID | `#{call_id}` |\n"
+
+    # Show extra args (model, system_prompt, tools) if provided
+    extra_args =
+      args
+      |> Map.drop(["prompt", :prompt])
+      |> Enum.map_join("", fn {k, v} ->
+        "| #{k} | `#{inspect(v, limit: 200)}` |\n"
+      end)
+
+    prompt_section = "\n## Prompt\n\n#{prompt}\n"
+
+    result_section =
+      case result_msg do
+        %Opal.Message{content: content, is_error: is_error} ->
+          status = if is_error, do: " [ERROR]", else: ""
+
+          "\n## Result#{status}\n\n" <>
+            fence_content(content || "_empty_")
+
+        nil ->
+          "\n## Result\n\n_No result found._\n"
+      end
+
+    header <> extra_args <> prompt_section <> result_section
+  end
+
+  # ── Index rendering ────────────────────────────────────────────────
+
+  defp render_index(%State{} = s, active_tools, messages, sub_agent_files) do
+    ts = DateTime.utc_now() |> DateTime.to_iso8601()
+
+    sections = [
+      "# Opal Conversation Dump\n",
+      "_Generated at #{ts}_\n",
+      render_debug_info(s, active_tools),
+      render_messages(messages, sub_agent_files)
+    ]
+
+    Enum.join(sections, "\n")
+  end
+
+  defp render_debug_info(%State{} = s, active_tools) do
+    tool_names = Enum.map(active_tools, & &1.name()) |> Enum.sort()
+    all_tool_names = Enum.map(s.tools, & &1.name()) |> Enum.sort()
+    disabled = s.disabled_tools |> Enum.sort()
+    skills_available = Enum.map(s.available_skills, & &1.name) |> Enum.sort()
+
+    usage = s.token_usage
+
+    lines = [
+      "## Debug Info\n",
+      "| Key | Value |",
+      "|-----|-------|",
+      "| Session ID | `#{s.session_id}` |",
+      "| Status | `#{s.status}` |",
+      "| Model | `#{s.model.provider}:#{s.model.id}` |",
+      "| Provider | `#{inspect(s.provider)}` |",
+      "| Working Dir | `#{s.working_dir}` |",
+      "| Messages | #{length(s.messages)} |",
+      "| Retry Count | #{s.retry_count} / #{s.max_retries} |",
+      "| Overflow | #{s.overflow_detected} |",
+      "",
+      "### Token Usage\n",
+      "| Metric | Value |",
+      "|--------|-------|",
+      "| Prompt Tokens | #{Map.get(usage, :prompt_tokens, 0)} |",
+      "| Completion Tokens | #{Map.get(usage, :completion_tokens, 0)} |",
+      "| Total Tokens | #{Map.get(usage, :total_tokens, 0)} |",
+      "| Context Window | #{Map.get(usage, :context_window, 0)} |",
+      "| Current Context | #{Map.get(usage, :current_context_tokens, 0)} |",
+      "",
+      "### Active Tools (#{length(tool_names)})\n",
+      format_list(tool_names),
+      "",
+      "### All Registered Tools (#{length(all_tool_names)})\n",
+      format_list(all_tool_names),
+      "",
+      if(disabled != [], do: "### Disabled Tools\n\n#{format_list(disabled)}\n", else: ""),
+      "### Context Files\n",
+      if(s.context_files == [], do: "_none_", else: format_list(s.context_files)),
+      "",
+      "### Skills\n",
+      "**Available:** #{if(skills_available == [], do: "_none_", else: Enum.join(skills_available, ", "))}",
+      "**Active:** #{if(s.active_skills == [], do: "_none_", else: Enum.join(s.active_skills, ", "))}",
+      "",
+      "### MCP Servers\n",
+      if(s.mcp_servers == [],
+        do: "_none_",
+        else: fence_content(Jason.encode!(s.mcp_servers, pretty: true), "json")
+      ),
+      "",
+      "**System Prompt →** [system-prompt.md](system-prompt.md)\n",
+      "---\n"
+    ]
+
+    Enum.join(lines, "\n")
+  end
+
+  # ── Message rendering ─────────────────────────────────────────────
+
+  defp render_messages(messages, sub_agent_files) do
+    header = "## Conversation\n\n"
+
+    body =
+      messages
+      |> Enum.map_join("\n---\n\n", &render_message(&1, sub_agent_files))
+
+    header <> body
+  end
+
+  defp render_message(%Opal.Message{role: :user, content: content, id: id}, _sa) do
+    "### 👤 User `#{short_id(id)}`\n\n#{content}\n"
+  end
+
+  defp render_message(
+         %Opal.Message{
+           role: :assistant,
+           content: content,
+           thinking: thinking,
+           tool_calls: tool_calls,
+           id: id
+         },
+         sub_agent_files
+       ) do
+    parts = ["### 🤖 Assistant `#{short_id(id)}`\n"]
+
+    parts =
+      if thinking && thinking != "" do
+        parts ++ ["\n**Thinking:**\n\n#{fence_content(thinking)}\n"]
+      else
+        parts
+      end
+
+    parts =
+      if content && content != "" do
+        parts ++ ["\n#{content}\n"]
+      else
+        parts ++ ["\n_no text content_\n"]
+      end
+
+    parts =
+      if tool_calls && tool_calls != [] do
+        tc_section =
+          Enum.map_join(tool_calls, "\n", fn tc ->
+            name = tc[:name] || tc["name"]
+            cid = tc[:call_id] || tc["call_id"]
+            args = format_json(tc[:arguments] || tc["arguments"] || %{})
+
+            sub_link =
+              case Map.get(sub_agent_files, cid) do
+                nil -> ""
+                file -> "\n\n🔗 **Sub-agent thread →** [#{file}](#{file})\n"
+              end
+
+            "**Tool Call:** `#{name}` (call_id: `#{cid}`)\n\n" <>
+              fence_content(args, "json") <>
+              sub_link
+          end)
+
+        parts ++ ["\n#{tc_section}"]
+      else
+        parts
+      end
+
+    Enum.join(parts, "\n")
+  end
+
+  defp render_message(
+         %Opal.Message{
+           role: :tool_call,
+           name: name,
+           call_id: call_id,
+           content: content,
+           id: id
+         },
+         sub_agent_files
+       ) do
+    args = format_json_string(content)
+
+    sub_link =
+      case Map.get(sub_agent_files, call_id) do
+        nil -> ""
+        file -> "\n🔗 **Sub-agent thread →** [#{file}](#{file})\n"
+      end
+
+    "### 🔧 Tool Call `#{short_id(id)}` — `#{name}`\n\n" <>
+      "Call ID: `#{call_id}`\n\n" <>
+      fence_content(args, "json") <>
+      sub_link
+  end
+
+  defp render_message(
+         %Opal.Message{
+           role: :tool_result,
+           call_id: call_id,
+           content: content,
+           is_error: is_error,
+           id: id
+         },
+         sub_agent_files
+       ) do
+    status = if is_error, do: "ERROR", else: "OK"
+
+    # If this is a sub-agent result, show a short summary with link
+    case Map.get(sub_agent_files, call_id) do
+      nil ->
+        preview = truncate_content(content, 5_000)
+
+        "### 📤 Tool Result `#{short_id(id)}` [#{status}]\n\n" <>
+          "Call ID: `#{call_id}`\n\n" <>
+          fence_content(preview)
+
+      file ->
+        "### 📤 Tool Result `#{short_id(id)}` [#{status}] — Sub-Agent\n\n" <>
+          "Call ID: `#{call_id}`\n\n" <>
+          "🔗 **Full sub-agent conversation →** [#{file}](#{file})\n"
+    end
+  end
+
+  defp render_message(%Opal.Message{role: role, content: content, id: id}, _sa) do
+    "### #{to_string(role) |> String.capitalize()} `#{short_id(id)}`\n\n" <>
+      fence_content(content || "_empty_")
+  end
+
+  # ── Helpers ────────────────────────────────────────────────────────
+
+  defp short_id(nil), do: "?"
+  defp short_id(id) when is_binary(id), do: String.slice(id, 0, 8)
+
+  defp format_list([]), do: "_none_"
+  defp format_list(items), do: Enum.map_join(items, "\n", &"- `#{&1}`")
+
+  defp format_json(data) when is_map(data) do
+    case Jason.encode(data, pretty: true) do
+      {:ok, json} -> json
+      _ -> inspect(data, pretty: true, limit: :infinity)
+    end
+  end
+
+  defp format_json(data), do: inspect(data, pretty: true, limit: :infinity)
+
+  defp format_json_string(nil), do: "{}"
+
+  defp format_json_string(str) when is_binary(str) do
+    case Jason.decode(str) do
+      {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
+      _ -> str
+    end
+  end
+
+  defp decode_json(nil), do: %{}
+
+  defp decode_json(str) when is_binary(str) do
+    case Jason.decode(str) do
+      {:ok, map} when is_map(map) -> map
+      _ -> %{}
+    end
+  end
+
+  # Wraps content in a fenced code block, choosing a fence marker that
+  # doesn't collide with the content itself (avoids the backtick-in-
+  # system-prompt rendering bug).
+  defp fence_content(content, lang \\ "") do
+    fence = pick_fence(content)
+    "#{fence}#{lang}\n#{content}\n#{fence}\n"
+  end
+
+  defp pick_fence(content) when is_binary(content) do
+    if String.contains?(content, "```") do
+      if String.contains?(content, "````") do
+        "`````"
+      else
+        "````"
+      end
+    else
+      "```"
+    end
+  end
+
+  defp pick_fence(_), do: "```"
+
+  defp truncate_content(nil, _max), do: "_empty_"
+
+  defp truncate_content(content, max) when is_binary(content) do
+    if String.length(content) > max do
+      String.slice(content, 0, max) <>
+        "\n\n… (truncated, #{String.length(content)} chars total)"
+    else
+      content
     end
   end
 

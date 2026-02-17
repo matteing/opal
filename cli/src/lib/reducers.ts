@@ -1,6 +1,19 @@
 // Extracted from hooks/use-opal.ts for testability
 import type { AgentEvent, TokenUsage } from "../sdk/protocol.js";
 
+/** A backend message from session/history. */
+export interface HistoryMessage {
+  id: string;
+  role: string;
+  content?: string | null;
+  thinking?: string | null;
+  toolCalls?: { callId: string; name: string; arguments: Record<string, unknown> }[];
+  callId?: string;
+  name?: string;
+  isError?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
 export interface Message {
   role: "user" | "assistant";
   content: string;
@@ -392,4 +405,114 @@ export function combineDeltas(events: AgentEvent[]): AgentEvent[] {
     out.push(ev);
   }
   return out;
+}
+
+/**
+ * Transform backend session/history messages into TimelineEntry[].
+ *
+ * Skips system messages and maps user, assistant, tool_call, and tool_result
+ * into the timeline model displayed in the CLI.
+ */
+export function historyToTimeline(messages: HistoryMessage[]): TimelineEntry[] {
+  const timeline: TimelineEntry[] = [];
+
+  // Build a lookup from call_id → tool_result for pairing
+  const resultByCallId = new Map<string, HistoryMessage>();
+  for (const msg of messages) {
+    if (msg.role === "tool_result" && msg.callId) {
+      resultByCallId.set(msg.callId, msg);
+    }
+  }
+
+  for (const msg of messages) {
+    switch (msg.role) {
+      case "system":
+        // Skip system prompt in the restored timeline
+        break;
+
+      case "user":
+        if (msg.content) {
+          timeline.push({
+            kind: "message",
+            message: { role: "user", content: msg.content },
+          });
+        }
+        break;
+
+      case "assistant": {
+        // If there's thinking, add as a separate entry
+        if (msg.thinking) {
+          timeline.push({ kind: "thinking", text: msg.thinking });
+        }
+
+        // Add tool calls as tool entries (paired with results)
+        if (msg.toolCalls) {
+          for (const tc of msg.toolCalls) {
+            const result = resultByCallId.get(tc.callId);
+            const task: Task = {
+              tool: tc.name,
+              callId: tc.callId,
+              args: tc.arguments,
+              meta: "",
+              status: result ? (result.isError ? "error" : "done") : "done",
+              result: result
+                ? {
+                    ok: !result.isError,
+                    output: result.content,
+                    error: result.isError ? (result.content ?? undefined) : undefined,
+                  }
+                : undefined,
+            };
+            timeline.push({ kind: "tool", task });
+          }
+        }
+
+        // Add assistant text if present
+        if (msg.content) {
+          timeline.push({
+            kind: "message",
+            message: { role: "assistant", content: msg.content },
+          });
+        }
+        break;
+      }
+
+      case "tool_call": {
+        // tool_call messages are standalone (some providers use this format)
+        const callId = msg.callId ?? "";
+        const result = resultByCallId.get(callId);
+        const args = msg.content ? tryParseJson(msg.content) : {};
+        const task: Task = {
+          tool: msg.name ?? "",
+          callId,
+          args,
+          meta: "",
+          status: result ? (result.isError ? "error" : "done") : "done",
+          result: result
+            ? {
+                ok: !result.isError,
+                output: result.content,
+                error: result.isError ? (result.content ?? undefined) : undefined,
+              }
+            : undefined,
+        };
+        timeline.push({ kind: "tool", task });
+        break;
+      }
+
+      case "tool_result":
+        // Already paired with tool_call/assistant above — skip
+        break;
+    }
+  }
+
+  return timeline;
+}
+
+function tryParseJson(s: string): Record<string, unknown> {
+  try {
+    return JSON.parse(s) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }

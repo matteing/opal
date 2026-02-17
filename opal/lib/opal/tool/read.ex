@@ -95,10 +95,7 @@ defmodule Opal.Tool.Read do
 
     selected
     |> Enum.with_index(start + 1)
-    |> Enum.map_join("\n", fn {line, num} ->
-      hash = Hashline.line_hash(line)
-      "#{num}:#{hash}|#{line}"
-    end)
+    |> Enum.map_join("\n", fn {line, num} -> Hashline.tag_line(line, num) end)
   end
 
   # -- Output truncation ------------------------------------------------------
@@ -135,7 +132,7 @@ defmodule Opal.Tool.Read do
 
       # Under line limit but over byte limit — truncate at line boundary
       byte_size(content) > @max_bytes ->
-        truncated = truncate_at_line_boundary(content, @max_bytes)
+        truncated = Encoding.truncate_at_line_boundary(content, @max_bytes)
         shown_count = length(String.split(truncated, "\n"))
         end_line = start + shown_count - 1
 
@@ -148,21 +145,6 @@ defmodule Opal.Tool.Read do
       # Within limits — pass through unchanged
       true ->
         {:ok, content}
-    end
-  end
-
-  # Truncates binary content at the last newline boundary before `max_bytes`.
-  # This avoids splitting a line in the middle, which would confuse the LLM.
-  defp truncate_at_line_boundary(content, max_bytes) do
-    truncated = binary_part(content, 0, min(max_bytes, byte_size(content)))
-
-    case :binary.matches(truncated, "\n") do
-      [] ->
-        truncated
-
-      matches ->
-        {last_pos, _} = List.last(matches)
-        binary_part(truncated, 0, last_pos)
     end
   end
 end

@@ -9,7 +9,7 @@ defmodule Opal.Tool.Edit do
 
   ## Operations
 
-  - **replace** (default): Replace lines `start` through `end` with `new_string`.
+  - **replace** (default): Replace lines `start` through `through` (inclusive) with `new_string`.
   - **insert_after**: Insert `new_string` after the `start` line.
   - **insert_before**: Insert `new_string` before the `start` line.
 
@@ -33,6 +33,7 @@ defmodule Opal.Tool.Edit do
   def description,
     do:
       "Edit a file by referencing line:hash tags from read_file output. " <>
+        "Both start and through lines are INCLUDED in the replacement. " <>
         "Supports replace (default), insert_after, and insert_before operations."
 
   @impl true
@@ -49,10 +50,12 @@ defmodule Opal.Tool.Edit do
           "type" => "string",
           "description" => "Start line tag in 'N:hash' format (e.g. '5:a3') from read_file output"
         },
-        "end" => %{
+        "through" => %{
           "type" => "string",
           "description" =>
-            "End line tag in 'N:hash' format for multi-line replacements. Defaults to start for single-line edits."
+            "Last line tag (inclusive) in 'N:hash' format for multi-line replacements. " <>
+              "This line IS replaced — if it contains a block closer like `end`, your new_string must account for it. " <>
+              "Defaults to start for single-line edits."
         },
         "new_string" => %{
           "type" => "string",
@@ -73,7 +76,7 @@ defmodule Opal.Tool.Edit do
         %{"path" => path, "start" => start_anchor} = args,
         %{working_dir: working_dir}
       ) do
-    end_anchor = Map.get(args, "end", start_anchor)
+    end_anchor = Map.get(args, "through", Map.get(args, "end", start_anchor))
     new_string = Map.get(args, "new_string", "")
     operation = Map.get(args, "operation", "replace")
 
@@ -91,6 +94,7 @@ defmodule Opal.Tool.Edit do
       with :ok <- validate_range(start_line, end_line, length(lines), operation),
            :ok <- Hashline.validate_hash(lines, start_line, start_hash),
            :ok <- validate_end_hash(lines, start_line, end_line, end_hash, operation) do
+        replaced = replaced_content(lines, start_line, end_line, operation)
         new_content = apply_operation(lines, start_line, end_line, new_string, operation)
 
         restored =
@@ -99,7 +103,7 @@ defmodule Opal.Tool.Edit do
           |> Encoding.restore_bom(had_bom)
 
         case File.write(resolved, restored) do
-          :ok -> {:ok, "Edit applied to: #{resolved}"}
+          :ok -> {:ok, format_result(resolved, replaced)}
           {:error, reason} -> {:error, "Failed to write file: #{reason}"}
         end
       end
@@ -163,5 +167,29 @@ defmodule Opal.Tool.Edit do
     {before, after_lines} = Enum.split(lines, start_line - 1)
     insertion = String.split(new_string, "\n")
     Enum.join(before ++ insertion ++ after_lines, "\n")
+  end
+
+  # --- Result formatting ---
+
+  # Extracts the lines that will be replaced/displaced by the edit, so the
+  # model can see exactly what it removed. For insert operations, returns
+  # the anchor line for context.
+  @spec replaced_content([String.t()], pos_integer(), pos_integer(), String.t()) :: String.t()
+  defp replaced_content(lines, start_line, end_line, "replace") do
+    lines
+    |> Enum.slice((start_line - 1)..(end_line - 1)//1)
+    |> Enum.with_index(start_line)
+    |> Enum.map_join("\n", fn {line, num} -> Hashline.tag_line(line, num) end)
+  end
+
+  defp replaced_content(lines, start_line, _end_line, _insert_op) do
+    line = Enum.at(lines, start_line - 1)
+    Hashline.tag_line(line, start_line)
+  end
+
+  # Formats the success message including the replaced/anchor content.
+  @spec format_result(String.t(), String.t()) :: String.t()
+  defp format_result(resolved, replaced) do
+    "Edit applied to: #{resolved}\n\nReplaced content:\n#{replaced}"
   end
 end

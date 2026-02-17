@@ -71,6 +71,7 @@ graph LR
 | **SDK** | TypeScript client library for the JSON-RPC protocol | [sdk.md](sdk.md) |
 | **Integrating** | Embedding Opal via Elixir, JSON-RPC server, or TypeScript SDK | [integrating.md](integrating.md) |
 | **Inspecting** | Live event stream via Erlang distribution for debugging | [inspecting.md](inspecting.md) |
+| **Opinions** | Subjective design calls and the reasoning behind them | [opinions.md](opinions.md) |
 
 ## Key Design Decisions
 

@@ -71,4 +71,23 @@ defmodule Opal.Path do
       {:error, :outside_base_dir}
     end
   end
+
+  @doc """
+  Returns the relative path from `base` to `path`, always using forward slashes.
+
+  On Windows, `Path.relative_to/2` returns backslash-separated paths.
+  This function normalizes to POSIX separators so tool output is
+  consistent across platforms and the LLM always sees `/` paths.
+
+  ## Examples
+
+      iex> Opal.Path.posix_relative("/project/src/main.ex", "/project")
+      "src/main.ex"
+  """
+  @spec posix_relative(String.t(), String.t()) :: String.t()
+  def posix_relative(path, base) when is_binary(path) and is_binary(base) do
+    path
+    |> Path.relative_to(base)
+    |> String.replace("\\", "/")
+  end
 end

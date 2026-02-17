@@ -198,6 +198,16 @@ export interface SessionDeleteResult {
   ok: boolean;
 }
 
+export interface SessionHistoryParams {
+  /** Target session ID. */
+  sessionId: string;
+}
+
+export interface SessionHistoryResult {
+  /** Ordered list of messages from root to current leaf. Each message has id, role, content, thinking, tool_calls, call_id, name, is_error, and metadata. */
+  messages: Record<string, unknown>[];
+}
+
 export type SessionListParams = Record<string, never>;
 
 export interface SessionListResult {
@@ -507,6 +517,7 @@ export const Methods = {
   SESSION_BRANCH: "session/branch" as const,
   SESSION_COMPACT: "session/compact" as const,
   SESSION_DELETE: "session/delete" as const,
+  SESSION_HISTORY: "session/history" as const,
   SESSION_LIST: "session/list" as const,
   SESSION_START: "session/start" as const,
   SETTINGS_GET: "settings/get" as const,
@@ -580,6 +591,10 @@ export interface MethodTypes {
   "session/delete": {
     params: SessionDeleteParams;
     result: SessionDeleteResult;
+  };
+  "session/history": {
+    params: SessionHistoryParams;
+    result: SessionHistoryResult;
   };
   "session/list": { params: SessionListParams; result: SessionListResult };
   "session/start": { params: SessionStartParams; result: SessionStartResult };

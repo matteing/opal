@@ -575,6 +575,23 @@ defmodule Opal.RPC.Protocol do
       ]
     },
     %{
+      method: "session/history",
+      direction: :client_to_server,
+      description:
+        "Return the message history for a running session. Used to restore the UI after resuming.",
+      params: [
+        %{name: "session_id", type: :string, required: true, description: "Target session ID."}
+      ],
+      result: [
+        %{
+          name: "messages",
+          type: {:array, :object},
+          description:
+            "Ordered list of messages from root to current leaf. Each message has id, role, content, thinking, tool_calls, call_id, name, is_error, and metadata."
+        }
+      ]
+    },
+    %{
       method: "session/delete",
       direction: :client_to_server,
       description: "Delete a saved session by ID.",

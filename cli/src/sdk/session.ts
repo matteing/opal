@@ -3,6 +3,7 @@ import type {
   AgentEvent,
   SessionStartParams,
   SessionStartResult,
+  SessionHistoryResult,
   AgentStateResult,
   ModelsListResult,
   ModelSetResult,
@@ -249,6 +250,16 @@ export class Session {
    */
   async getState(): Promise<AgentStateResult> {
     return this.client.request("agent/state", {
+      sessionId: this.sessionId,
+    });
+  }
+
+  /**
+   * Get the message history for the session (root to current leaf).
+   * Used to restore the UI when resuming a session.
+   */
+  async getHistory(): Promise<SessionHistoryResult> {
+    return this.client.request("session/history", {
       sessionId: this.sessionId,
     });
   }

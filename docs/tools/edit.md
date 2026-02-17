@@ -30,39 +30,60 @@ The hash is computed from the trimmed line content via `:erlang.phash2/2` (mod 2
 
 ### Editing: hash-anchored references
 
-The edit tool accepts `start` and `end` anchors in `N:hash` format:
+The edit tool accepts `start` and `through` anchors in `N:hash` format:
 
 ```json
 {
   "path": "src/app.ts",
   "start": "2:f1",
-  "end": "2:f1",
+  "through": "2:f1",
   "new_string": "  return \"hello\";"
 }
 ```
 
 Three operations are supported:
 
-| Operation           | Behavior                                              |
-| ------------------- | ----------------------------------------------------- |
-| `replace` (default) | Replace lines `start` through `end` with `new_string` |
-| `insert_after`      | Insert `new_string` after the `start` line            |
-| `insert_before`     | Insert `new_string` before the `start` line           |
+| Operation           | Behavior                                                          |
+| ------------------- | ----------------------------------------------------------------- |
+| `replace` (default) | Replace lines `start` through `through` (inclusive) with `new_string` |
+| `insert_after`      | Insert `new_string` after the `start` line                        |
+| `insert_before`     | Insert `new_string` before the `start` line                       |
 
-Omitting `end` defaults to a single-line edit. Omitting `new_string` deletes the line range.
+Omitting `through` defaults to a single-line edit. Omitting `new_string` deletes the line range.
+
+> **Note:** The parameter was previously named `end`. Using `through` avoids a
+> naming collision with Elixir/Ruby/Lua's `end` keyword, which caused models to
+> confuse the tool parameter with language syntax. The legacy `end` parameter is
+> still accepted as a fallback.
 
 ### Pipeline
 
 ```mermaid
 graph TD
-    Input["start, end, new_string"] --> Parse["Parse anchors"]
+    Input["start, through, new_string"] --> Parse["Parse anchors"]
     Parse -- "invalid format" --> Err1["error"]
     Parse --> Read["Read file,<br/>strip BOM,<br/>normalize line endings"]
     Read --> Validate["Validate hashes"]
     Validate -- "hash mismatch" --> Err2["error: file may have changed"]
-    Validate --> Apply["Apply edit,<br/>restore encoding"]
-    Apply -- "success" --> Write["write file"]
+    Validate --> Extract["Extract replaced content"]
+    Extract --> Apply["Apply edit,<br/>restore encoding"]
+    Apply -- "success" --> Write["write file +<br/>echo replaced lines"]
 ```
+
+### Replaced content echo
+
+On success, the edit tool returns the replaced (or anchor) lines alongside the confirmation. This lets the model self-check what it removed:
+
+```
+Edit applied to: /path/to/file.ex
+
+Replaced content:
+5:a3|  defp old_helper do
+6:f1|    :ok
+7:0e|  end
+```
+
+For insert operations, the anchor line is echoed instead.
 
 ### Hash validation
 

@@ -82,6 +82,46 @@ defmodule Opal.Tool.EditTest do
     test "replaces a range of lines", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc\nddd\neee")
 
+      assert {:ok, result} =
+               Edit.execute(
+                 %{
+                   "path" => path,
+                   "start" => anchor_str(Enum.at(anchors, 1)),
+                   "through" => anchor_str(Enum.at(anchors, 3)),
+                   "new_string" => "REPLACED"
+                 },
+                 %{working_dir: @working_dir}
+               )
+
+      assert File.read!(path) == "aaa\nREPLACED\neee"
+      assert result =~ "Edit applied to:"
+      assert result =~ "Replaced content:"
+      assert result =~ "bbb"
+      assert result =~ "ddd"
+    end
+
+    test "replaces with multi-line content", %{path: path} do
+      anchors = write_and_anchors(path, "aaa\nbbb\nccc")
+
+      assert {:ok, _} =
+               Edit.execute(
+                 %{
+                   "path" => path,
+                   "start" => anchor_str(Enum.at(anchors, 1)),
+                   "through" => anchor_str(Enum.at(anchors, 1)),
+                   "new_string" => "line1\nline2\nline3"
+                 },
+                 %{working_dir: @working_dir}
+               )
+
+      assert File.read!(path) == "aaa\nline1\nline2\nline3\nccc"
+    end
+  end
+
+  describe "backward compatibility" do
+    test "accepts legacy 'end' parameter as fallback", %{path: path} do
+      anchors = write_and_anchors(path, "aaa\nbbb\nccc\nddd\neee")
+
       assert {:ok, _} =
                Edit.execute(
                  %{
@@ -96,21 +136,83 @@ defmodule Opal.Tool.EditTest do
       assert File.read!(path) == "aaa\nREPLACED\neee"
     end
 
-    test "replaces with multi-line content", %{path: path} do
-      anchors = write_and_anchors(path, "aaa\nbbb\nccc")
+    test "'through' takes precedence over 'end'", %{path: path} do
+      anchors = write_and_anchors(path, "aaa\nbbb\nccc\nddd\neee")
 
+      # 'through' points to line 2, 'end' points to line 4 — 'through' wins
       assert {:ok, _} =
                Edit.execute(
                  %{
                    "path" => path,
                    "start" => anchor_str(Enum.at(anchors, 1)),
-                   "end" => anchor_str(Enum.at(anchors, 1)),
-                   "new_string" => "line1\nline2\nline3"
+                   "through" => anchor_str(Enum.at(anchors, 1)),
+                   "end" => anchor_str(Enum.at(anchors, 3)),
+                   "new_string" => "REPLACED"
                  },
                  %{working_dir: @working_dir}
                )
 
-      assert File.read!(path) == "aaa\nline1\nline2\nline3\nccc"
+      # Only line 2 was replaced (through=line 2), not lines 2-4
+      assert File.read!(path) == "aaa\nREPLACED\nccc\nddd\neee"
+    end
+  end
+
+  describe "replaced content echo" do
+    test "echoes replaced lines with hashline tags", %{path: path} do
+      anchors = write_and_anchors(path, "aaa\nbbb\nccc\nddd")
+
+      assert {:ok, result} =
+               Edit.execute(
+                 %{
+                   "path" => path,
+                   "start" => anchor_str(Enum.at(anchors, 1)),
+                   "through" => anchor_str(Enum.at(anchors, 2)),
+                   "new_string" => "REPLACED"
+                 },
+                 %{working_dir: @working_dir}
+               )
+
+      assert result =~ "Replaced content:"
+      # Should contain hashline-tagged versions of the replaced lines
+      assert result =~ "2:"
+      assert result =~ "|bbb"
+      assert result =~ "3:"
+      assert result =~ "|ccc"
+    end
+
+    test "echoes single replaced line", %{path: path} do
+      anchors = write_and_anchors(path, "aaa\nbbb\nccc")
+
+      assert {:ok, result} =
+               Edit.execute(
+                 %{
+                   "path" => path,
+                   "start" => anchor_str(Enum.at(anchors, 1)),
+                   "new_string" => "BBB"
+                 },
+                 %{working_dir: @working_dir}
+               )
+
+      assert result =~ "Replaced content:"
+      assert result =~ "|bbb"
+    end
+
+    test "echoes anchor line for insert operations", %{path: path} do
+      anchors = write_and_anchors(path, "aaa\nbbb\nccc")
+
+      assert {:ok, result} =
+               Edit.execute(
+                 %{
+                   "path" => path,
+                   "start" => anchor_str(Enum.at(anchors, 1)),
+                   "new_string" => "INSERTED",
+                   "operation" => "insert_after"
+                 },
+                 %{working_dir: @working_dir}
+               )
+
+      assert result =~ "Replaced content:"
+      assert result =~ "|bbb"
     end
   end
 
@@ -123,7 +225,7 @@ defmodule Opal.Tool.EditTest do
                  %{
                    "path" => path,
                    "start" => anchor_str(Enum.at(anchors, 1)),
-                   "end" => anchor_str(Enum.at(anchors, 2))
+                   "through" => anchor_str(Enum.at(anchors, 2))
                  },
                  %{working_dir: @working_dir}
                )
@@ -239,7 +341,7 @@ defmodule Opal.Tool.EditTest do
                  %{
                    "path" => path,
                    "start" => anchor_str(Enum.at(anchors, 2)),
-                   "end" => anchor_str(Enum.at(anchors, 0)),
+                   "through" => anchor_str(Enum.at(anchors, 0)),
                    "new_string" => "x"
                  },
                  %{working_dir: @working_dir}

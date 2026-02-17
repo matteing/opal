@@ -58,4 +58,28 @@ defmodule Opal.Tool.Encoding do
   @spec restore_line_endings(binary(), boolean()) :: binary()
   def restore_line_endings(content, true), do: String.replace(content, ~r/(?<!\r)\n/, "\r\n")
   def restore_line_endings(content, false), do: content
+
+  # -- Truncation helpers -----------------------------------------------------
+
+  @doc """
+  Truncates binary content at the last newline boundary before `max_bytes`.
+
+  Avoids splitting a line in the middle, which would corrupt hashline tags
+  or produce confusing partial output for the LLM.
+
+  Returns the truncated binary (no trailing newline is added).
+  """
+  @spec truncate_at_line_boundary(binary(), non_neg_integer()) :: binary()
+  def truncate_at_line_boundary(content, max_bytes) do
+    truncated = binary_part(content, 0, min(max_bytes, byte_size(content)))
+
+    case :binary.matches(truncated, "\n") do
+      [] ->
+        truncated
+
+      matches ->
+        {last_pos, _} = List.last(matches)
+        binary_part(truncated, 0, last_pos)
+    end
+  end
 end

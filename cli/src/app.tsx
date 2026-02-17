@@ -256,9 +256,7 @@ export const App: FC<AppProps> = ({ sessionOpts, initialPrompt, onSessionId }) =
           {state.queuedMessages.map((text, i) => (
             <Box key={i} gap={1}>
               <Text color={colors.accent}>↳</Text>
-              <Text dimColor>
-                {text.length > 60 ? text.slice(0, 57) + "…" : text}
-              </Text>
+              <Text dimColor>{text.length > 60 ? text.slice(0, 57) + "…" : text}</Text>
               <Text dimColor italic>
                 [queued]
               </Text>

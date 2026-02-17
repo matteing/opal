@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { AgentEvent, TokenUsage, ConfirmRequest } from "../sdk/protocol.js";
 import { Session, type SessionOptions } from "../sdk/session.js";
 import type { RpcMessageEntry } from "../sdk/client.js";
-import { applyEvent, combineDeltas, emptyAgentView } from "../lib/reducers.js";
+import { applyEvent, combineDeltas, emptyAgentView, historyToTimeline } from "../lib/reducers.js";
 import type {
+  HistoryMessage,
   Message,
   Task,
   Skill,
@@ -280,6 +281,27 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
         setState((s) => ({ ...s, currentModel: buildDisplaySpec(res.model) }));
       })
       .catch(() => {});
+
+    // Restore conversation history when resuming a session
+    if (opts.sessionId) {
+      session
+        .getHistory()
+        .then((res) => {
+          if (res.messages.length > 0) {
+            const restored = historyToTimeline(res.messages as unknown as HistoryMessage[]);
+            if (restored.length > 0) {
+              setState((s) => ({
+                ...s,
+                main: {
+                  ...s.main,
+                  timeline: [...s.main.timeline, ...restored],
+                },
+              }));
+            }
+          }
+        })
+        .catch(() => {});
+    }
 
     // Start Erlang distribution if --sname was provided
     if (opts.sname) {
