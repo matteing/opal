@@ -6,43 +6,68 @@ This document explains how Opal assembles the system prompt that is sent to the 
 
 ## Overview
 
-The system prompt is assembled in `Opal.Agent.build_messages/1` just before each LLM call. It concatenates five components into a single system message that is prepended to the conversation history:
+The system prompt is assembled by `Opal.Agent.SystemPrompt.build/1` just before each LLM call. It combines six sections into a single system message, each wrapped in XML-style boundary tags for clear separation:
 
 ```
-┌─────────────────────────────────────────┐
-│  1. Base system prompt (user-provided)  │
-│  2. Project context (AGENTS.md, etc.)   │
-│  3. Skill menu (progressive disclosure) │
-│  4. Tool usage guidelines (dynamic)     │
-│  5. Planning instructions               │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│  1. <identity>         — agent personality  │
+│  2. <project-context>  — AGENTS.md, etc.    │
+│  3. <skills>           — skill menu         │
+│  4. <environment>      — working directory  │
+│  5. <tool-guidelines>  — dynamic rules      │
+│  6. <planning>         — plan.md location   │
+└─────────────────────────────────────────────┘
 ```
 
 ```elixir
-full_prompt =
-  [prompt, context, skill_menu, tool_guidelines, planning]
-  |> Enum.reject(&(&1 == ""))
-  |> Enum.join("\n")
+# In Opal.Agent.SystemPrompt.build/1
+sections = [
+  build_identity_section(state),
+  format_context_entries(state.context_entries),
+  format_skills(state.available_skills, state.config),
+  format_environment(state.working_dir),
+  build_guidelines(active_tools),
+  format_planning(state)
+]
+
+Enum.reject(sections, &(&1 == "" or is_nil(&1)))
+|> Enum.join("\n\n")
 ```
 
 Each component is independently optional — if it produces an empty string, it is excluded from the final prompt.
 
 ---
 
-## Component 1: Base System Prompt
+## Component 1: Identity
 
-The static system prompt string passed when starting the agent:
+The agent's core personality and behavioural instructions, wrapped in `<identity>` tags. If no custom `system_prompt` is provided when starting the agent, `SystemPrompt.build_identity/0` supplies a default:
+
+```xml
+<identity>
+You are Opal, an expert AI coding assistant.
+...
+## Principles
+- Be direct — answer concisely
+- Act, don't ask — use tools when intent is clear
+- Verify your work — check for errors, run tests
+- Be honest — never fabricate output
+- Respect boundaries — stay within working directory
+- Stay on task — avoid unsolicited changes
+</identity>
+```
+
+Callers can override the identity entirely:
 
 ```elixir
 Opal.Agent.start_link(
-  system_prompt: "You are a coding assistant.",
+  system_prompt: "You are a code review specialist.",
   ...
 )
 ```
 
-This is the foundation. It defines the agent's persona and high-level behavior. If not provided, it defaults to `""`.
+When a custom `system_prompt` is provided, it replaces the default identity block (it is **not** wrapped in `<identity>` tags — the caller controls the format).
 
-**Source:** `state.system_prompt` (set at init from the `:system_prompt` option).
+**Source:** `Opal.Agent.SystemPrompt.build_identity/0`, overridable via `state.system_prompt`.
 
 ---
 
@@ -72,19 +97,19 @@ At each directory level, Opal checks for these files (configurable via `Opal.Con
 
 **Ordering:** Files found closer to the filesystem root appear first; files closer to `working_dir` appear last (higher priority). This means project-specific instructions override organization-wide ones.
 
-Each discovered file is wrapped with a source comment:
+Each discovered file is wrapped in XML boundary tags:
 
-```markdown
-## Project Context
-
-<!-- From: /home/user/project/AGENTS.md -->
+```xml
+<project-context source="/home/user/project/AGENTS.md">
 <contents of AGENTS.md>
+</project-context>
 
-<!-- From: /home/user/AGENTS.md -->
+<project-context source="/home/user/AGENTS.md">
 <contents of AGENTS.md>
+</project-context>
 ```
 
-**Source:** `Opal.Context.discover_context/2` → `Opal.Context.build_context/2`, stored in `state.context`.
+**Source:** `Opal.Context.discover_context/2` → `Opal.Agent.SystemPrompt.format_context_entries/1`, raw entries stored in `state.context_entries`.
 
 **Config:** `config.features.context.enabled` (default: `true`), `config.features.context.filenames` (default: `["AGENTS.md", "OPAL.md"]`).
 
@@ -94,16 +119,18 @@ Each discovered file is wrapped with a source comment:
 
 When skills are discovered (see [Skills](#skills-discovery) below), a summary menu is injected so the LLM knows what skills are available without loading their full instructions.
 
-```markdown
-## Available Skills
-
+```xml
+<skills>
 Use the `use_skill` tool to load a skill's full instructions when relevant.
 
 - **my-skill**: Does something useful for the project.
 - **testing**: Runs and fixes tests following project conventions.
+</skills>
 ```
 
-This follows the **progressive disclosure** pattern: only the name and one-line description are included. The full instructions for a skill are loaded into the conversation only when the agent (or auto-loading) activates it.
+This follows the **progressive disclosure** pattern: only the name and one-line description are included. The full instructions for a skill are loaded into the conversation only when the agent calls `use_skill`.
+
+Opal's skill implementation closely follows the [Agent Skills](https://agentskills.io) spec. To reduce implementation complexity, we intentionally omit support for `globs`-based auto-activation — skills are always loaded explicitly via the `use_skill` tool.
 
 ### Skills Discovery
 
@@ -118,8 +145,6 @@ This follows the **progressive disclosure** pattern: only the name and one-line 
 | Additional dirs from config               | Custom                            |
 
 Each `SKILL.md` must have YAML frontmatter with at least `name` and `description`. Skills that fail to parse or validate are silently skipped.
-
-**Auto-loading:** When a file-modifying tool (`write_file`, `edit_file`) touches a path matching a skill's `globs` patterns, the skill is automatically loaded into the conversation context.
 
 **Source:** `Opal.Context.discover_skills/2`, stored in `state.available_skills`.
 
@@ -171,15 +196,15 @@ No other code needs to change.
 
 Given tools `[Opal.Tool.Read, Opal.Tool.Edit, Opal.Tool.Write, Opal.Tool.Shell]`:
 
-```markdown
-## Tool Usage Guidelines
-
+```xml
+<tool-guidelines>
 - Use the `read_file` tool to read files. Do NOT use `cat`, `head`, `tail`, or `less` via shell.
 - Use `read_file` with `offset` and `limit` to read specific line ranges.
 - Use the `edit_file` tool for all file modifications. Do NOT use `sed`, `awk`, `perl -i`, or shell redirects (`>`, `>>`).
 - Use the `write_file` tool to create new files. Do NOT use shell redirects or `tee`.
 - When summarizing your actions, output plain text directly in your response. Do NOT use `cat`, `echo`, or shell to display files you just wrote.
 - Before starting each major step in a multi-step task, emit a short status tag: `<status>Analyzing test failures</status>`. Keep it under 6 words.
+</tool-guidelines>
 ```
 
 **Source:** `Opal.Agent.SystemPrompt.build_guidelines/1`.
@@ -190,19 +215,19 @@ Given tools `[Opal.Tool.Read, Opal.Tool.Edit, Opal.Tool.Write, Opal.Tool.Shell]`
 
 When a `Session` process is attached (i.e., this is a top-level agent, not a sub-agent), planning instructions are appended telling the agent where to write plan documents:
 
-```markdown
-## Planning
-
+```xml
+<planning>
 For complex multi-step tasks, create a plan document at:
 /home/user/.opal/sessions/<session_id>/plan.md
 
 Write your plan before starting implementation. Update it as you
 complete steps. The user can review the plan at any time with Ctrl+Y.
+</planning>
 ```
 
 Sub-agents (where `state.session` is `nil`) do not receive planning instructions, since they handle delegated subtasks rather than top-level planning.
 
-**Source:** `Opal.Agent.planning_instructions/1`.
+**Source:** `Opal.Agent.SystemPrompt.format_planning/1`.
 
 ---
 
@@ -219,31 +244,36 @@ sequenceDiagram
     participant LLM as Provider.stream/4
 
     Init->>Ctx: discover_context(working_dir)
-    Ctx-->>Init: context files
+    Ctx-->>Init: context entries [%{path, content}]
     Init->>Ctx: discover_skills(working_dir)
     Ctx-->>Init: available skills
-    Init->>Ctx: build_context(working_dir)
-    Ctx-->>Init: context string (stored in state.context)
-
-    Note over Init: Agent is now ready
+    Note over Init: Raw data stored in state
 
     Init->>BM: run_turn → build_messages(state)
-    BM->>BM: Concatenate: prompt + context + skill_menu
-    BM->>SP: build_guidelines(active_tools)
-    SP-->>BM: tool guidelines string
-    BM->>BM: Append: tool_guidelines + planning
+    BM->>SP: build(state)
+    SP->>SP: build_identity_section(state)
+    SP->>SP: format_context_entries(state.context_entries)
+    SP->>SP: format_skills(state.available_skills, config)
+    SP->>SP: format_environment(state.working_dir)
+    SP->>SP: build_guidelines(active_tools)
+    SP->>SP: format_planning(state)
+    SP-->>BM: assembled system prompt
     BM-->>LLM: [system_msg | conversation_messages]
 ```
 
 ### Key Design Decisions
 
-1. **Context is discovered once at init, not per-turn.** The `state.context` string is computed during `Agent.init/1` and reused for every turn. This avoids filesystem I/O on every LLM call.
+1. **Context is discovered once at init, formatted per-turn.** The raw `state.context_entries` (list of `%{path, content}` maps) are computed during `Agent.init/1`. `SystemPrompt.build/1` formats them with XML boundary tags on every turn, keeping the formatting concern in one module.
 
-2. **Tool guidelines are computed per-turn.** Since the active tool set can change (e.g., MCP tools coming online, config-gated tools), `build_guidelines/1` runs on every call to `build_messages/1`.
+2. **SystemPrompt owns all prompt concerns.** Identity, context formatting, skills, environment, tool guidelines, and planning all live in `Opal.Agent.SystemPrompt`.
 
-3. **Skills use progressive disclosure.** Only names and descriptions go into the system prompt. Full instructions are injected as user messages when activated — this keeps the system prompt small and lets skill instructions age out during compaction.
+3. **XML boundary tags.** Each section is wrapped in XML-style tags (`<identity>`, `<project-context>`, `<skills>`, `<environment>`, `<tool-guidelines>`, `<planning>`) so the model can clearly distinguish section boundaries — a pattern proven effective in production agent systems.
 
-4. **The system prompt is a single message.** All components are concatenated and sent as one `:system` role message. This is the first message in the list sent to the provider.
+4. **Tool guidelines are computed per-turn.** Since the active tool set can change (e.g., MCP tools coming online, config-gated tools), `build_guidelines/1` runs on every call to `build/1`.
+
+5. **Skills use progressive disclosure.** Only names and descriptions go into the system prompt. Full instructions are injected as user messages when activated — this keeps the system prompt small and lets skill instructions age out during compaction.
+
+6. **The system prompt is a single message.** All components are concatenated and sent as one `:system` role message. This is the first message in the list sent to the provider.
 
 ---
 
@@ -263,10 +293,10 @@ Sub-agents (spawned via `Opal.Tool.SubAgent`) receive a stripped-down system pro
 
 ## Module Reference
 
-| Module                    | Role                                                     |
-| ------------------------- | -------------------------------------------------------- |
-| `Opal.Agent`              | Assembles the final system message in `build_messages/1` |
-| `Opal.Agent.SystemPrompt` | Generates tool usage guidelines from active tools        |
-| `Opal.Context`            | Discovers context files and skills from the filesystem   |
-| `Opal.Skill`              | Parses and validates `SKILL.md` files                    |
-| `Opal.Config.Features`    | Feature toggles for context and skill discovery          |
+| Module                    | Role                                                      |
+| ------------------------- | --------------------------------------------------------- |
+| `Opal.Agent`              | Delegates to `SystemPrompt.build/1` in `build_messages/1` |
+| `Opal.Agent.SystemPrompt` | Assembles the complete system prompt from agent state     |
+| `Opal.Context`            | Pure filesystem discovery of context files and skills     |
+| `Opal.Skill`              | Parses and validates `SKILL.md` files                     |
+| `Opal.Config.Features`    | Feature toggles for context and skill discovery           |

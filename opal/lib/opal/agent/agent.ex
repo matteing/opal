@@ -188,7 +188,7 @@ defmodule Opal.Agent do
       end
 
     # Discover project context files and skills
-    {context, context_files, available_skills} =
+    {context_entries, context_files, available_skills} =
       if config.features.context.enabled or config.features.skills.enabled do
         ctx_files =
           if config.features.context.enabled do
@@ -208,16 +208,10 @@ defmodule Opal.Agent do
             []
           end
 
-        context_str =
-          Opal.Context.build_context(working_dir,
-            filenames:
-              if(config.features.context.enabled, do: config.features.context.filenames, else: [])
-          )
-
         file_paths = Enum.map(ctx_files, & &1.path)
-        {context_str, file_paths, skills}
+        {ctx_files, file_paths, skills}
       else
-        {"", [], []}
+        {[], [], []}
       end
 
     mcp_servers = Keyword.get(opts, :mcp_servers, [])
@@ -242,7 +236,7 @@ defmodule Opal.Agent do
       sub_agent_supervisor: Keyword.get(opts, :sub_agent_supervisor),
       mcp_supervisor: mcp_supervisor,
       mcp_servers: mcp_servers,
-      context: context,
+      context_entries: context_entries,
       context_files: context_files,
       available_skills: available_skills,
       active_skills: [],
@@ -705,83 +699,17 @@ defmodule Opal.Agent do
     Opal.Agent.UsageTracker.handle_overflow_compaction(state, reason)
   end
 
-  # Prepends system prompt (with discovered context, skill menu, and
-  # tool usage guidelines appended) as a system message.
-  defp build_messages(
-         %State{
-           system_prompt: prompt,
-           context: context,
-           messages: messages,
-           config: config,
-           available_skills: skills,
-           working_dir: working_dir
-         } = state
-       )
-       when (prompt != "" and prompt != nil) or (context != "" and context != nil) do
-    # Build skill menu if skills are available
-    skill_menu =
-      if config.features.skills.enabled and skills != [] do
-        summaries = Enum.map_join(skills, "\n", &Opal.Skill.summary/1)
+  # Prepends system prompt as a system message.
+  # `SystemPrompt.build/1` owns the full prompt layout — see that module
+  # for the section order and XML-tag structure.
+  defp build_messages(%State{} = state) do
+    case Opal.Agent.SystemPrompt.build(state) do
+      nil ->
+        ensure_tool_results(Enum.reverse(state.messages))
 
-        "\n\n## Available Skills\n\nUse the `use_skill` tool to load a skill's full instructions when relevant.\n\n#{summaries}"
-      else
-        ""
-      end
-
-    # Build dynamic tool guidelines based on which tools are active
-    # (prevents the LLM from using shell for read/edit/write operations)
-    tool_guidelines =
-      Opal.Agent.SystemPrompt.build_guidelines(Opal.Agent.Tools.active_tools(state))
-
-    # Runtime instructions — tell the agent exactly where commands run.
-    runtime_context = runtime_context_instructions(working_dir)
-
-    # Planning instructions — tell the agent where to write plan.md
-    planning = planning_instructions(state)
-
-    full_prompt =
-      [prompt || "", context || "", runtime_context, skill_menu, tool_guidelines, planning]
-      |> Enum.reject(&(&1 == ""))
-      |> Enum.join("\n")
-
-    system_msg = Opal.Message.system(full_prompt)
-
-    [system_msg | ensure_tool_results(Enum.reverse(messages))]
-  end
-
-  defp build_messages(%State{messages: messages}), do: ensure_tool_results(Enum.reverse(messages))
-
-  defp runtime_context_instructions(working_dir)
-       when is_binary(working_dir) and working_dir != "" do
-    """
-
-    ## Runtime Context
-
-    Current working directory: `#{working_dir}`
-
-    Shell commands already run from this directory by default. Do not prepend `cd` to the same directory unless you intentionally need a different location.
-    """
-  end
-
-  defp runtime_context_instructions(_), do: ""
-
-  # Returns planning instructions for the system prompt, or "" for sub-agents.
-  defp planning_instructions(%State{config: config, session_id: session_id, session: session}) do
-    if session != nil do
-      session_dir = Path.join(Opal.Config.sessions_dir(config), session_id)
-
-      """
-
-      ## Planning
-
-      For complex multi-step tasks, create a plan document at:
-        #{session_dir}/plan.md
-
-      Write your plan before starting implementation. Update it as you
-      complete steps. The user can review the plan at any time with Ctrl+Y.
-      """
-    else
-      ""
+      full_prompt ->
+        system_msg = Opal.Message.system(full_prompt)
+        [system_msg | ensure_tool_results(Enum.reverse(state.messages))]
     end
   end
 
@@ -1127,56 +1055,10 @@ defmodule Opal.Agent do
   # is attached and auto_save is enabled in config.
   defp maybe_auto_save(%State{session: nil}), do: :ok
 
-  defp maybe_auto_save(%State{session: session, config: config} = state) do
+  defp maybe_auto_save(%State{session: session, config: config}) do
     if config.auto_save do
-      maybe_generate_title(state)
       dir = Opal.Config.sessions_dir(config)
       Opal.Session.save(session, dir)
-    end
-  end
-
-  # Generates a session title from the first user message if none exists yet.
-  # Uses the LLM to produce a concise ~5 word summary.
-  defp maybe_generate_title(%State{session: session, config: config, messages: messages} = state) do
-    if config.auto_title do
-      existing = Opal.Session.get_metadata(session, :title)
-
-      if existing == nil and length(messages) >= 2 do
-        first_user_msg = Enum.find(messages, fn m -> m.role == :user end)
-
-        if first_user_msg do
-          Task.Supervisor.start_child(state.tool_supervisor, fn ->
-            generate_session_title(state, first_user_msg.content)
-          end)
-        end
-      end
-    end
-  end
-
-  defp generate_session_title(
-         %State{session: session, model: model, provider: provider},
-         user_text
-       ) do
-    prompt_text = String.slice(user_text, 0, 500)
-
-    title_messages = [
-      Opal.Message.system(
-        "Generate a concise 3-6 word title for this conversation. Reply with ONLY the title, no quotes or punctuation."
-      ),
-      Opal.Message.user(prompt_text)
-    ]
-
-    case provider.stream(model, title_messages, []) do
-      {:ok, resp} ->
-        title = Opal.Provider.StreamCollector.collect_text(resp, provider, 10_000)
-
-        if title != "" do
-          clean = title |> String.trim() |> String.slice(0, 60)
-          Opal.Session.set_metadata(session, :title, clean)
-        end
-
-      {:error, _} ->
-        :ok
     end
   end
 

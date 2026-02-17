@@ -166,6 +166,48 @@ defmodule Opal.Agent.StreamTest do
     end
   end
 
+  describe "extract_xml_tag/4 (generic)" do
+    test "extracts complete tag and calls callback" do
+      state = base_state()
+      cb = fn text, st -> %{st | current_text: text} end
+      {clean, state} = Stream.extract_xml_tag("<foo>hello</foo>rest", :foo, state, cb)
+      assert clean == "rest"
+      assert state.current_text == "hello"
+    end
+
+    test "passes through text without matching tag" do
+      state = base_state()
+      cb = fn _text, st -> st end
+      {clean, _state} = Stream.extract_xml_tag("Hello world", :foo, state, cb)
+      assert clean == "Hello world"
+    end
+
+    test "buffers partial opening tag" do
+      state = base_state()
+      cb = fn _text, st -> st end
+      {clean, state} = Stream.extract_xml_tag("Hello<foo>partial", :foo, state, cb)
+      assert clean == "Hello"
+      assert state.tag_buffers[:foo] != ""
+    end
+
+    test "buffers potential tag start across chunks" do
+      state = base_state()
+      cb = fn _text, st -> st end
+      {clean, state} = Stream.extract_xml_tag("Hello<fo", :foo, state, cb)
+      assert clean == "Hello"
+      assert state.tag_buffers[:foo] == "<fo"
+    end
+
+    test "completes buffered tag" do
+      state = %{base_state() | tag_buffers: %{foo: "<foo>hello"}}
+      cb = fn text, st -> %{st | current_text: text} end
+      {clean, state} = Stream.extract_xml_tag("</foo>rest", :foo, state, cb)
+      assert clean == "rest"
+      assert state.current_text == "hello"
+      assert state.tag_buffers[:foo] == ""
+    end
+  end
+
   describe "extract_status_tags/2" do
     test "extracts complete status tag" do
       state = base_state()
@@ -183,14 +225,14 @@ defmodule Opal.Agent.StreamTest do
       state = base_state()
       {clean, state} = Stream.extract_status_tags("Hello<status>partial", state)
       assert clean == "Hello"
-      assert state.status_tag_buffer != ""
+      assert state.tag_buffers[:status] != ""
     end
 
     test "buffers potential tag start" do
       state = base_state()
       {clean, state} = Stream.extract_status_tags("Hello<st", state)
       assert clean == "Hello"
-      assert state.status_tag_buffer == "<st"
+      assert state.tag_buffers[:status] == "<st"
     end
   end
 
@@ -207,6 +249,56 @@ defmodule Opal.Agent.StreamTest do
 
     test "returns 0 for no partial tag" do
       assert Stream.partial_tag_length("hello") == 0
+    end
+  end
+
+  describe "extract_title_tag/2" do
+    test "extracts complete title tag" do
+      state = base_state()
+      {clean, _state} = Stream.extract_title_tag("<title>Fix auth bug</title>rest", state)
+      assert clean == "rest"
+    end
+
+    test "passes through text without title tags" do
+      state = base_state()
+      {clean, _state} = Stream.extract_title_tag("Hello world", state)
+      assert clean == "Hello world"
+    end
+
+    test "buffers partial opening title tag" do
+      state = base_state()
+      {clean, state} = Stream.extract_title_tag("Hello<title>partial", state)
+      assert clean == "Hello"
+      assert state.tag_buffers[:title] != ""
+    end
+
+    test "buffers potential title tag start" do
+      state = base_state()
+      {clean, state} = Stream.extract_title_tag("Hello<ti", state)
+      assert clean == "Hello"
+      assert state.tag_buffers[:title] == "<ti"
+    end
+
+    test "completes buffered title tag" do
+      state = %{base_state() | tag_buffers: %{title: "<title>My Title"}}
+      {clean, state} = Stream.extract_title_tag("</title>more text", state)
+      assert clean == "more text"
+      assert state.tag_buffers[:title] == ""
+    end
+  end
+
+  describe "partial_title_tag_length/1" do
+    test "detects partial title tag suffixes" do
+      assert Stream.partial_title_tag_length("text<") == 1
+      assert Stream.partial_title_tag_length("text<t") == 2
+      assert Stream.partial_title_tag_length("text<ti") == 3
+      assert Stream.partial_title_tag_length("text<tit") == 4
+      assert Stream.partial_title_tag_length("text<titl") == 5
+      assert Stream.partial_title_tag_length("text<title") == 6
+    end
+
+    test "returns 0 for no partial tag" do
+      assert Stream.partial_title_tag_length("hello") == 0
     end
   end
 

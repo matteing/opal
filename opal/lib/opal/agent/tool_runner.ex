@@ -12,9 +12,6 @@ defmodule Opal.Agent.ToolRunner do
   require Logger
   alias Opal.Agent.State
 
-  # File-modifying tools whose "path" argument should trigger skill globs.
-  @file_tools ~w(write_file edit_file)
-
   @doc """
   Starts parallel execution of a batch of tool calls.
 
@@ -54,7 +51,7 @@ defmodule Opal.Agent.ToolRunner do
 
     state = %{
       state
-      | tool_results: state.tool_results ++ [{tc, result}],
+      | tool_results: [{tc, result} | state.tool_results],
         pending_tool_tasks: Map.delete(state.pending_tool_tasks, ref)
     }
 
@@ -73,19 +70,21 @@ defmodule Opal.Agent.ToolRunner do
   """
   @spec finalize_tool_batch(State.t()) :: {:noreply, State.t()}
   def finalize_tool_batch(%State{} = state) do
-    results = state.tool_results
+    results = Enum.reverse(state.tool_results)
 
     tool_result_messages =
-      Enum.map(results, fn {tc, result} ->
-        case result do
-          {:ok, output} -> Opal.Message.tool_result(tc.call_id, tool_output_text(output))
-          {:error, reason} -> Opal.Message.tool_result(tc.call_id, tool_output_text(reason), true)
-        end
+      Enum.map(results, fn
+        {tc, {:ok, output}} ->
+          Opal.Message.tool_result(tc.call_id, tool_output_text(output))
+
+        {tc, {:error, reason}} ->
+          Opal.Message.tool_result(tc.call_id, tool_output_text(reason), true)
       end)
 
-    state = append_messages(state, tool_result_messages)
-    state = maybe_auto_load_skills(results, state)
-    state = %{state | pending_tool_tasks: %{}, tool_context: nil, tool_results: []}
+    state =
+      state
+      |> append_messages(tool_result_messages)
+      |> Map.merge(%{pending_tool_tasks: %{}, tool_context: nil, tool_results: []})
 
     Opal.Agent.run_turn(state)
   end
@@ -119,19 +118,14 @@ defmodule Opal.Agent.ToolRunner do
   """
   @spec build_tool_context(State.t()) :: map()
   def build_tool_context(%State{} = state) do
-    ctx = %{
+    %{
       working_dir: state.working_dir,
       session_id: state.session_id,
       config: state.config,
       agent_pid: self(),
       agent_state: state
     }
-
-    if state.question_handler do
-      Map.put(ctx, :question_handler, state.question_handler)
-    else
-      ctx
-    end
+    |> put_if(:question_handler, state.question_handler)
   end
 
   @doc """
@@ -156,11 +150,7 @@ defmodule Opal.Agent.ToolRunner do
   Finds a tool module by name from the list of available tools.
   """
   @spec find_tool_module(String.t(), [module()]) :: module() | nil
-  def find_tool_module(name, tools) do
-    Enum.find(tools, fn tool_mod ->
-      tool_mod.name() == name
-    end)
-  end
+  def find_tool_module(name, tools), do: Enum.find(tools, &(&1.name() == name))
 
   @doc """
   Returns the list of active tools based on config and available skills.
@@ -174,25 +164,18 @@ defmodule Opal.Agent.ToolRunner do
       }) do
     disabled = MapSet.new(disabled_tools)
 
-    tools
-    |> Enum.reject(&MapSet.member?(disabled, &1.name()))
-    |> then(fn t ->
-      if config.features.sub_agents.enabled,
-        do: t,
-        else: Enum.reject(t, &(&1 == Opal.Tool.SubAgent))
-    end)
-    |> then(fn t ->
-      if config.features.mcp.enabled, do: t, else: Enum.reject(t, &mcp_tool_module?/1)
-    end)
-    |> then(fn t ->
-      if config.features.debug.enabled,
-        do: t,
-        else: Enum.reject(t, &(&1 == Opal.Tool.Debug))
-    end)
-    |> then(fn t ->
-      if config.features.skills.enabled and skills != [],
-        do: t,
-        else: Enum.reject(t, &(&1 == Opal.Tool.UseSkill))
+    # Feature gates: {disabled?, predicate}. Only active gates reject tools.
+    gates = [
+      {not config.features.sub_agents.enabled, &(&1 == Opal.Tool.SubAgent)},
+      {not config.features.mcp.enabled, &mcp_tool_module?/1},
+      {not config.features.debug.enabled, &(&1 == Opal.Tool.Debug)},
+      {not (config.features.skills.enabled and skills != []), &(&1 == Opal.Tool.UseSkill)}
+    ]
+
+    rejectors = for {true, pred} <- gates, do: pred
+
+    Enum.reject(tools, fn tool ->
+      MapSet.member?(disabled, tool.name()) or Enum.any?(rejectors, & &1.(tool))
     end)
   end
 
@@ -226,60 +209,6 @@ defmodule Opal.Agent.ToolRunner do
     case Path.relative_to(expanded, Path.expand(working_dir)) do
       ^expanded -> path
       relative -> relative
-    end
-  end
-
-  @doc """
-  After a batch of tool calls, checks whether any file-modifying tool
-  touched a path that matches an inactive skill's globs.
-  """
-  @spec maybe_auto_load_skills([{map(), term()}], State.t()) :: State.t()
-  def maybe_auto_load_skills(_results, %State{available_skills: []} = state), do: state
-
-  def maybe_auto_load_skills(
-        _results,
-        %State{config: %{features: %{skills: %{enabled: false}}}} = state
-      ),
-      do: state
-
-  def maybe_auto_load_skills(results, %State{} = state) do
-    # Collect relative paths from successful file-modifying tool calls
-    touched_paths =
-      results
-      |> Enum.flat_map(fn
-        {%{name: name, arguments: %{"path" => path}}, {:ok, _}} when name in @file_tools ->
-          [make_relative(path, state.working_dir)]
-
-        _ ->
-          []
-      end)
-
-    if touched_paths == [] do
-      state
-    else
-      # Find skills with matching globs that aren't already active
-      matching =
-        state.available_skills
-        |> Enum.reject(&(&1.name in state.active_skills))
-        |> Enum.filter(fn skill ->
-          Enum.any?(touched_paths, &Opal.Skill.matches_path?(skill, &1))
-        end)
-
-      Enum.reduce(matching, state, fn skill, acc ->
-        Logger.debug("Auto-loading skill '#{skill.name}' (glob matched)")
-
-        skill_msg = %Opal.Message{
-          id: "skill:#{skill.name}",
-          role: :user,
-          content:
-            "[System] Skill '#{skill.name}' auto-activated (file matched glob). Instructions:\n\n#{skill.instructions}"
-        }
-
-        new_active = [skill.name | acc.active_skills]
-        acc = append_message(%{acc | active_skills: new_active}, skill_msg)
-        broadcast(acc, {:skill_loaded, skill.name, skill.description})
-        acc
-      end)
     end
   end
 
@@ -328,10 +257,11 @@ defmodule Opal.Agent.ToolRunner do
     %{state | messages: Enum.reverse(msgs) ++ state.messages}
   end
 
+  defp put_if(map, _key, nil), do: map
+  defp put_if(map, key, value), do: Map.put(map, key, value)
+
   defp mcp_tool_module?(tool_mod) when is_atom(tool_mod) do
-    tool_mod
-    |> Atom.to_string()
-    |> String.starts_with?("Elixir.Opal.MCP.Tool.")
+    tool_mod |> Atom.to_string() |> String.starts_with?("Elixir.Opal.MCP.Tool.")
   end
 
   defp tool_output_text(output) when is_binary(output), do: output

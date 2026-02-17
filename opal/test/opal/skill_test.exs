@@ -267,92 +267,6 @@ defmodule Opal.SkillTest do
     end
   end
 
-  describe "parse/1 — globs" do
-    test "parses single glob string" do
-      content = """
-      ---
-      name: docs
-      description: Documentation skill.
-      globs: docs/**
-      ---
-
-      Keep docs updated.
-      """
-
-      assert {:ok, skill} = Skill.parse(content)
-      assert skill.globs == ["docs/**"]
-    end
-
-    test "parses list of globs" do
-      content = """
-      ---
-      name: docs
-      description: Documentation skill.
-      globs:
-        - docs/**
-        - "*.md"
-      ---
-
-      Keep docs updated.
-      """
-
-      assert {:ok, skill} = Skill.parse(content)
-      assert skill.globs == ["docs/**", "*.md"]
-    end
-
-    test "globs is nil when not specified" do
-      content = """
-      ---
-      name: test
-      description: No globs.
-      ---
-
-      Body.
-      """
-
-      assert {:ok, skill} = Skill.parse(content)
-      assert skill.globs == nil
-    end
-  end
-
-  describe "matches_path?/2" do
-    test "matches double-star glob" do
-      skill = %Skill{name: "docs", globs: ["docs/**"], description: "", instructions: ""}
-      assert Skill.matches_path?(skill, "docs/tools/edit.md")
-      assert Skill.matches_path?(skill, "docs/index.md")
-      refute Skill.matches_path?(skill, "src/main.ex")
-    end
-
-    test "matches single-star glob" do
-      skill = %Skill{name: "md", globs: ["*.md"], description: "", instructions: ""}
-      assert Skill.matches_path?(skill, "README.md")
-      refute Skill.matches_path?(skill, "docs/README.md")
-    end
-
-    test "matches multiple globs (any)" do
-      skill = %Skill{name: "multi", globs: ["docs/**", "*.md"], description: "", instructions: ""}
-      assert Skill.matches_path?(skill, "docs/foo.txt")
-      assert Skill.matches_path?(skill, "CHANGELOG.md")
-      refute Skill.matches_path?(skill, "src/app.ex")
-    end
-
-    test "returns false when globs is nil" do
-      skill = %Skill{name: "no-globs", globs: nil, description: "", instructions: ""}
-      refute Skill.matches_path?(skill, "anything.txt")
-    end
-
-    test "returns false when globs is empty" do
-      skill = %Skill{name: "empty", globs: [], description: "", instructions: ""}
-      refute Skill.matches_path?(skill, "anything.txt")
-    end
-
-    test "matches question-mark wildcard" do
-      skill = %Skill{name: "q", globs: ["doc?.md"], description: "", instructions: ""}
-      assert Skill.matches_path?(skill, "docs.md")
-      refute Skill.matches_path?(skill, "documentation.md")
-    end
-  end
-
   describe "parse/1 — frontmatter edge cases" do
     test "returns error for non-map YAML" do
       content = """
@@ -382,7 +296,7 @@ defmodule Opal.SkillTest do
       assert skill.allowed_tools == nil
     end
 
-    test "handles globs as non-string non-list" do
+    test "ignores unknown frontmatter keys" do
       content = """
       ---
       name: test
@@ -394,7 +308,7 @@ defmodule Opal.SkillTest do
       """
 
       assert {:ok, skill} = Skill.parse(content)
-      assert skill.globs == nil
+      assert skill.name == "test"
     end
   end
 end

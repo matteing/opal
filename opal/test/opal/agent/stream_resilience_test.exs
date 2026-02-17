@@ -17,7 +17,7 @@ defmodule Opal.Agent.StreamResilienceTest do
       current_text: "",
       current_tool_calls: [],
       current_thinking: nil,
-      status_tag_buffer: ""
+      tag_buffers: %{}
     }
   end
 

@@ -132,18 +132,4 @@ defmodule Opal.Agent.ToolRunnerTest do
       assert ToolRunner.cancel_all_tasks(state) == state
     end
   end
-
-  describe "maybe_auto_load_skills/2" do
-    test "no-op when no available skills" do
-      state = base_state()
-      assert ToolRunner.maybe_auto_load_skills([], state) == state
-    end
-
-    test "no-op when skills feature is disabled" do
-      config = Opal.Config.new()
-      features = %{config.features | skills: %{config.features.skills | enabled: false}}
-      state = %{base_state() | config: %{config | features: features}}
-      assert ToolRunner.maybe_auto_load_skills([], state) == state
-    end
-  end
 end

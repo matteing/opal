@@ -115,58 +115,7 @@ defmodule Opal.Context do
     |> Enum.uniq_by(& &1.name)
   end
 
-  @doc """
-  Builds the context string to inject into the system prompt.
-
-  Concatenates discovered context files and skill summaries into a single
-  string block. Returns an empty string if no context is found.
-
-  ## Options
-
-    * `:filenames` — context filenames (default: `@default_context_filenames`)
-    * `:extra_dirs` — additional skill directories (default: `[]`)
-    * `:skip_skills` — if `true`, skip skill discovery entirely (default: `false`)
-  """
-  @spec build_context(String.t(), keyword()) :: String.t()
-  def build_context(working_dir, opts \\ []) do
-    context_files = discover_context(working_dir, opts)
-
-    skills =
-      if Keyword.get(opts, :skip_skills, false),
-        do: [],
-        else: discover_skills(working_dir, opts)
-
-    [
-      format_context_files(context_files),
-      format_skills(skills)
-    ]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.join("\n")
-  end
-
   # ── Private ─────────────────────────────────────────────────────────────
-
-  defp format_context_files([]), do: nil
-
-  defp format_context_files(files) do
-    blocks =
-      Enum.map_join(files, "\n\n", fn %{path: path, content: content} ->
-        "<!-- From: #{path} -->\n#{content}"
-      end)
-
-    "\n## Project Context\n\n#{blocks}"
-  end
-
-  defp format_skills([]), do: nil
-
-  defp format_skills(skills) do
-    lines =
-      Enum.map_join(skills, "\n", fn skill ->
-        "- **#{skill.name}**: #{skill.description}"
-      end)
-
-    "\n## Available Skills\n\n#{lines}"
-  end
 
   # Returns directories from the given path up to the filesystem root.
   # Result is ordered root-first (deepest directory last).

@@ -65,6 +65,10 @@ defmodule Opal.Tool.Shell do
 
   # -- Behaviour callbacks (zero-arity use platform default) --
 
+  @doc "Returns all possible shell tool names across platforms."
+  @spec shell_names() :: MapSet.t(String.t())
+  def shell_names, do: @shell_meta |> Map.values() |> Enum.map(& &1.name) |> MapSet.new()
+
   @impl true
   @spec name() :: String.t()
   def name, do: name(default_shell())

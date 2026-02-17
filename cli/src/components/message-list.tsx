@@ -188,7 +188,7 @@ const MessageBlock: FC<{
     if (isUser) {
       return (
         <Box flexDirection="column" marginBottom={1}>
-          <Box width={rowWidth} paddingX={2} paddingY={1} backgroundColor={colors.userBg}>
+          <Box width={rowWidth} paddingX={2} borderColor="gray" borderStyle="round">
             <Text color={colors.userText} wrap="wrap">
               {rendered}
             </Text>

@@ -1433,7 +1433,7 @@ defmodule Opal.AgentTest do
 
       %{pid: pid} = start_agent(working_dir: dir)
       state = Agent.get_state(pid)
-      assert state.context =~ "Always be concise."
+      assert Enum.any?(state.context_entries, &(&1.content =~ "Always be concise."))
     end
 
     test "agent discovers skills and includes summaries in context", %{ctx_dir: dir} do
@@ -1451,14 +1451,17 @@ defmodule Opal.AgentTest do
 
       %{pid: pid} = start_agent(working_dir: dir)
       state = Agent.get_state(pid)
-      assert state.context =~ "my-skill"
-      assert state.context =~ "A helpful testing skill."
+
+      assert Enum.any?(state.context_entries, &(&1.content =~ "my-skill")) or
+               Enum.any?(state.available_skills, &(&1.name == "my-skill"))
+
+      assert Enum.any?(state.available_skills, &(&1.description =~ "A helpful testing skill."))
     end
 
     test "context is empty when no files or skills exist", %{ctx_dir: dir} do
       %{pid: pid} = start_agent(working_dir: dir)
       state = Agent.get_state(pid)
-      assert state.context == ""
+      assert state.context_entries == []
     end
 
     test "context is injected into system prompt messages", %{ctx_dir: dir} do
@@ -1474,15 +1477,12 @@ defmodule Opal.AgentTest do
       state = wait_for_idle(pid)
 
       # The system message should contain both the original prompt and the context
-      system_msg =
-        hd(state.messages)
-        |> then(fn _ ->
-          # build_messages is private, but we can verify via the state
-          # The context string is in state.context
-          state.context
-        end)
+      # Context entries are formatted into the system prompt by SystemPrompt.build/1
+      context_text =
+        state.context_entries
+        |> Enum.map_join("\n", & &1.content)
 
-      assert system_msg =~ "Project-specific instructions."
+      assert context_text =~ "Project-specific instructions."
     end
   end
 end

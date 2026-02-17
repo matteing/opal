@@ -17,7 +17,7 @@ Opal is two things:
 - A **minimal coding agent CLI** you can use to build things.
 - An **idiomatic Elixir library** you can drop into your app to get an agent system.
 
-It features [built-in tools](docs/tools.md), an [MCP host](docs/mcp.md), support for [Agent Skills](https://agentskills.io), and a [JSON-RPC transport](docs/rpc.md) for cross-language integrations.
+It features [built-in tools](docs/tools.md), an [MCP host](docs/mcp.md), support for [Agent Skills](https://agentskills.io), [auto-compaction](docs/compaction.md), [extended thinking](docs/reasoning.md), and a [JSON-RPC transport](docs/rpc.md) for cross-language integrations. Supports [multiple providers](docs/providers.md) — GitHub Copilot, Anthropic, OpenAI, Google, and [more](https://github.com/agentjido/req_llm).
 
 ## What can it do?
 
@@ -31,9 +31,9 @@ Right now, Opal can:
 
 **Adjust expectations; it's a hobby project.** There's no permission or approval system yet — the agent can run any shell command and write to any file in your working directory. **No guardrails, no sandbox.** Use it on things you can afford to break. See [disclaimer](#disclaimer).
 
-In library usage, the harness can be cleanly integrated into Elixir (or other language) systems. When integrating with Elixir, you get no serialization boundary (just Erlang message passing). 
+In library usage, the harness can be cleanly integrated into Elixir (or other language) systems. When integrating with Elixir, you get no serialization boundary (just Erlang message passing).
 
-You could theoretically also network these nodes together and have agents talking to agents!? 
+You could theoretically also network these nodes together and have agents talking to agents!?
 
 ## Installing
 
@@ -50,29 +50,11 @@ See the [installation guide](docs/installing.md) for authentication, API keys, c
 
 **[Live introspection.](docs/inspecting.md)** Connect to a running agent from another terminal and stream every event in real time — what it's thinking, which tools it's calling, memory usage, the works. Under the hood, Elixir sits on the Erlang VM (the BEAM), which has built-in node-to-node networking. That means zero extra infrastructure for remote debugging.
 
-**[Lightweight sub-agents.](docs/supervision.md)** Spawn a child agent with its own context, tools, and model. It runs in parallel, fully isolated. If the parent dies, children are [cleaned up automatically](docs/supervision.md). This is OTP's *supervision tree* — a battle-tested pattern for managing process lifecycles — doing the heavy lifting. No thread pools, no manual resource cleanup.
+**[Lightweight sub-agents.](docs/supervision.md)** Spawn a child agent with its own context, tools, and model. It runs in parallel, fully isolated. If the parent dies, children are [cleaned up automatically](docs/supervision.md). This is OTP's _supervision tree_ — a battle-tested pattern for managing process lifecycles — doing the heavy lifting. No thread pools, no manual resource cleanup.
 
-**[Redirect the agent mid-flight.](docs/agent-loop.md)** Call `Opal.steer(agent, "focus on tests instead")` and the agent picks it up between tool calls. This works because every Erlang process has a *mailbox* — a built-in message queue. The [agent loop](docs/agent-loop.md) checks it between steps. No polling, no callback chains.
+**[Redirect the agent mid-flight.](docs/agent-loop.md)** Call `Opal.steer(agent, "focus on tests instead")` and the agent picks it up between tool calls. This works because every Erlang process has a _mailbox_ — a built-in message queue. The [agent loop](docs/agent-loop.md) checks it between steps. No polling, no callback chains.
 
 **Embeddable as a library.** Add `{:opal, ...}` to your Elixir deps and the full agent system runs inside your app. Since it's all Erlang processes, there's no sidecar, no serialization — just message passing. Or consume it over [JSON-RPC](docs/rpc.md) from any language. See the [SDK docs](docs/sdk.md).
-
-## What you get
-
-- **Interactive TUI** — fullscreen terminal chat (React/Ink) with streaming, model picker, thinking display
-- **[8 built-in tools](docs/tools.md)** — `read_file`, `write_file`, `edit_file`, `shell`, `sub_agent`, `tasks`, `use_skill`, `ask_user`
-- **[MCP host](docs/mcp.md)** — auto-discovers servers from `.vscode/mcp.json` and friends; stdio, SSE, streamable HTTP
-- **[Multiple providers](docs/providers.md)** — GitHub Copilot + anything [ReqLLM](https://github.com/doughsay/req_llm) supports (Anthropic, OpenAI, Google, etc.)
-- **[Auto-compaction](docs/compaction.md) & [extended thinking](docs/reasoning.md)** — LLM-powered summarization near context limits, configurable thinking levels
-- **[Event system](docs/otp.md)** — `Registry`-based pub/sub, subscribe from any process
-
-## What's in here?
-
-| Project     | What it is |
-| ----------- | ---------- |
-| **`opal/`** | The Elixir SDK — agent engine, tools, providers, sessions, MCP bridge, RPC server. Embeddable in any supervision tree. |
-| **`cli/`**  | React/Ink terminal UI + typed TypeScript client SDK. Talks to core over JSON-RPC stdio. Published as `@unfinite/opal` on npm. |
-
-See the [full architecture docs](docs/index.md) for the process tree, request flow, and supervision model.
 
 ## CLI
 
@@ -86,16 +68,7 @@ opal --debug                                # enable debug feature/tools for thi
 
 ## Providers
 
-Opal supports two provider paths:
-
-| Provider | What it connects to | Auth |
-|----------|-------------------|------|
-| **GitHub Copilot** | Claude, GPT-4o, Gemini, Grok via Copilot API | GitHub OAuth (device flow, guided on first run) |
-| **Direct API** | Anthropic, OpenAI, Google, Groq, xAI, AWS Bedrock, OpenRouter, and [more](https://github.com/agentjido/req_llm) | Standard API keys (`ANTHROPIC_API_KEY`, etc.) |
-
-GitHub Copilot is the recommended provider — it's what Opal is developed and tested against.
-
-The model string controls which provider is used:
+GitHub Copilot is the default — the model string prefix controls which provider is used:
 
 ```sh
 opal --model claude-sonnet-4           # Copilot (default when no prefix)
@@ -103,37 +76,46 @@ opal --model anthropic:claude-sonnet-4 # Direct Anthropic API
 opal --model openai:gpt-4o            # Direct OpenAI API
 ```
 
-Direct API support is powered by [ReqLLM](https://github.com/agentjido/req_llm). See the [full provider docs](docs/providers.md) for model discovery, API key setup, and custom providers.
+See the [provider docs](docs/providers.md) for API keys, model discovery, and custom providers.
 
 ## Using Opal as a library
 
 Add it to your supervision tree and you get everything — no external process, no serialization. See the [SDK docs](docs/sdk.md) for the full API.
 
 ```elixir
-{:ok, agent} = Opal.start_session(%{
-  system_prompt: "You are a helpful coding assistant.",
-  working_dir: "/path/to/project"
-})
+{:ok, agent} = Opal.start_session(%{working_dir: "."})
 
+# Stream events as they happen
 Opal.stream(agent, "Refactor the auth module")
 |> Enum.each(fn
-  {:message_delta, %{delta: text}} -> IO.write(text)
-  {:tool_execution_start, info}    -> IO.puts("⚡ #{info.meta}")
-  {:agent_end, _}                  -> IO.puts("\n✓ Done")
-  _                                -> :ok
+  {:thinking_delta, %{delta: thought}} ->
+    IO.write(IO.ANSI.faint() <> thought <> IO.ANSI.reset())
+
+  {:message_delta, %{delta: text}} ->
+    IO.write(text)
+
+  {:tool_execution_start, name, _call_id, _args, _meta} ->
+    IO.puts("  ⚡ #{name}")
+
+  {:tool_execution_end, _name, _call_id, _result} ->
+    IO.puts("  ✓")
+
+  {:agent_end, _messages, _usage} ->
+    IO.puts("\n✦ Done")
+
+  _ ->
+    :ok
 end)
 ```
 
-`Opal.stream/2` returns a lazy Elixir `Stream` — every event the agent emits lands in your pipeline as it happens. Compose it with `Stream.filter/2`, `Enum.reduce/3`, or anything else in the standard library.
-
-For fire-and-forget or request/response patterns:
+`Opal.stream/2` returns a lazy `Stream` — compose with `Stream.filter/2`, `Enum.reduce/3`, or pipe into anything.
 
 ```elixir
-# Async — subscribe to Opal.Events for streaming output
-:ok = Opal.prompt(agent, "List all Elixir files")
+# Block until it's done
+{:ok, answer} = Opal.prompt_sync(agent, "What does the User module do?")
 
-# Sync — block until the agent finishes
-{:ok, response} = Opal.prompt_sync(agent, "What is 2 + 2?")
+# Redirect mid-flight — lands in the agent's mailbox between tool calls
+Opal.steer(agent, "Focus on the tests instead")
 ```
 
 ### Custom tools
@@ -190,7 +172,7 @@ mise run inspect                   # connect via iex to a running dev mode insta
 
 ## Why I built this
 
-I wanted to understand how agent harnesses actually work — not just use one, but build one from the ground up. I studied [Pi](https://github.com/badlogic/pi-mono) and the more I stared at the problem — long-running loops, concurrent tool execution, process isolation, sub-agent orchestration — the more it looked like Erlang/OTP. So I built it. 
+I wanted to understand how agent harnesses actually work — not just use one, but build one from the ground up. I studied [Pi](https://github.com/badlogic/pi-mono) and the more I stared at the problem — long-running loops, concurrent tool execution, process isolation, sub-agent orchestration — the more it looked like Erlang/OTP. So I built it.
 
 Sub-agents? Processes. Steering? Mailbox. Fault isolation? Supervision tree. Live debugging? Erlang distribution. I didn't have to build any of that. The language did that.
 
@@ -199,14 +181,10 @@ Sub-agents? Processes. Steering? Mailbox. Fault isolation? Supervision tree. Liv
 - A more fully featured TUI
 - Proper SDK docs, NPM package
 - Random gaps in functionality that come through!
-- Subagents + agents talking to each other through message passing? 
+- Subagents + agents talking to each other through message passing?
   - subagent X asked subagent Y a question
   - not sure if that would even work but whatevs
-- A toy OpenClaw reimplementation using Opal 
-
-## A note on token usage
-
-This has not been engineered with token limits in mind. My development Copilot subscription gives me unlimited tokens, so I've been building under the assumption that tokens are infinite. This allows for creative expression and engineering — but it's not the most efficient. In future versions I'll work to reduce token usage by optimizing the system prompt.
+- A toy OpenClaw reimplementation using Opal
 
 ## Disclaimer
 
@@ -233,6 +211,7 @@ And from my beloved past at XDA Forums:
 * flag removal etc.
 */
 ```
+
 ## References
 
 Standing on the shoulders of giants. Other references (papers, projects) are in the relevant documentation files.

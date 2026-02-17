@@ -1,6 +1,19 @@
 defmodule Opal.Agent.Tools do
   @moduledoc """
   Tool lifecycle orchestration for the agent loop.
+
+  ## Accessing available tools
+
+  Always use `active_tools/1` to get the tools the model should see.
+  Never read `state.tools` directly — it is the raw registry and
+  includes tools that may be disabled by feature flags or per-name
+  disable lists. The filtering layers are:
+
+  1. `state.tools` — full registry (all registered + MCP tools)
+  2. `state.disabled_tools` — per-name disable list (config/RPC)
+  3. Feature gates — structural toggles (MCP, sub-agents, debug, skills)
+
+  `active_tools/1` applies layers 2 and 3 to produce the final set.
   """
 
   alias Opal.Agent.State
