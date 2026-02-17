@@ -38,10 +38,11 @@ defmodule Opal.Provider.LLM do
   # ── stream/4 ──────────────────────────────────────────────────────────
 
   @impl true
-  def stream(model, messages, tools, _opts \\ []) do
+  def stream(model, messages, tools, opts \\ []) do
     model_spec = Opal.Provider.Model.to_req_llm_spec(model)
     context = to_req_llm_context(model, messages)
-    req_tools = to_req_llm_tools(tools)
+    tool_context = Keyword.get(opts, :tool_context, %{})
+    req_tools = to_req_llm_tools(tools, tool_context)
 
     stream_opts =
       [tools: req_tools]
@@ -312,11 +313,11 @@ defmodule Opal.Provider.LLM do
   defp to_req_llm_message(_model, _msg), do: []
 
   # Convert Opal tool modules to ReqLLM tool structs
-  defp to_req_llm_tools(tools) do
+  defp to_req_llm_tools(tools, tool_context) do
     Enum.map(tools, fn tool ->
       ReqLLM.tool(
         name: tool.name(),
-        description: tool.description(),
+        description: Opal.Tool.description(tool, tool_context),
         parameter_schema: tool.parameters(),
         callback: fn _args -> {:ok, ""} end
       )

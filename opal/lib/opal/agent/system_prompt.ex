@@ -192,9 +192,7 @@ defmodule Opal.Agent.SystemPrompt do
       when is_binary(working_dir) and working_dir != "" do
     """
     <environment>
-    Current working directory: `#{working_dir}`
-
-    Shell commands already run from this directory by default. Do not prepend `cd` to the same directory unless you intentionally need a different location.
+    Working directory: #{working_dir}
     </environment>\
     """
   end

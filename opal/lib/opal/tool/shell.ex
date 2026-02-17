@@ -75,7 +75,31 @@ defmodule Opal.Tool.Shell do
 
   @impl true
   @spec description() :: String.t()
-  def description, do: description(default_shell())
+  def description, do: shell_description(default_shell())
+
+  @doc """
+  Context-aware description that includes the working directory.
+
+  When the tool context includes `:working_dir`, appends it to the
+  description so the LLM knows commands already execute there and
+  avoids prepending unnecessary `cd` commands.
+  """
+  @impl true
+  @spec description(Opal.Tool.tool_context()) :: String.t()
+  def description(%{working_dir: wd} = context) when is_binary(wd) and wd != "" do
+    shell_type = Map.get(context, :shell, default_shell())
+
+    base = shell_description(shell_type)
+
+    base <>
+      " Commands run in: #{wd}." <>
+      " Do NOT prepend cd to this directory."
+  end
+
+  def description(%{} = context) do
+    shell_type = Map.get(context, :shell, default_shell())
+    shell_description(shell_type)
+  end
 
   @impl true
   def meta(%{"command" => command}) do
@@ -130,9 +154,9 @@ defmodule Opal.Tool.Shell do
   @spec name(shell()) :: String.t()
   def name(shell_type), do: Map.fetch!(@shell_meta, shell_type).name
 
-  @doc "Returns the tool description for the given shell type."
-  @spec description(shell()) :: String.t()
-  def description(shell_type), do: Map.fetch!(@shell_meta, shell_type).description
+  @doc "Returns the base description for the given shell type."
+  @spec shell_description(shell()) :: String.t()
+  def shell_description(shell_type), do: Map.fetch!(@shell_meta, shell_type).description
 
   # -- Internals --
 

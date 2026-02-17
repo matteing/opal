@@ -64,11 +64,35 @@ defmodule Opal.Tool do
       end
   """
 
+  @typedoc """
+  Lightweight context passed to tools during schema generation.
+
+  Lets tools enrich their descriptions with runtime information (e.g. the
+  shell tool embeds the current working directory so the LLM stops
+  prepending `cd` to every command).
+
+  Distinct from the heavier execution context passed to `execute/2`.
+  """
+  @type tool_context :: %{
+          optional(:working_dir) => String.t(),
+          optional(:shell) => atom()
+        }
+
   @doc "Returns the tool name used in tool call messages."
   @callback name() :: String.t()
 
   @doc "Returns a human-readable description of what the tool does."
   @callback description() :: String.t()
+
+  @doc """
+  Returns a context-aware description of the tool.
+
+  Optional callback that receives a `t:tool_context/0` with runtime
+  information and can enrich the description accordingly.
+
+  Falls back to `description/0` when not implemented.
+  """
+  @callback description(context :: tool_context()) :: String.t()
 
   @doc "Returns a JSON Schema map describing the tool's accepted parameters."
   @callback parameters() :: map()
@@ -85,7 +109,23 @@ defmodule Opal.Tool do
   @callback execute(args :: map(), context :: map()) ::
               {:ok, String.t()} | {:error, String.t()} | {:effect, term()}
 
-  @optional_callbacks [meta: 1]
+  @optional_callbacks [meta: 1, description: 1]
+
+  @doc """
+  Returns the tool description, enriched with context when supported.
+
+  Calls `tool_module.description(context)` if the tool implements the
+  optional `description/1` callback, otherwise falls back to the
+  zero-arity `description/0`.
+  """
+  @spec description(module(), tool_context()) :: String.t()
+  def description(tool_module, context) do
+    if function_exported?(tool_module, :description, 1) do
+      tool_module.description(context)
+    else
+      tool_module.description()
+    end
+  end
 
   @doc """
   Returns the meta description for a tool invocation.

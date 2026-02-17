@@ -77,9 +77,20 @@ defmodule Opal.Tool.ShellTest do
 
     test "returns non-empty description per shell type" do
       for shell <- [:sh, :bash, :zsh, :cmd, :powershell] do
-        desc = Shell.description(shell)
+        desc = Shell.shell_description(shell)
         assert is_binary(desc) and String.length(desc) > 0
       end
+    end
+
+    test "description/1 includes working directory when provided" do
+      desc = Shell.description(%{working_dir: "/tmp/project"})
+      assert desc =~ "/tmp/project"
+      assert desc =~ "Do NOT prepend cd"
+    end
+
+    test "description/1 falls back to base description without working_dir" do
+      desc = Shell.description(%{})
+      assert desc == Shell.description()
     end
   end
 

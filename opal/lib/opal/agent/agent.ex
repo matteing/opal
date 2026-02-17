@@ -598,7 +598,9 @@ defmodule Opal.Agent do
       {:request_start, %{model: state.model.id, messages: length(all_messages)}}
     )
 
-    case provider.stream(state.model, all_messages, tools) do
+    case provider.stream(state.model, all_messages, tools,
+           tool_context: %{working_dir: state.working_dir}
+         ) do
       {:ok, %Opal.Provider.EventStream{ref: ref, cancel_fun: cancel_fn}} ->
         Logger.debug("Provider event stream started (native events)")
 

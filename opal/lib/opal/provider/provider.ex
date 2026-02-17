@@ -97,15 +97,21 @@ defmodule Opal.Provider do
   Converts tool modules to the OpenAI function-calling format.
 
   This is the shared default implementation used by all built-in providers.
+
+  Accepts an optional `tool_context` map (e.g. `%{working_dir: "/path"}`)
+  that is forwarded to tools implementing the optional `description/1`
+  callback, allowing context-aware descriptions (e.g. the shell tool
+  includes the current working directory so the LLM avoids prepending
+  unnecessary `cd` commands).
   """
-  @spec convert_tools(tools :: [module()]) :: [map()]
-  def convert_tools(tools) do
+  @spec convert_tools(tools :: [module()], tool_context :: Opal.Tool.tool_context()) :: [map()]
+  def convert_tools(tools, tool_context \\ %{}) do
     Enum.map(tools, fn tool ->
       %{
         type: "function",
         function: %{
           name: tool.name(),
-          description: tool.description(),
+          description: Opal.Tool.description(tool, tool_context),
           parameters: tool.parameters(),
           # Strict mode requires all properties to be required and no
           # additionalProperties — our tool schemas don't guarantee that.
@@ -131,6 +137,8 @@ defmodule Opal.Provider do
 
       @impl true
       def convert_tools(tools), do: Opal.Provider.convert_tools(tools)
+
+      def convert_tools(tools, tool_context), do: Opal.Provider.convert_tools(tools, tool_context)
 
       defoverridable convert_tools: 1
     end

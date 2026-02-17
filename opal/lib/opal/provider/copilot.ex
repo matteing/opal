@@ -35,19 +35,21 @@ defmodule Opal.Provider.Copilot do
           headers: copilot_headers(messages, opts)
         )
 
+      tool_context = Keyword.get(opts, :tool_context, %{})
+
       if use_responses_api?(model.id) do
-        stream_responses_api(req, model, messages, tools)
+        stream_responses_api(req, model, messages, tools, tool_context)
       else
-        stream_chat_completions(req, model, messages, tools)
+        stream_chat_completions(req, model, messages, tools, tool_context)
       end
     end
   end
 
   # ── Chat Completions variant (/v1/chat/completions) ──
 
-  defp stream_chat_completions(req, model, messages, tools) do
+  defp stream_chat_completions(req, model, messages, tools, tool_context) do
     converted_messages = convert_messages_completions(model, messages)
-    converted_tools = convert_tools(tools)
+    converted_tools = convert_tools(tools, tool_context)
 
     body = %{
       model: model.id,
@@ -72,9 +74,9 @@ defmodule Opal.Provider.Copilot do
 
   # ── Responses API variant (/v1/responses) ──
 
-  defp stream_responses_api(req, model, messages, tools) do
+  defp stream_responses_api(req, model, messages, tools, tool_context) do
     converted_messages = convert_messages_responses(model, messages)
-    converted_tools = convert_tools_responses(tools)
+    converted_tools = convert_tools_responses(tools, tool_context)
 
     body = %{
       model: model.id,
@@ -264,14 +266,17 @@ defmodule Opal.Provider.Copilot do
   @impl true
   defdelegate convert_tools(tools), to: Opal.Provider
 
+  @doc false
+  defdelegate convert_tools(tools, tool_context), to: Opal.Provider
+
   # Responses API uses a flat tool format: {type, name, description, parameters}
   # Unlike Chat Completions which nests under "function".
-  defp convert_tools_responses(tools) do
+  defp convert_tools_responses(tools, tool_context) do
     Enum.map(tools, fn tool ->
       %{
         type: "function",
         name: tool.name(),
-        description: tool.description(),
+        description: Opal.Tool.description(tool, tool_context),
         parameters: tool.parameters(),
         strict: false
       }
