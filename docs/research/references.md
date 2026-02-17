@@ -56,3 +56,4 @@ Compiled from `## References` sections across the docs.
 Papers and resources to review and potentially integrate:
 
 - [LCM: Lossless Context Management](https://papers.voltropy.com/LCM) — "We introduce Lossless Context Management (LCM), a deterministic architecture for LLM memory that outperforms Claude Code on long-context tasks. When benchmarked using Opus 4.6, our LCM-augmented coding agent, Volt, achieves higher scores than Claude Code on the OOLONG long-context eval, including at every context length between 32K and 1M tokens."
+- [Playwright MCP](https://github.com/microsoft/playwright-mcp) — Microsoft's Playwright tooling for agents; rationale for CLI-based tools over MCP servers — simpler, stateless, composable. Relevant to evaluating whether Opal should move away from MCP toward skills + CLIs. (todo)
