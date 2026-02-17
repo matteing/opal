@@ -426,6 +426,35 @@ describe("applyEvent", () => {
     expect(result).toEqual(state);
   });
 
+  it("messageApplied moves message from queue to timeline", () => {
+    const state = { ...emptyState(), queuedMessages: ["Focus on tests", "Also fix lint"] };
+    const result = applyEvent(state, {
+      type: "messageApplied",
+      text: "Focus on tests",
+    } as AgentEvent);
+    expect(result.queuedMessages).toEqual(["Also fix lint"]);
+    const last = result.main.timeline[result.main.timeline.length - 1];
+    expect(last.kind).toBe("message");
+    if (last.kind === "message") {
+      expect(last.message.role).toBe("user");
+      expect(last.message.content).toBe("Focus on tests");
+    }
+  });
+
+  it("messageApplied with no matching queue still adds to timeline", () => {
+    const state = emptyState();
+    const result = applyEvent(state, {
+      type: "messageApplied",
+      text: "Surprise message",
+    } as AgentEvent);
+    expect(result.queuedMessages).toEqual([]);
+    const last = result.main.timeline[result.main.timeline.length - 1];
+    expect(last.kind).toBe("message");
+    if (last.kind === "message") {
+      expect(last.message.content).toBe("Surprise message");
+    }
+  });
+
   it("unknown event type is a no-op", () => {
     const state = emptyState();
     const result = applyEvent(state, { type: "unknown" } as unknown as AgentEvent);

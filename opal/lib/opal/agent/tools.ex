@@ -37,6 +37,6 @@ defmodule Opal.Agent.Tools do
   @spec active_tools(State.t()) :: [module()]
   defdelegate active_tools(state), to: ToolRunner
 
-  @spec check_for_steering(State.t()) :: State.t()
-  defdelegate check_for_steering(state), to: ToolRunner
+  @spec drain_pending_messages(State.t()) :: State.t()
+  defdelegate drain_pending_messages(state), to: ToolRunner
 end

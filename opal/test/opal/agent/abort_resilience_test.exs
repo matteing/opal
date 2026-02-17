@@ -1,7 +1,7 @@
 defmodule Opal.Agent.AbortResilienceTest do
   @moduledoc """
-  Tests abort/steer during every agent state and race conditions between
-  concurrent signals: abort during streaming, tools, idle; steering
+  Tests abort/prompt during every agent state and race conditions between
+  concurrent signals: abort during streaming, tools, idle; prompting
   during streaming; double abort; abort+retry race.
   """
   use ExUnit.Case, async: false
@@ -354,16 +354,16 @@ defmodule Opal.Agent.AbortResilienceTest do
     end
   end
 
-  describe "steer during streaming" do
+  describe "prompt during streaming" do
     @tag timeout: 10_000
-    test "steer is queued and drained at turn boundary" do
+    test "prompt is queued and drained at turn boundary" do
       :persistent_term.put({SlowProvider, :delay}, 500)
       %{pid: pid, session_id: sid} = start_agent(provider: FastProvider)
 
       Agent.prompt(pid, "Hello")
 
-      # Send steer while agent is processing
-      Agent.steer(pid, "Focus on tests")
+      # Send prompt while agent is processing
+      Agent.prompt(pid, "Focus on tests")
 
       # Wait for completion
       assert_receive {:opal_event, ^sid, {:agent_end, _msgs, _usage}}, 5000
@@ -371,7 +371,7 @@ defmodule Opal.Agent.AbortResilienceTest do
       state = Agent.get_state(pid)
       assert state.status == :idle
       # Steers should have been consumed (either queued & drained, or triggered new turn)
-      assert state.pending_steers == []
+      assert state.pending_messages == []
     end
   end
 
@@ -429,7 +429,7 @@ defmodule Opal.Agent.AbortResilienceTest do
 
   describe "prompt while busy" do
     @tag timeout: 10_000
-    test "prompt during streaming is queued as steer" do
+    test "prompt during streaming is queued" do
       :persistent_term.put({SlowProvider, :delay}, 500)
       %{pid: pid, session_id: sid} = start_agent()
 
@@ -443,8 +443,8 @@ defmodule Opal.Agent.AbortResilienceTest do
       Process.sleep(2000)
 
       state = Agent.get_state(pid)
-      # The queued prompt should have been drained (it acts like a steer)
-      assert state.pending_steers == []
+      # The queued prompt should have been drained
+      assert state.pending_messages == []
     end
   end
 end

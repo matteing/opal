@@ -175,6 +175,16 @@ flush()  # prints buffered events
 # Full state struct
 state = Opal.Inspect.state()
 
+# Dump full state to a temp file and open in $EDITOR
+Opal.Inspect.dump_state()
+# => "/tmp/opal-state-abc123def456.exs"
+
+# Dump without auto-opening
+Opal.Inspect.dump_state(open: false)
+
+# Dump to a specific path
+Opal.Inspect.dump_state(path: "~/agent-state.exs")
+
 # gen_statem internal state (includes state name)
 {state_name, state} = :sys.get_state(Opal.Inspect.agent())
 # state_name is :idle, :running, :streaming, or :executing_tools

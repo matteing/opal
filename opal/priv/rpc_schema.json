@@ -157,6 +157,30 @@
         ],
         "type": "object"
       },
+      "message_applied": {
+        "description": "A previously queued message has been applied and injected into the conversation.",
+        "properties": {
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "text": {
+            "description": "The message text.",
+            "type": "string"
+          },
+          "type": {
+            "const": "message_applied",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "text"
+        ],
+        "type": "object"
+      },
       "message_delta": {
         "description": "A chunk of LLM-generated text.",
         "properties": {
@@ -178,6 +202,30 @@
           "type",
           "session_id",
           "delta"
+        ],
+        "type": "object"
+      },
+      "message_queued": {
+        "description": "A message was queued because the agent was busy. Emitted immediately on receipt.",
+        "properties": {
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "text": {
+            "description": "The queued message text.",
+            "type": "string"
+          },
+          "type": {
+            "const": "message_queued",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "text"
         ],
         "type": "object"
       },
@@ -497,7 +545,7 @@
         }
       },
       "agent/prompt": {
-        "description": "Send an async user prompt. Results stream as agent/event notifications.",
+        "description": "Send a user prompt. If idle the agent starts immediately; if busy the message is queued for injection between tool calls.",
         "params": {
           "properties": {
             "session_id": {
@@ -516,7 +564,15 @@
           "type": "object"
         },
         "result": {
-          "properties": {},
+          "properties": {
+            "queued": {
+              "description": "True when the agent was busy and the message was queued.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "queued"
+          ],
           "type": "object"
         }
       },
@@ -583,30 +639,6 @@
             "message_count",
             "tools"
           ],
-          "type": "object"
-        }
-      },
-      "agent/steer": {
-        "description": "Steer the agent mid-run. If idle, acts like agent/prompt.",
-        "params": {
-          "properties": {
-            "session_id": {
-              "description": "Target session ID.",
-              "type": "string"
-            },
-            "text": {
-              "description": "The steering message.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "session_id",
-            "text"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "properties": {},
           "type": "object"
         }
       },
@@ -849,31 +881,6 @@
         },
         "result": {
           "properties": {
-            "distribution": {
-              "description": "Erlang distribution state, or null if not active.",
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "properties": {
-                    "cookie": {
-                      "description": "Distribution cookie.",
-                      "type": "string"
-                    },
-                    "node": {
-                      "description": "Full node name (e.g. opal@hostname).",
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "cookie",
-                    "node"
-                  ],
-                  "type": "object"
-                }
-              ]
-            },
             "features": {
               "description": "Current runtime feature flags.",
               "properties": {
@@ -929,7 +936,6 @@
             }
           },
           "required": [
-            "distribution",
             "features",
             "tools"
           ],
@@ -940,30 +946,6 @@
         "description": "Update runtime feature and tool configuration for a session.",
         "params": {
           "properties": {
-            "distribution": {
-              "description": "Erlang distribution config. Set {name, cookie?} to start, null to stop.",
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "properties": {
-                    "cookie": {
-                      "description": "Distribution cookie. Generated randomly if omitted.",
-                      "type": "string"
-                    },
-                    "name": {
-                      "description": "Short node name (e.g. opal).",
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "name"
-                  ],
-                  "type": "object"
-                }
-              ]
-            },
             "features": {
               "description": "Feature flags to update.",
               "properties": {
@@ -1007,31 +989,6 @@
         },
         "result": {
           "properties": {
-            "distribution": {
-              "description": "Erlang distribution state, or null if not active.",
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "properties": {
-                    "cookie": {
-                      "description": "Distribution cookie.",
-                      "type": "string"
-                    },
-                    "node": {
-                      "description": "Full node name (e.g. opal@hostname).",
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "cookie",
-                    "node"
-                  ],
-                  "type": "object"
-                }
-              ]
-            },
             "features": {
               "description": "Current runtime feature flags.",
               "properties": {
@@ -1087,7 +1044,6 @@
             }
           },
           "required": [
-            "distribution",
             "features",
             "tools"
           ],

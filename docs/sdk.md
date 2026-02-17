@@ -50,7 +50,7 @@ for await (const event of session.prompt("Fix the bug")) {
 }
 
 // Other operations
-await session.steer("Skip that file");
+await session.prompt("Skip that file"); // queued if busy
 await session.abort();
 await session.compact();
 const state = await session.getState();

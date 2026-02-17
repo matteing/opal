@@ -7,6 +7,9 @@ defmodule Opal.MCP.Resources do
   thin wrapper around Anubis client resource operations.
   """
 
+  # MCP servers may return lists or maps — defensive guards are intentional
+  @dialyzer {:no_match, list: 1}
+
   require Logger
 
   @doc """

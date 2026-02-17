@@ -39,12 +39,6 @@ defmodule Opal.RPC.HandlerTest do
     end
   end
 
-  describe "handle/2 agent/steer missing params" do
-    test "returns invalid_params error" do
-      assert {:error, -32602, _, nil} = Handler.handle("agent/steer", %{})
-    end
-  end
-
   describe "handle/2 agent/abort missing params" do
     test "returns invalid_params error" do
       assert {:error, -32602, _, nil} = Handler.handle("agent/abort", %{})
@@ -382,18 +376,8 @@ defmodule Opal.RPC.HandlerTest do
       assert Map.has_key?(state, :model)
     end
 
-    test "agent/steer returns ok for valid session", %{sid: sid} do
-      assert {:ok, _} =
-               Handler.handle("agent/steer", %{"session_id" => sid, "text" => "Focus on tests"})
-    end
-
     test "agent/abort returns ok for valid session", %{sid: sid} do
       assert {:ok, _} = Handler.handle("agent/abort", %{"session_id" => sid})
-    end
-
-    test "agent/steer returns not found for unknown session" do
-      assert {:error, -32602, "Session not found", _} =
-               Handler.handle("agent/steer", %{"session_id" => "fake", "text" => "hi"})
     end
 
     test "model/set changes model for valid session", %{sid: sid} do

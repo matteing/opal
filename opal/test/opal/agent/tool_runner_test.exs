@@ -80,18 +80,6 @@ defmodule Opal.Agent.ToolRunnerTest do
       assert ctx.session_id == state.session_id
       assert ctx.config == state.config
     end
-
-    test "includes question_handler when present" do
-      handler = fn _q -> {:ok, "answer"} end
-      state = %{base_state() | question_handler: handler}
-      ctx = ToolRunner.build_tool_context(state)
-      assert ctx.question_handler == handler
-    end
-
-    test "omits question_handler when nil" do
-      ctx = ToolRunner.build_tool_context(base_state())
-      refute Map.has_key?(ctx, :question_handler)
-    end
   end
 
   describe "active_tools/1" do
@@ -110,16 +98,16 @@ defmodule Opal.Agent.ToolRunnerTest do
     end
   end
 
-  describe "check_for_steering/1" do
-    test "returns state unchanged when no pending steers" do
+  describe "drain_pending_messages/1" do
+    test "returns state unchanged when no pending messages" do
       state = base_state()
-      assert ToolRunner.check_for_steering(state) == state
+      assert ToolRunner.drain_pending_messages(state) == state
     end
 
-    test "injects pending steers as user messages" do
-      state = %{base_state() | pending_steers: ["Do something else"]}
-      new_state = ToolRunner.check_for_steering(state)
-      assert new_state.pending_steers == []
+    test "injects pending messages as user messages" do
+      state = %{base_state() | pending_messages: ["Do something else"]}
+      new_state = ToolRunner.drain_pending_messages(state)
+      assert new_state.pending_messages == []
       [msg | _] = new_state.messages
       assert msg.role == :user
       assert msg.content == "Do something else"

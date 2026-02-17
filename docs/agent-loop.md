@@ -9,7 +9,6 @@ The public API remains stable and routes into the state machine:
 ```elixir
 Opal.Agent.start_link(opts)
 Opal.Agent.prompt(agent, text)
-Opal.Agent.steer(agent, text)
 Opal.Agent.follow_up(agent, text)
 Opal.Agent.abort(agent)
 Opal.Agent.get_state(agent)
@@ -34,12 +33,12 @@ executing_tools(event_type, event_content, state)
 
 ## FSM States
 
-| State | Meaning | External commands |
-|---|---|---|
-| `:idle` | Waiting for prompt/steer input | prompt, steer, calls |
-| `:running` | Building context and starting provider stream | steer/prompt queued, abort, calls |
-| `:streaming` | Processing provider events (SSE/EventStream) | steer/prompt queued, abort, calls |
-| `:executing_tools` | Running tool calls through supervised tasks | steer/prompt queued, abort, calls |
+| State              | Meaning                                       | External commands                 |
+| ------------------ | --------------------------------------------- | --------------------------------- |
+| `:idle`            | Waiting for prompt/steer input                | prompt, steer, calls              |
+| `:running`         | Building context and starting provider stream | steer/prompt queued, abort, calls |
+| `:streaming`       | Processing provider events (SSE/EventStream)  | steer/prompt queued, abort, calls |
+| `:executing_tools` | Running tool calls through supervised tasks   | steer/prompt queued, abort, calls |
 
 ```mermaid
 stateDiagram-v2

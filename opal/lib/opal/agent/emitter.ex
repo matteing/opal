@@ -1,9 +1,10 @@
-defmodule Opal.Agent.EventLog do
+defmodule Opal.Agent.Emitter do
   @moduledoc """
-  In-memory per-session event log for debug introspection.
+  Canonical event emitter for the agent loop.
 
-  Events are only persisted when `features.debug.enabled` is true for the
-  session. The log is bounded (ring-buffer style) to avoid unbounded growth.
+  Broadcasts events to all session subscribers via `Opal.Events` and
+  conditionally records them in a bounded ETS ring buffer for debug
+  introspection (when `features.debug.enabled` is true).
   """
 
   alias Opal.Agent.State

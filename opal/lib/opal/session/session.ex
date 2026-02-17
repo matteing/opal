@@ -681,7 +681,7 @@ defmodule Opal.Session do
         line = IO.read(file, :line)
         File.close(file)
 
-        case Jason.decode(line || "") do
+        case Jason.decode(if(is_binary(line), do: line, else: "")) do
           {:ok, header} -> get_in(header, ["metadata", "title"])
           _ -> nil
         end

@@ -7,8 +7,8 @@ defmodule Opal.Tool.AskUser do
   text input and optional multiple-choice questions.
 
   Not available to sub-agents — only the top-level interactive agent
-  should prompt the user. See `Opal.Tool.AskParent` for the sub-agent
-  variant and `Opal.Tool.Ask` for the shared spec/RPC logic.
+  should prompt the user. See `Opal.Tool.Ask` for the shared spec/RPC
+  logic.
   """
 
   @behaviour Opal.Tool

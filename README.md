@@ -52,7 +52,7 @@ See the [installation guide](docs/installing.md) for authentication, API keys, c
 
 **[Lightweight sub-agents.](docs/supervision.md)** Spawn a child agent with its own context, tools, and model. It runs in parallel, fully isolated. If the parent dies, children are [cleaned up automatically](docs/supervision.md). This is OTP's _supervision tree_ — a battle-tested pattern for managing process lifecycles — doing the heavy lifting. No thread pools, no manual resource cleanup.
 
-**[Redirect the agent mid-flight.](docs/agent-loop.md)** Call `Opal.steer(agent, "focus on tests instead")` and the agent picks it up between tool calls. This works because every Erlang process has a _mailbox_ — a built-in message queue. The [agent loop](docs/agent-loop.md) checks it between steps. No polling, no callback chains.
+**[Redirect the agent mid-flight.](docs/agent-loop.md)** Call `Opal.prompt(agent, "focus on tests instead")` while the agent is busy and it's queued, then picked up between tool calls. This works because every Erlang process has a _mailbox_ — a built-in message queue. The [agent loop](docs/agent-loop.md) checks it between steps. No polling, no callback chains.
 
 **Embeddable as a library.** Add `{:opal, ...}` to your Elixir deps and the full agent system runs inside your app. Since it's all Erlang processes, there's no sidecar, no serialization — just message passing. Or consume it over [JSON-RPC](docs/rpc.md) from any language. See the [SDK docs](docs/sdk.md).
 
@@ -114,8 +114,8 @@ end)
 # Block until it's done
 {:ok, answer} = Opal.prompt_sync(agent, "What does the User module do?")
 
-# Redirect mid-flight — lands in the agent's mailbox between tool calls
-Opal.steer(agent, "Focus on the tests instead")
+# Redirect mid-flight — queued in the agent's mailbox between tool calls
+%{queued: true} = Opal.prompt(agent, "Focus on the tests instead")
 ```
 
 ### Custom tools

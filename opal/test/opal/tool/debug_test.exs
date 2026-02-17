@@ -1,7 +1,7 @@
 defmodule Opal.Tool.DebugTest do
   use ExUnit.Case, async: true
 
-  alias Opal.Agent.{EventLog, State}
+  alias Opal.Agent.{Emitter, State}
   alias Opal.Tool.Debug
 
   describe "execute/2" do
@@ -22,8 +22,8 @@ defmodule Opal.Tool.DebugTest do
           messages: [Opal.Message.user("hello from debug test")]
         }
 
-      EventLog.clear(session_id)
-      EventLog.broadcast(state, {:status_update, "inspecting"})
+      Emitter.clear(session_id)
+      Emitter.broadcast(state, {:status_update, "inspecting"})
 
       assert {:ok, output} =
                Debug.execute(
@@ -37,7 +37,7 @@ defmodule Opal.Tool.DebugTest do
       assert payload["messages"]["count"] == 1
       assert Enum.any?(payload["recent_events"], &(&1["type"] == "status_update"))
 
-      EventLog.clear(session_id)
+      Emitter.clear(session_id)
     end
   end
 
@@ -53,10 +53,10 @@ defmodule Opal.Tool.DebugTest do
           config: Opal.Config.new(%{features: %{debug: %{enabled: false}}})
         }
 
-      EventLog.clear(session_id)
-      EventLog.broadcast(state, {:status_update, "not logged"})
+      Emitter.clear(session_id)
+      Emitter.broadcast(state, {:status_update, "not logged"})
 
-      assert EventLog.recent(session_id, 10) == []
+      assert Emitter.recent(session_id, 10) == []
     end
   end
 
@@ -86,7 +86,7 @@ defmodule Opal.Tool.DebugTest do
           messages: [Opal.Message.user("hello")]
         }
 
-      EventLog.clear(session_id)
+      Emitter.clear(session_id)
 
       assert {:ok, output} = Debug.execute(%{}, %{agent_state: state})
       payload = Jason.decode!(output)
@@ -110,7 +110,7 @@ defmodule Opal.Tool.DebugTest do
           messages: []
         }
 
-      EventLog.clear(session_id)
+      Emitter.clear(session_id)
 
       assert {:ok, output} = Debug.execute(%{"event_limit" => 9999}, %{agent_state: state})
       assert is_binary(output)

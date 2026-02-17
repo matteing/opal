@@ -198,22 +198,19 @@ defmodule Opal.RPC.Protocol do
     %{
       method: "agent/prompt",
       direction: :client_to_server,
-      description: "Send an async user prompt. Results stream as agent/event notifications.",
+      description:
+        "Send a user prompt. If idle the agent starts immediately; if busy the message is queued for injection between tool calls.",
       params: [
         %{name: "session_id", type: :string, required: true, description: "Target session ID."},
         %{name: "text", type: :string, required: true, description: "The user's prompt text."}
       ],
-      result: []
-    },
-    %{
-      method: "agent/steer",
-      direction: :client_to_server,
-      description: "Steer the agent mid-run. If idle, acts like agent/prompt.",
-      params: [
-        %{name: "session_id", type: :string, required: true, description: "Target session ID."},
-        %{name: "text", type: :string, required: true, description: "The steering message."}
-      ],
-      result: []
+      result: [
+        %{
+          name: "queued",
+          type: :boolean,
+          description: "True when the agent was busy and the message was queued."
+        }
+      ]
     },
     %{
       method: "agent/abort",
@@ -827,6 +824,22 @@ defmodule Opal.RPC.Protocol do
              }},
           description: "Current token usage snapshot."
         }
+      ]
+    },
+    %{
+      type: "message_queued",
+      description:
+        "A message was queued because the agent was busy. Emitted immediately on receipt.",
+      fields: [
+        %{name: "text", type: :string, description: "The queued message text."}
+      ]
+    },
+    %{
+      type: "message_applied",
+      description:
+        "A previously queued message has been applied and injected into the conversation.",
+      fields: [
+        %{name: "text", type: :string, description: "The message text."}
       ]
     },
     %{

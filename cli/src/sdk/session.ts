@@ -54,6 +54,8 @@ type EventMap = {
     },
   ];
   statusUpdate: [message: string];
+  messageQueued: [text: string];
+  messageApplied: [text: string];
   error: [reason: string];
   contextDiscovered: [files: string[]];
   skillLoaded: [name: string, description: string];
@@ -220,13 +222,17 @@ export class Session {
   }
 
   /**
-   * Steer the agent mid-run.
+   * Send a prompt without consuming the event stream.
+   *
+   * Use this for queued messages (steers) where events are already being
+   * consumed by an earlier `prompt()` call. Returns `{ queued }` indicating
+   * whether the message was queued or started immediately.
    */
-  async steer(text: string): Promise<void> {
-    await this.client.request("agent/steer", {
+  async sendPrompt(text: string): Promise<{ queued: boolean }> {
+    return (await this.client.request("agent/prompt", {
       sessionId: this.sessionId,
       text,
-    });
+    })) as { queued: boolean };
   }
 
   /**
@@ -325,10 +331,11 @@ export class Session {
   async setDistribution(
     config: { name: string; cookie?: string } | null,
   ): Promise<{ node: string; cookie: string } | null> {
-    const result = await this.client.request("opal/config/set", {
+    // distribution field is handled server-side but not in the generated schema
+    const result = (await this.client.request("opal/config/set", {
       sessionId: this.sessionId,
-      distribution: config as Record<string, unknown> | undefined,
-    });
+      distribution: config,
+    } as unknown as OpalConfigSetParams)) as unknown as Record<string, unknown>;
     return (result.distribution as { node: string; cookie: string } | null) ?? null;
   }
 
@@ -437,6 +444,12 @@ export class Session {
           break;
         case "agentRecovered":
           handler();
+          break;
+        case "messageQueued":
+          handler(event.text);
+          break;
+        case "messageApplied":
+          handler(event.text);
           break;
       }
     }

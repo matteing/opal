@@ -45,6 +45,10 @@ Compiled from `## References` sections across the docs.
 
 - [RFC 8628 — OAuth 2.0 Device Authorization Grant](https://datatracker.ietf.org/doc/html/rfc8628) — GitHub device-code OAuth flow used by Opal. ([installing](../installing.md))
 
+## Context Files & Agent Instructions
+
+- [Evaluating AGENTS.md: Are Repository-Level Context Files Helpful for Coding Agents?](https://arxiv.org/abs/2602.11988) — Gloaguen et al., 2026. Finds that AGENTS.md context files tend to reduce task success rates while increasing inference cost by 20%+; recommends minimal requirements only. (arxiv)
+
 ---
 
 ## TODO

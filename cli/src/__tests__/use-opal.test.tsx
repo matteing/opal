@@ -173,16 +173,20 @@ describe("useOpal hook", () => {
   });
 
   describe("submitSteer", () => {
-    it("adds queued steer message to timeline", async () => {
+    it("adds steer to queuedMessages (not timeline)", async () => {
       const { unmount } = render(React.createElement(HookWrapper));
       await tick(50);
       capturedActions?.submitSteer("Focus on tests");
       await tick();
+      expect(capturedState?.queuedMessages).toContain("Focus on tests");
+      // Should NOT be in the timeline
       const msgs = capturedState?.main.timeline.filter(
-        (e) => e.kind === "message" && e.message.queued === true,
+        (e) => e.kind === "message" && e.message.content === "Focus on tests",
       );
-      expect(msgs?.length).toBeGreaterThanOrEqual(1);
-      expect(msgs?.[0]?.kind === "message" && msgs[0].message.content).toBe("Focus on tests");
+      expect(msgs?.length ?? 0).toBe(0);
+      // Should send via sendPrompt (fire-and-forget), not prompt (async generator)
+      expect(mockSession.sendPrompt).toHaveBeenCalledWith("Focus on tests");
+      expect(mockSession.prompt).not.toHaveBeenCalled();
       unmount();
     });
   });

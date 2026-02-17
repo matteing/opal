@@ -188,16 +188,11 @@ const MessageBlock: FC<{
     if (isUser) {
       return (
         <Box flexDirection="column" marginBottom={1}>
-          <Box width={rowWidth} paddingX={2} borderColor="gray" borderStyle="round">
+          <Box width={rowWidth} paddingX={1} borderColor="gray" borderStyle="round">
             <Text color={colors.userText} wrap="wrap">
               {rendered}
             </Text>
           </Box>
-          {message.queued && (
-            <Box marginLeft={1}>
-              <Text dimColor>[queued]</Text>
-            </Box>
-          )}
         </Box>
       );
     }
@@ -216,7 +211,6 @@ const MessageBlock: FC<{
     return (
       prev.message.content === next.message.content &&
       prev.message.role === next.message.role &&
-      prev.message.queued === next.message.queued &&
       prev.width === next.width &&
       prev.isStreaming === next.isStreaming
     );

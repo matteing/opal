@@ -146,11 +146,11 @@ def execute(args, ctx), do: {:ok, result}
   working_dir: "/path/to/project"
 })
 
-# Send prompt (async)
-:ok = Opal.prompt(agent, "List all files")
+# Send prompt
+%{queued: false} = Opal.prompt(agent, "List all files")
 
-# Steer mid-execution
-:ok = Opal.steer(agent, "Focus on tests instead")
+# Send another prompt while busy — queued and applied between tool calls
+%{queued: true} = Opal.prompt(agent, "Focus on tests instead")
 ```
 
 ### Tool Implementation

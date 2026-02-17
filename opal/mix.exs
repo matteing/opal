@@ -14,6 +14,7 @@ defmodule Opal.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       releases: releases(),
+      dialyzer: [plt_add_apps: [:mix]],
       name: "Opal",
       description: description(),
       package: package(),

@@ -17,7 +17,7 @@ function viewWithTimeline(timeline: TimelineEntry[]): AgentView {
 describe("MessageList visuals", () => {
   it("renders user messages without legacy role badges", () => {
     const view = viewWithTimeline([
-      { kind: "message", message: { role: "user", content: "My prompt line", queued: true } },
+      { kind: "message", message: { role: "user", content: "My prompt line" } },
     ]);
 
     const { lastFrame, unmount } = render(
@@ -30,7 +30,6 @@ describe("MessageList visuals", () => {
 
     const frame = lastFrame() ?? "";
     expect(frame).toContain("My prompt line");
-    expect(frame).toContain("[queued]");
     expect(frame).not.toContain("❯ You");
     unmount();
   });

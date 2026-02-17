@@ -431,16 +431,82 @@ defmodule Opal.Inspect do
   defp to_preview(nil), do: ""
   defp to_preview(val), do: inspect(val, limit: 3, printable_limit: 80)
 
+  # ── State Dump ──────────────────────────────────────────────────────
+
+  @doc """
+  Dumps the full agent state to a temporary file and opens it.
+
+  The state is pretty-printed as an Elixir term and written to
+  `/tmp/opal-state-<session_id>.exs`. Returns the file path.
+
+  ## Options
+
+    * `:path` — custom file path (default: auto-generated temp path)
+    * `:open` — whether to open the file after writing (default: `true`)
+
+  ## Examples
+
+      iex> Opal.Inspect.dump_state()
+      "/tmp/opal-state-abc123def456.exs"
+
+      iex> Opal.Inspect.dump_state(open: false)
+      "/tmp/opal-state-abc123def456.exs"
+
+      iex> Opal.Inspect.dump_state("session-id", path: "/tmp/my-dump.exs")
+      "/tmp/my-dump.exs"
+  """
+  @spec dump_state(keyword()) :: String.t()
+  def dump_state(opts \\ []) when is_list(opts) do
+    s = state()
+    do_dump_state(s, opts)
+  end
+
+  @spec dump_state(String.t(), keyword()) :: String.t()
+  def dump_state(session_id, opts) when is_binary(session_id) do
+    s = state(session_id)
+    do_dump_state(s, opts)
+  end
+
+  defp do_dump_state(%State{} = s, opts) do
+    short_id = String.slice(s.session_id, 0, 12)
+    default_path = Path.join(System.tmp_dir!(), "opal-state-#{short_id}.exs")
+    path = Keyword.get(opts, :path, default_path)
+    open? = Keyword.get(opts, :open, true)
+
+    content =
+      inspect(s,
+        pretty: true,
+        limit: :infinity,
+        printable_limit: :infinity,
+        width: 120
+      )
+
+    File.write!(path, content)
+    IO.puts(IO.ANSI.green() <> "Wrote agent state to #{path}" <> IO.ANSI.reset())
+
+    if open?, do: open_file(path)
+
+    path
+  end
+
+  defp open_file(path) do
+    editor = System.get_env("VISUAL") || System.get_env("EDITOR")
+
+    if editor do
+      System.cmd(editor, [path], stderr_to_stdout: true)
+    else
+      case Opal.Platform.os() do
+        :macos -> System.cmd("open", [path])
+        :linux -> System.cmd("xdg-open", [path])
+        :windows -> System.cmd("cmd", ["/c", "start", "", path])
+      end
+    end
+  end
+
   defp write_and_open(content, path) do
     File.write!(path, content)
     IO.puts(IO.ANSI.green() <> "Wrote system prompt to #{path}" <> IO.ANSI.reset())
-
-    case Opal.Platform.os() do
-      :macos -> System.cmd("open", [path])
-      :linux -> System.cmd("xdg-open", [path])
-      :windows -> System.cmd("cmd", ["/c", "start", "", path])
-    end
-
+    open_file(path)
     :ok
   end
 end

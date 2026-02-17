@@ -251,6 +251,22 @@ export const App: FC<AppProps> = ({ sessionOpts, initialPrompt, onSessionId }) =
 
       {state.showHelp && <HelpMenu onDismiss={actions.dismissHelpMenu} />}
 
+      {state.queuedMessages.length > 0 && (
+        <Box flexDirection="column" paddingX={1}>
+          {state.queuedMessages.map((text, i) => (
+            <Box key={i} gap={1}>
+              <Text color={colors.accent}>↳</Text>
+              <Text dimColor>
+                {text.length > 60 ? text.slice(0, 57) + "…" : text}
+              </Text>
+              <Text dimColor italic>
+                [queued]
+              </Text>
+            </Box>
+          ))}
+        </Box>
+      )}
+
       <BottomBar state={state} actions={actions} />
 
       {state.showDebugPanel && <RpcPanel messages={state.rpcMessages} height={rpcPanelHeight} />}

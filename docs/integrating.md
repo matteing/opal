@@ -98,8 +98,8 @@ The model can be specified in three ways:
 # Sync — blocks until the agent finishes, returns accumulated text
 {:ok, response} = Opal.prompt_sync(agent, "What does this function do?")
 
-# Steer mid-run (injected between tool executions)
-:ok = Opal.steer(agent, "Focus on the tests instead")
+# Redirect mid-run (queued and injected between tool executions)
+%{queued: true} = Opal.prompt(agent, "Focus on the tests instead")
 
 # Abort the current run
 :ok = Opal.abort(agent)
@@ -467,8 +467,7 @@ sequenceDiagram
 | Method | Params | Description |
 |--------|--------|-------------|
 | `session/start` | `model?`, `system_prompt?`, `working_dir?`, `tools?`, `mcp_servers?`, `features?`, `session?` | Start a session, returns `session_id`, `auth` probe |
-| `agent/prompt` | `session_id`, `text` | Send a prompt (async — events stream via notifications) |
-| `agent/steer` | `session_id`, `text` | Steer the agent mid-run |
+| `agent/prompt` | `session_id`, `text` | Send a prompt (queued if busy — events stream via notifications) |
 | `agent/abort` | `session_id` | Cancel the current run |
 | `agent/state` | `session_id` | Query agent status, model, tools, message count |
 | `session/list` | — | List active sessions |
@@ -822,8 +821,8 @@ session.on("error", (reason) => {
 ### Session Methods
 
 ```typescript
-// Steer the agent mid-run
-await session.steer("Focus on performance instead");
+// Send another prompt while busy (queued and applied between tool calls)
+await session.prompt("Focus on performance instead");
 
 // Abort
 await session.abort();

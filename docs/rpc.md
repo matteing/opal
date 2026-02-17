@@ -21,8 +21,7 @@ Client → Server requests:
 | Method | Purpose |
 |--------|---------|
 | `session/start` | Start a new agent session |
-| `agent/prompt` | Send a user message |
-| `agent/steer` | Inject guidance mid-turn |
+| `agent/prompt` | Send a user message (queued if busy) |
 | `agent/abort` | Cancel the current turn |
 | `agent/state` | Get agent state (model, usage, status) |
 | `session/list` | List saved sessions |

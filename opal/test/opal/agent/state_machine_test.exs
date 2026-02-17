@@ -135,7 +135,7 @@ defmodule Opal.Agent.StateMachineTest do
 
   describe "prompt while busy" do
     @tag timeout: 10_000
-    test "prompt during streaming is queued as pending_steers" do
+    test "prompt during streaming is queued as pending_messages" do
       :persistent_term.put({SlowProvider, :delay}, 500)
       %{pid: pid, session_id: sid} = start_agent(provider: SlowProvider)
 
@@ -149,7 +149,7 @@ defmodule Opal.Agent.StateMachineTest do
       assert_receive {:opal_event, ^sid, {:agent_end, _msgs, _usage}}, 5000
 
       state = Agent.get_state(pid)
-      assert state.pending_steers == []
+      assert state.pending_messages == []
     end
 
     @tag timeout: 10_000
@@ -167,7 +167,7 @@ defmodule Opal.Agent.StateMachineTest do
       Process.sleep(3000)
 
       state = Agent.get_state(pid)
-      assert state.pending_steers == []
+      assert state.pending_messages == []
       # All three prompts should have been processed
       user_messages = Enum.filter(state.messages, &(&1.role == :user))
       assert length(user_messages) >= 3
@@ -190,8 +190,8 @@ defmodule Opal.Agent.StateMachineTest do
       state = Agent.get_state(pid)
       assert state.status == :idle
 
-      # The queued prompt should still be in pending_steers
-      assert length(state.pending_steers) >= 1
+      # The queued prompt should still be in pending_messages
+      assert length(state.pending_messages) >= 1
     end
   end
 

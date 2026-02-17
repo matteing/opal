@@ -94,16 +94,10 @@ defmodule Opal.SubAgent do
       "SubAgent spawn parent=#{parent_state.session_id} child=#{session_id} model=#{model.id}"
     )
 
-    # Filter out tools that shouldn't be available to sub-agents;
-    # inject AskParent so sub-agents can ask questions back to the parent.
+    # Filter out tools that shouldn't be available to sub-agents.
+    # Sub-agents cannot ask questions — only top-level agents can.
     parent_tools = Map.get(overrides, :tools, parent_state.tools)
-
-    tools =
-      parent_tools
-      |> Enum.reject(&(&1 == Opal.Tool.AskUser))
-      |> then(fn ts ->
-        if Opal.Tool.AskParent in ts, do: ts, else: ts ++ [Opal.Tool.AskParent]
-      end)
+    tools = Enum.reject(parent_tools, &(&1 == Opal.Tool.AskUser))
 
     opts = [
       session_id: session_id,
@@ -113,8 +107,7 @@ defmodule Opal.SubAgent do
       working_dir: Map.get(overrides, :working_dir, parent_state.working_dir),
       config: parent_state.config,
       provider: provider,
-      tool_supervisor: parent_state.tool_supervisor,
-      question_handler: Map.get(overrides, :question_handler)
+      tool_supervisor: parent_state.tool_supervisor
     ]
 
     DynamicSupervisor.start_child(parent_state.sub_agent_supervisor, {Opal.Agent, opts})

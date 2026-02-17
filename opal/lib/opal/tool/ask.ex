@@ -1,12 +1,13 @@
 defmodule Opal.Tool.Ask do
   @moduledoc """
-  Shared spec and RPC helper for the ask-user family of tools.
+  Shared spec and RPC helper for the ask-user tool.
 
-  Both `Opal.Tool.AskUser` (top-level agent) and `Opal.Tool.AskParent`
-  (sub-agent) present an identical `ask_user` interface to the LLM.
-  This module holds the common schema, meta, and the RPC call so the
-  two tools stay DRY — the only thing that differs is the delivery
-  path in `execute/2`.
+  `Opal.Tool.AskUser` (top-level agent) presents the `ask_user` interface
+  to the LLM. This module holds the common schema, meta, and the RPC call
+  so the tool stays DRY.
+
+  Sub-agents do not have access to this tool — only top-level agents can
+  ask the user questions.
   """
 
   @doc "Shared tool name — both tools expose `ask_user` to the LLM."

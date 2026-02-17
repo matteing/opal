@@ -3,8 +3,8 @@ defmodule Opal do
   Public API for the Opal coding agent SDK.
 
   Provides functions to start agent sessions, send prompts (async and sync),
-  steer agents mid-run, and manage session lifecycle. All agent events are
-  broadcast via `Opal.Events` for real-time observability.
+  and manage session lifecycle. All agent events are broadcast via
+  `Opal.Events` for real-time observability.
 
   Session defaults (model, tools, shell, data_dir) come from `Opal.Config`
   and can be overridden per-session.
@@ -83,12 +83,14 @@ defmodule Opal do
   end
 
   @doc """
-  Sends an asynchronous prompt to the agent.
+  Sends a prompt to the agent. Returns `%{queued: boolean}`.
+
+  If the agent is idle, it starts immediately. If busy, the message is
+  queued and applied between tool executions.
 
   Subscribe to `Opal.Events` with the session ID to receive streaming output.
-  Returns `:ok` immediately.
   """
-  @spec prompt(GenServer.server(), String.t()) :: :ok
+  @spec prompt(GenServer.server(), String.t()) :: %{queued: boolean()}
   def prompt(agent, text) do
     Opal.Agent.prompt(agent, text)
   end
@@ -116,20 +118,9 @@ defmodule Opal do
   end
 
   @doc """
-  Steers the agent mid-run.
-
-  If idle, acts like `prompt/2`. If running, the message is picked up
-  between tool executions.
-  """
-  @spec steer(GenServer.server(), String.t()) :: :ok
-  def steer(agent, text) do
-    Opal.Agent.steer(agent, text)
-  end
-
-  @doc """
   Sends a follow-up prompt to the agent. Convenience wrapper for `prompt/2`.
   """
-  @spec follow_up(GenServer.server(), String.t()) :: :ok
+  @spec follow_up(GenServer.server(), String.t()) :: %{queued: boolean()}
   def follow_up(agent, text) do
     Opal.Agent.follow_up(agent, text)
   end

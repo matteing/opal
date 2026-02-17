@@ -7,8 +7,11 @@ defmodule Opal.Agent.UsageTracker do
   for messages added since the last report.
   """
 
+  # compact/2 spec includes {:error, _} but Dialyzer infers :ok from current paths
+  @dialyzer {:no_match, [maybe_auto_compact: 1, handle_overflow_compaction: 2]}
+
   require Logger
-  alias Opal.Agent.State
+  alias Opal.Agent.{Emitter, State}
 
   # Threshold ratio for auto-compaction when estimated tokens exceed this percentage of context window
   @auto_compact_threshold 0.80
@@ -34,7 +37,7 @@ defmodule Opal.Agent.UsageTracker do
         "Auto-compacting: ~#{estimated_tokens} estimated tokens / #{context_window} context (#{Float.round(ratio * 100, 1)}%)"
       )
 
-      broadcast(state, {:compaction_start, length(state.messages)})
+      Emitter.broadcast(state, {:compaction_start, length(state.messages)})
 
       case Opal.Session.Compaction.compact(session,
              provider: state.provider,
@@ -43,7 +46,7 @@ defmodule Opal.Agent.UsageTracker do
            ) do
         :ok ->
           new_path = Opal.Session.get_path(session)
-          broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
+          Emitter.broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
 
           %{
             state
@@ -94,7 +97,7 @@ defmodule Opal.Agent.UsageTracker do
   @spec handle_overflow_compaction(State.t(), term()) :: State.t()
   def handle_overflow_compaction(%State{session: nil} = state, reason) do
     Logger.error("Context overflow but no session attached — cannot compact")
-    broadcast(state, {:error, {:overflow_no_session, reason}})
+    Emitter.broadcast(state, {:error, {:overflow_no_session, reason}})
     %{state | status: :idle}
   end
 
@@ -106,7 +109,7 @@ defmodule Opal.Agent.UsageTracker do
     keep_tokens = div(context_window, 5)
 
     Logger.info("Context overflow detected — compacting to #{keep_tokens} tokens")
-    broadcast(state, {:compaction_start, :overflow})
+    Emitter.broadcast(state, {:compaction_start, :overflow})
 
     case Opal.Session.Compaction.compact(session,
            provider: state.provider,
@@ -116,7 +119,7 @@ defmodule Opal.Agent.UsageTracker do
          ) do
       :ok ->
         new_path = Opal.Session.get_path(session)
-        broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
+        Emitter.broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
 
         state = %{
           state
@@ -131,7 +134,7 @@ defmodule Opal.Agent.UsageTracker do
 
       {:error, compact_error} ->
         Logger.error("Overflow compaction failed: #{inspect(compact_error)}")
-        broadcast(state, {:error, {:overflow_compact_failed, reason, compact_error}})
+        Emitter.broadcast(state, {:error, {:overflow_compact_failed, reason, compact_error}})
         %{state | status: :idle}
     end
   end
@@ -187,7 +190,10 @@ defmodule Opal.Agent.UsageTracker do
 
     context_window = model_context_window(state.model)
 
-    broadcast(state, {:usage_update, %{state.token_usage | context_window: context_window}})
+    Emitter.broadcast(
+      state,
+      {:usage_update, %{state.token_usage | context_window: context_window}}
+    )
 
     # Flag usage-based overflow so finalize_response/1 can trigger compaction
     # before the *next* turn pushes past the limit.
@@ -202,6 +208,4 @@ defmodule Opal.Agent.UsageTracker do
   # Private helper functions
 
   defp model_context_window(model), do: Opal.Provider.Registry.context_window(model)
-
-  defp broadcast(%State{} = state, event), do: Opal.Agent.EventLog.broadcast(state, event)
 end

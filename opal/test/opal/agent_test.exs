@@ -627,7 +627,7 @@ defmodule Opal.AgentTest do
 
     @impl true
     def execute(%{"input" => input}, _context) do
-      # Slow enough for steer message to arrive during execution
+      # Slow enough for queued message to arrive during execution
       Process.sleep(100)
       {:ok, "Echo: #{input}"}
     end
@@ -827,9 +827,9 @@ defmodule Opal.AgentTest do
   # ============================================================
 
   describe "prompt flow — simple text response" do
-    test "prompt/2 returns :ok immediately" do
+    test "prompt/2 returns queued status immediately" do
       %{pid: pid} = start_agent()
-      assert :ok = Agent.prompt(pid, "Hello")
+      assert %{queued: false} = Agent.prompt(pid, "Hello")
     end
 
     test "agent broadcasts {:agent_start} event" do
@@ -1022,10 +1022,10 @@ defmodule Opal.AgentTest do
   # ============================================================
 
   describe "steering" do
-    test "steer/2 while idle acts like prompt" do
+    test "prompt/2 while idle acts like prompt" do
       %{pid: pid, session_id: sid} = start_agent()
 
-      Agent.steer(pid, "Steer message")
+      Agent.prompt(pid, "Steer message")
 
       assert_receive {:opal_event, ^sid, {:agent_start}}, 1000
       assert_receive {:opal_event, ^sid, {:agent_end, messages, _usage}}, 2000
@@ -1035,9 +1035,9 @@ defmodule Opal.AgentTest do
       assert user_msg.content == "Steer message"
     end
 
-    test "steer/2 while running — message is processed" do
-      # When running, steer cast is re-injected and picked up by
-      # check_for_steering between tool executions.
+    test "prompt/2 while running — message is processed" do
+      # When running, prompt call is queued and picked up by
+      # drain_pending_messages between tool executions.
       %{pid: pid, session_id: sid} = start_agent(scenario: :tool_call, tools: [SlowEchoTool])
 
       Agent.prompt(pid, "Start")
@@ -1046,13 +1046,13 @@ defmodule Opal.AgentTest do
       # Wait for tool execution to start (the tool takes 100ms)
       assert_receive {:opal_event, ^sid, {:tool_execution_start, "echo_tool", _, _, _}}, 2000
 
-      # Send steer while tool is executing — message sits in mailbox
-      Agent.steer(pid, "Also do this")
+      # Send prompt while tool is executing — message sits in mailbox
+      Agent.prompt(pid, "Also do this")
 
       # Wait for completion
       assert_receive {:opal_event, ^sid, {:agent_end, messages, _usage}}, 5000
 
-      # The steer message should be in the messages (picked up by check_for_steering)
+      # The queued message should be in the messages (picked up by drain_pending_messages)
       steer_msgs =
         Enum.filter(messages, fn m ->
           m.role == :user && m.content == "Also do this"

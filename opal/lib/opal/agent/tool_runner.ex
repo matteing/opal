@@ -10,13 +10,13 @@ defmodule Opal.Agent.ToolRunner do
   """
 
   require Logger
-  alias Opal.Agent.State
+  alias Opal.Agent.{Emitter, State}
 
   @doc """
   Starts parallel execution of a batch of tool calls.
 
   All tool calls are spawned concurrently as supervised tasks. The agent
-  remains responsive to abort, steer, and other messages while tools run.
+  remains responsive to abort, prompt, and other messages while tools run.
   Results are collected as each task completes; when all are done,
   `finalize_tool_batch/1` continues to the next turn.
   """
@@ -53,7 +53,7 @@ defmodule Opal.Agent.ToolRunner do
   end
 
   def handle_tool_result(ref, tc, result, %State{} = state) do
-    broadcast(state, {:tool_execution_end, tc.name, tc.call_id, result})
+    Emitter.broadcast(state, {:tool_execution_end, tc.name, tc.call_id, result})
 
     state = %{
       state
@@ -120,7 +120,7 @@ defmodule Opal.Agent.ToolRunner do
   Builds the shared context map passed to every tool execution.
 
   Creates a context map containing working directory, session info,
-  configuration, and optional question handler for sub-agents.
+  and configuration.
   """
   @spec build_tool_context(State.t()) :: map()
   def build_tool_context(%State{} = state) do
@@ -131,7 +131,6 @@ defmodule Opal.Agent.ToolRunner do
       agent_pid: self(),
       agent_state: state
     }
-    |> put_if(:question_handler, state.question_handler)
   end
 
   @doc """
@@ -186,22 +185,22 @@ defmodule Opal.Agent.ToolRunner do
   end
 
   @doc """
-  Processes pending steering messages if any exist.
+  Drains pending messages queued while the agent was busy.
 
-  If steering messages are pending, injects them as user messages
-  and returns updated state.
+  Injects them as user messages and returns updated state.
   """
-  @spec check_for_steering(State.t()) :: State.t()
-  def check_for_steering(%State{pending_steers: []} = state), do: state
+  @spec drain_pending_messages(State.t()) :: State.t()
+  def drain_pending_messages(%State{pending_messages: []} = state), do: state
 
-  def check_for_steering(%State{pending_steers: steers} = state) do
+  def drain_pending_messages(%State{pending_messages: pending} = state) do
     state =
-      Enum.reduce(steers, state, fn text, acc ->
-        Logger.debug("Steering message received: #{String.slice(text, 0, 50)}...")
+      Enum.reduce(pending, state, fn text, acc ->
+        Logger.debug("Pending message applied: #{String.slice(text, 0, 50)}...")
+        Emitter.broadcast(acc, {:message_applied, text})
         append_message(acc, Opal.Message.user(text))
       end)
 
-    %{state | pending_steers: []}
+    %{state | pending_messages: []}
   end
 
   @doc """
@@ -229,9 +228,9 @@ defmodule Opal.Agent.ToolRunner do
       "Tool start session=#{state.session_id} tool=#{tc.name} args=#{inspect(tc.arguments, limit: 5, printable_limit: 200)}"
     )
 
-    broadcast(state, {:tool_execution_start, tc.name, tc.call_id, tc.arguments, meta})
+    Emitter.broadcast(state, {:tool_execution_start, tc.name, tc.call_id, tc.arguments, meta})
 
-    emit = fn chunk -> broadcast(state, {:tool_output, tc.name, chunk}) end
+    emit = fn chunk -> Emitter.broadcast(state, {:tool_output, tc.name, chunk}) end
     ctx = state.tool_context |> Map.put(:emit, emit) |> Map.put(:call_id, tc.call_id)
 
     task =
@@ -242,8 +241,6 @@ defmodule Opal.Agent.ToolRunner do
 
     %{state | pending_tool_tasks: Map.put(state.pending_tool_tasks, task.ref, {task, tc})}
   end
-
-  defp broadcast(%State{} = state, event), do: Opal.Agent.EventLog.broadcast(state, event)
 
   defp append_message(%State{session: nil} = state, msg) do
     %{state | messages: [msg | state.messages]}
@@ -262,9 +259,6 @@ defmodule Opal.Agent.ToolRunner do
     Opal.Session.append_many(session, msgs)
     %{state | messages: Enum.reverse(msgs) ++ state.messages}
   end
-
-  defp put_if(map, _key, nil), do: map
-  defp put_if(map, key, value), do: Map.put(map, key, value)
 
   # Applies a tool effect to the agent state, returning {result, state}.
   # Effects let tools declare state mutations without re-entrant calls.
@@ -289,7 +283,7 @@ defmodule Opal.Agent.ToolRunner do
 
           new_active = [skill_name | state.active_skills]
           state = append_message(%{state | active_skills: new_active}, skill_msg)
-          broadcast(state, {:skill_loaded, skill_name, skill.description})
+          Emitter.broadcast(state, {:skill_loaded, skill_name, skill.description})
 
           {{:ok, "Skill '#{skill_name}' loaded. Its instructions are now in your context."},
            state}

@@ -1,8 +1,8 @@
 defmodule Opal.Agent.ConcurrentSignalsTest do
   @moduledoc """
   Tests for race conditions between concurrent agent signals:
-  abort during retry delay, steer+abort interleave, configure during
-  streaming, multiple steers coalesce.
+  abort during retry delay, prompt+abort interleave, configure during
+  streaming, multiple prompts coalesce.
   """
   use ExUnit.Case, async: false
 
@@ -184,31 +184,31 @@ defmodule Opal.Agent.ConcurrentSignalsTest do
     :ok
   end
 
-  describe "steer + abort interleave" do
+  describe "prompt + abort interleave" do
     @tag timeout: 10_000
-    test "steers preserved after abort, not executed until next prompt" do
+    test "prompts preserved after abort, not executed until next prompt" do
       :persistent_term.put({SlowProvider, :delay}, 1000)
       %{pid: pid, session_id: sid} = start_agent()
 
       Agent.prompt(pid, "Hello")
       assert_receive {:opal_event, ^sid, {:agent_start}}, 2000
 
-      # Queue a steer then abort
-      Agent.steer(pid, "Focus on tests")
+      # Queue a prompt then abort
+      Agent.prompt(pid, "Focus on tests")
       Process.sleep(10)
       Agent.abort(pid)
 
       Process.sleep(100)
       state = Agent.get_state(pid)
       assert state.status == :idle
-      # Steers should still be in the queue
-      assert length(state.pending_steers) >= 1
+      # Queued prompts should still be in the queue
+      assert length(state.pending_messages) >= 1
     end
   end
 
-  describe "multiple steers coalesce" do
+  describe "multiple prompts coalesce" do
     @tag timeout: 10_000
-    test "three steers during tool execution all injected at boundary" do
+    test "three prompts during tool execution all injected at boundary" do
       %{pid: pid, session_id: sid} =
         start_agent(provider: ToolSlowProvider, tools: [SlowTool])
 
@@ -217,18 +217,18 @@ defmodule Opal.Agent.ConcurrentSignalsTest do
       # Wait for tool to start
       assert_receive {:opal_event, ^sid, {:tool_execution_start, _, _, _, _}}, 5000
 
-      # Send three steers while tool is executing
-      Agent.steer(pid, "Steer 1")
-      Agent.steer(pid, "Steer 2")
-      Agent.steer(pid, "Steer 3")
+      # Send three prompts while tool is executing
+      Agent.prompt(pid, "Steer 1")
+      Agent.prompt(pid, "Steer 2")
+      Agent.prompt(pid, "Steer 3")
 
       # Wait for completion
       Process.sleep(5000)
 
       state = Agent.get_state(pid)
-      assert state.pending_steers == []
+      assert state.pending_messages == []
 
-      # All steers should be in messages as user messages
+      # All prompts should be in messages as user messages
       user_msgs = Enum.filter(state.messages, &(&1.role == :user))
       contents = Enum.map(user_msgs, & &1.content)
       assert "Steer 1" in contents

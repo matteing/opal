@@ -18,6 +18,10 @@ defmodule Opal.RPC.Handler do
 
   require Logger
 
+  # compact/2 and query_raw/2 specs include {:error, _} paths that Dialyzer
+  # cannot currently reach — keep the defensive branches.
+  @dialyzer {:no_match, handle: 2}
+
   @type result :: {:ok, map()} | {:error, integer(), String.t(), term()}
 
   @doc """
@@ -74,8 +78,8 @@ defmodule Opal.RPC.Handler do
   def handle("agent/prompt", %{"session_id" => sid, "text" => text}) do
     case lookup_agent(sid) do
       {:ok, agent} ->
-        Opal.prompt(agent, text)
-        {:ok, %{}}
+        result = Opal.prompt(agent, text)
+        {:ok, result}
 
       {:error, reason} ->
         {:error, Opal.RPC.invalid_params(), "Session not found", reason}
@@ -83,21 +87,6 @@ defmodule Opal.RPC.Handler do
   end
 
   def handle("agent/prompt", _params) do
-    {:error, Opal.RPC.invalid_params(), "Missing required params: session_id, text", nil}
-  end
-
-  def handle("agent/steer", %{"session_id" => sid, "text" => text}) do
-    case lookup_agent(sid) do
-      {:ok, agent} ->
-        Opal.steer(agent, text)
-        {:ok, %{}}
-
-      {:error, reason} ->
-        {:error, Opal.RPC.invalid_params(), "Session not found", reason}
-    end
-  end
-
-  def handle("agent/steer", _params) do
     {:error, Opal.RPC.invalid_params(), "Missing required params: session_id, text", nil}
   end
 
@@ -697,7 +686,7 @@ defmodule Opal.RPC.Handler do
     else
       node_name = String.to_atom(name)
 
-      case Node.start(node_name, :shortnames) do
+      case Node.start(node_name, name_domain: :shortnames) do
         {:ok, _pid} ->
           Node.set_cookie(cookie)
           Opal.Application.write_node_file(Node.self(), cookie)

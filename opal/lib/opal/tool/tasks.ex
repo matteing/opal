@@ -155,7 +155,7 @@ defmodule Opal.Tool.Tasks do
   @doc """
   Return active tasks as a list of maps for a session or scope key.
   """
-  @spec query_raw(map() | String.t(), String.t()) :: {:ok, [map()]} | {:error, String.t()}
+  @spec query_raw(map() | String.t(), String.t() | nil) :: {:ok, [map()]} | {:error, String.t()}
   def query_raw(scope, _query) do
     with_dets(scope_key(scope), fn table ->
       tasks =

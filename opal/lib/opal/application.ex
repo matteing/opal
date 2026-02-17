@@ -54,7 +54,7 @@ defmodule Opal.Application do
       node_name = :"opal_#{System.pid()}"
       cookie = distribution_cookie()
 
-      case Node.start(node_name, :shortnames) do
+      case Node.start(node_name, name_domain: :shortnames) do
         {:ok, _pid} ->
           Node.set_cookie(cookie)
           write_node_file(Node.self(), cookie)

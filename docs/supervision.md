@@ -185,16 +185,16 @@ sequenceDiagram
     participant Caller
     participant Agent
 
-    Caller->>Agent: Agent.prompt/2 (:gen_statem.cast)
-    Note right of Caller: :ok (immediate)
+    Caller->>Agent: Agent.prompt/2 (:gen_statem.call)
+    Agent-->>Caller: %{queued: false}
     Note right of Agent: begins turn...
 ```
 
-Used for: `Agent.prompt/2`, `Agent.steer/2`, `Agent.abort/1`
+Used for: `Agent.prompt/2`, `Agent.follow_up/2`, `Agent.abort/1`
 
-Prompts are fire-and-forget casts. The caller gets `:ok` immediately and
-observes progress through events (pattern 3). This keeps the caller
-non-blocking — critical for interactive CLI and web UIs.
+Prompts are synchronous calls that return `%{queued: boolean}`. The caller
+observes progress through events (pattern 3). This keeps the UI responsive —
+critical for interactive CLI and web UIs.
 
 ### 3. Registry PubSub — Event Broadcasting
 

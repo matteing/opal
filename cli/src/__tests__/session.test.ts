@@ -133,16 +133,17 @@ describe("Session", () => {
     session.close();
   });
 
-  it("steer() sends agent/steer", async () => {
+  it("sendPrompt() sends agent/prompt without event stream", async () => {
     const session = await startSession();
-    const p = session.steer("Focus on tests");
+    const p = session.sendPrompt("Focus on tests");
     await new Promise((r) => setTimeout(r, 10));
-    respondToRequest(mockProc, 2, {});
-    await p;
+    respondToRequest(mockProc, 2, { queued: true });
+    const result = await p;
 
     const msg = JSON.parse(writes[writes.length - 1].replace("\n", ""));
-    expect(msg.method).toBe("agent/steer");
-    expect(msg.params.session_id).toBe("test-session");
+    expect(msg.method).toBe("agent/prompt");
+    expect(msg.params.text).toBe("Focus on tests");
+    expect(result).toEqual({ queued: true });
     session.close();
   });
 

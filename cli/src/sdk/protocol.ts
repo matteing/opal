@@ -17,7 +17,10 @@ export interface AgentPromptParams {
   text: string;
 }
 
-export type AgentPromptResult = Record<string, never>;
+export interface AgentPromptResult {
+  /** True when the agent was busy and the message was queued. */
+  queued: boolean;
+}
 
 export interface AgentStateParams {
   /** Target session ID. */
@@ -36,15 +39,6 @@ export interface AgentStateResult {
   /** Active tool names. */
   tools: string[];
 }
-
-export interface AgentSteerParams {
-  /** Target session ID. */
-  sessionId: string;
-  /** The steering message. */
-  text: string;
-}
-
-export type AgentSteerResult = Record<string, never>;
 
 export type AuthLoginParams = Record<string, never>;
 
@@ -126,8 +120,6 @@ export interface OpalConfigGetParams {
 }
 
 export interface OpalConfigGetResult {
-  /** Erlang distribution state, or null if not active. */
-  distribution: Record<string, unknown>;
   /** Current runtime feature flags. */
   features: {
     debug: boolean;
@@ -140,8 +132,6 @@ export interface OpalConfigGetResult {
 }
 
 export interface OpalConfigSetParams {
-  /** Erlang distribution config. Set {name, cookie?} to start, null to stop. */
-  distribution?: Record<string, unknown>;
   /** Feature flags to update. */
   features?: {
     debug: boolean;
@@ -156,8 +146,6 @@ export interface OpalConfigSetParams {
 }
 
 export interface OpalConfigSetResult {
-  /** Erlang distribution state, or null if not active. */
-  distribution: Record<string, unknown>;
   /** Current runtime feature flags. */
   features: {
     debug: boolean;
@@ -383,10 +371,22 @@ export interface ErrorEvent {
   reason: string;
 }
 
+export interface MessageAppliedEvent {
+  type: "messageApplied";
+  /** The message text. */
+  text: string;
+}
+
 export interface MessageDeltaEvent {
   type: "messageDelta";
   /** The text fragment. */
   delta: string;
+}
+
+export interface MessageQueuedEvent {
+  type: "messageQueued";
+  /** The queued message text. */
+  text: string;
 }
 
 export interface MessageStartEvent {
@@ -474,7 +474,9 @@ export type AgentEvent =
   | AgentStartEvent
   | ContextDiscoveredEvent
   | ErrorEvent
+  | MessageAppliedEvent
   | MessageDeltaEvent
+  | MessageQueuedEvent
   | MessageStartEvent
   | SkillLoadedEvent
   | StatusUpdateEvent
@@ -492,7 +494,6 @@ export const Methods = {
   AGENT_ABORT: "agent/abort" as const,
   AGENT_PROMPT: "agent/prompt" as const,
   AGENT_STATE: "agent/state" as const,
-  AGENT_STEER: "agent/steer" as const,
   AUTH_LOGIN: "auth/login" as const,
   AUTH_POLL: "auth/poll" as const,
   AUTH_SET_KEY: "auth/set_key" as const,
@@ -552,7 +553,6 @@ export interface MethodTypes {
   "agent/abort": { params: AgentAbortParams; result: AgentAbortResult };
   "agent/prompt": { params: AgentPromptParams; result: AgentPromptResult };
   "agent/state": { params: AgentStateParams; result: AgentStateResult };
-  "agent/steer": { params: AgentSteerParams; result: AgentSteerResult };
   "auth/login": { params: AuthLoginParams; result: AuthLoginResult };
   "auth/poll": { params: AuthPollParams; result: AuthPollResult };
   "auth/set_key": { params: AuthSet_keyParams; result: AuthSet_keyResult };

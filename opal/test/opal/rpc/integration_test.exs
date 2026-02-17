@@ -456,14 +456,6 @@ defmodule Opal.RPC.IntegrationTest do
       assert msg["error"]["code"] == -32602
     end
 
-    test "agent/steer without params returns invalid_params" do
-      server = start_server()
-      send_request(server, 1, "agent/steer", %{})
-
-      msg = recv_raw()
-      assert msg["error"]["code"] == -32602
-    end
-
     test "agent/abort without params returns invalid_params" do
       server = start_server()
       send_request(server, 1, "agent/abort", %{})
@@ -540,7 +532,7 @@ defmodule Opal.RPC.IntegrationTest do
 
       prompt_resp = recv_raw()
       assert prompt_resp["id"] == 2
-      assert prompt_resp["result"] == %{}
+      assert prompt_resp["result"]["queued"] == false
 
       # 3. Collect streaming notifications until agent_end
       events =
@@ -616,7 +608,7 @@ defmodule Opal.RPC.IntegrationTest do
       })
 
       prompt_resp = recv_raw()
-      assert prompt_resp["result"] == %{}
+      assert prompt_resp["result"]["queued"] == false
 
       # 3. Collect all events until agent_end
       events =

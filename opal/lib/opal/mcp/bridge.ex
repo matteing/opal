@@ -14,6 +14,9 @@ defmodule Opal.MCP.Bridge do
   with the server name: `weather_get_weather`, `backup_get_weather`.
   """
 
+  # MCP servers may return lists or maps — defensive guards are intentional
+  @dialyzer {:no_match, do_discover_tools: 1}
+
   require Logger
 
   @doc """

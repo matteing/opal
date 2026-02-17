@@ -24,8 +24,11 @@ defmodule Opal.Agent do
 
   @behaviour :gen_statem
 
+  # MapSet is opaque — Dialyzer can't see through recursive calls that thread it
+  @dialyzer {:no_opaque, find_orphaned_calls: 3}
+
   require Logger
-  alias Opal.Agent.State
+  alias Opal.Agent.{Emitter, State}
 
   # --- Public API ---
 
@@ -50,7 +53,6 @@ defmodule Opal.Agent do
     * `:sub_agent_supervisor` — supervisor for child agents
     * `:mcp_supervisor` — supervisor for MCP server connections
     * `:mcp_servers` — MCP server config maps (default: `[]`)
-    * `:question_handler` — callback for interactive tool prompts
   """
   @type start_opts :: [
           {:session_id, String.t()}
@@ -66,7 +68,6 @@ defmodule Opal.Agent do
           | {:sub_agent_supervisor, Supervisor.supervisor()}
           | {:mcp_supervisor, Supervisor.supervisor() | nil}
           | {:mcp_servers, [map()]}
-          | {:question_handler, (map() -> {:ok, String.t()} | {:error, term()}) | nil}
         ]
 
   @doc """
@@ -89,34 +90,23 @@ defmodule Opal.Agent do
   end
 
   @doc """
-  Sends an asynchronous user prompt to the agent.
+  Sends a user prompt to the agent.
 
-  Appends a user message, sets status to `:running`, and begins a new LLM turn.
-  Returns `:ok` immediately.
+  If the agent is idle, it starts processing immediately (`queued: false`).
+  If busy, the message is queued and applied between tool executions
+  (`queued: true`).
   """
-  @spec prompt(GenServer.server(), String.t()) :: :ok
+  @spec prompt(GenServer.server(), String.t()) :: %{queued: boolean()}
   def prompt(agent, text) when is_binary(text) do
-    :gen_statem.cast(agent, {:prompt, text})
-  end
-
-  @doc """
-  Injects a steering message into the agent.
-
-  If the agent is idle, this behaves like `prompt/2`. If the agent is running
-  or streaming, the steering message is queued in the GenServer mailbox and
-  picked up between tool executions.
-  """
-  @spec steer(GenServer.server(), String.t()) :: :ok
-  def steer(agent, text) when is_binary(text) do
-    :gen_statem.cast(agent, {:steer, text})
+    :gen_statem.call(agent, {:prompt, text})
   end
 
   @doc """
   Sends a follow-up prompt to the agent. Convenience alias for `prompt/2`.
   """
-  @spec follow_up(GenServer.server(), String.t()) :: :ok
+  @spec follow_up(GenServer.server(), String.t()) :: %{queued: boolean()}
   def follow_up(agent, text) when is_binary(text) do
-    :gen_statem.cast(agent, {:prompt, text})
+    :gen_statem.call(agent, {:prompt, text})
   end
 
   @doc """
@@ -235,7 +225,6 @@ defmodule Opal.Agent do
         context_files: context_files,
         available_skills: available_skills,
         active_skills: [],
-        question_handler: Keyword.get(opts, :question_handler),
         token_usage: %{
           prompt_tokens: 0,
           completion_tokens: 0,
@@ -246,7 +235,7 @@ defmodule Opal.Agent do
       }
       |> maybe_recover_session()
 
-    Opal.Agent.EventLog.clear(session_id)
+    Emitter.clear(session_id)
 
     tools_str = base_tools |> Enum.map(& &1.name()) |> Enum.join(", ")
 
@@ -255,7 +244,7 @@ defmodule Opal.Agent do
         "mcp_tools=#{length(mcp_tools)} skills=#{length(state.available_skills)}"
     )
 
-    if context_files != [], do: broadcast(state, {:context_discovered, context_files})
+    if context_files != [], do: Emitter.broadcast(state, {:context_discovered, context_files})
 
     {:ok, :idle, state}
   end
@@ -329,7 +318,7 @@ defmodule Opal.Agent do
     if Opal.Session.current_id(session) do
       messages = Opal.Session.get_path(session)
       Logger.info("Agent recovered session=#{state.session_id} messages=#{length(messages)}")
-      broadcast(state, {:agent_recovered})
+      Emitter.broadcast(state, {:agent_recovered})
       %{state | messages: Enum.reverse(messages)}
     else
       state
@@ -372,7 +361,14 @@ defmodule Opal.Agent do
 
   defp dispatch_state_event(_event_type, _event_content, state), do: {:keep_state, state}
 
-  defp handle_cast({:prompt, text}, %State{status: :idle} = state) do
+  defp handle_cast(:abort, %State{} = state) do
+    state = cancel_streaming(state)
+    state = cancel_tool_execution(state)
+    Emitter.broadcast(state, {:agent_abort})
+    %{state | status: :idle}
+  end
+
+  defp handle_call({:prompt, text}, _from, %State{status: :idle} = state) do
     Logger.debug(
       "Prompt received session=#{state.session_id} len=#{String.length(text)} chars=\"#{String.slice(text, 0, 80)}\""
     )
@@ -380,39 +376,19 @@ defmodule Opal.Agent do
     user_msg = Opal.Message.user(text)
     state = append_message(state, user_msg)
     state = %{state | status: :running}
-    broadcast(state, {:agent_start})
-    run_turn_internal(state)
+    Emitter.broadcast(state, {:agent_start})
+    state = run_turn_internal(state)
+    {%{queued: false}, state}
   end
 
-  defp handle_cast({:prompt, text}, %State{status: status} = state)
+  defp handle_call({:prompt, text}, _from, %State{status: status} = state)
        when status in [:running, :streaming, :executing_tools] do
     Logger.debug(
       "Prompt queued while busy session=#{state.session_id} status=#{status} len=#{String.length(text)}"
     )
 
-    %{state | pending_steers: state.pending_steers ++ [text]}
-  end
-
-  defp handle_cast({:steer, text}, %State{status: :idle} = state) do
-    # When idle, steering acts like a prompt
-    user_msg = Opal.Message.user(text)
-    state = append_message(state, user_msg)
-    state = %{state | status: :running}
-    broadcast(state, {:agent_start})
-    run_turn_internal(state)
-  end
-
-  defp handle_cast({:steer, text}, %State{status: status} = state)
-       when status in [:running, :streaming, :executing_tools] do
-    # Queue steering message — drained between tool executions
-    %{state | pending_steers: state.pending_steers ++ [text]}
-  end
-
-  defp handle_cast(:abort, %State{} = state) do
-    state = cancel_streaming(state)
-    state = cancel_tool_execution(state)
-    broadcast(state, {:agent_abort})
-    %{state | status: :idle}
+    Emitter.broadcast(state, {:message_queued, text})
+    {%{queued: true}, %{state | pending_messages: state.pending_messages ++ [text]}}
   end
 
   defp handle_call(:get_state, _from, state) do
@@ -556,7 +532,7 @@ defmodule Opal.Agent do
     elapsed = System.monotonic_time(:second) - last
 
     if elapsed >= @stream_stall_warn_secs do
-      broadcast(state, {:stream_stalled, elapsed})
+      Emitter.broadcast(state, {:stream_stalled, elapsed})
     end
 
     watchdog = Process.send_after(self(), :stream_watchdog, 5_000)
@@ -617,13 +593,16 @@ defmodule Opal.Agent do
       "Turn start session=#{state.session_id} messages=#{length(all_messages)} tools=#{length(tools)} model=#{state.model.id}"
     )
 
-    broadcast(state, {:request_start, %{model: state.model.id, messages: length(all_messages)}})
+    Emitter.broadcast(
+      state,
+      {:request_start, %{model: state.model.id, messages: length(all_messages)}}
+    )
 
     case provider.stream(state.model, all_messages, tools) do
       {:ok, %Opal.Provider.EventStream{ref: ref, cancel_fun: cancel_fn}} ->
         Logger.debug("Provider event stream started (native events)")
 
-        broadcast(state, {:request_end})
+        Emitter.broadcast(state, {:request_end})
 
         watchdog = Process.send_after(self(), :stream_watchdog, 10_000)
 
@@ -647,7 +626,7 @@ defmodule Opal.Agent do
           "Provider stream started. Response status: #{resp.status}, body type: #{inspect(resp.body.__struct__)}"
         )
 
-        broadcast(state, {:request_end})
+        Emitter.broadcast(state, {:request_end})
 
         watchdog = Process.send_after(self(), :stream_watchdog, 10_000)
 
@@ -690,12 +669,12 @@ defmodule Opal.Agent do
               "Retrying in #{delay}ms (attempt #{attempt}/#{state.max_retries}): #{inspect(reason)}"
             )
 
-            broadcast(state, {:retry, attempt, delay, reason})
+            Emitter.broadcast(state, {:retry, attempt, delay, reason})
             Process.send_after(self(), :retry_turn, delay)
             %{state | retry_count: attempt}
 
           true ->
-            broadcast(state, {:error, reason})
+            Emitter.broadcast(state, {:error, reason})
             %{state | status: :idle, retry_count: 0}
         end
     end
@@ -742,7 +721,7 @@ defmodule Opal.Agent do
     current = Map.fetch!(config.features, key)
     features = Map.put(config.features, key, Map.put(current, :enabled, enabled))
     state = %{state | config: %{config | features: features}}
-    if key == :debug and not enabled, do: Opal.Agent.EventLog.clear(state.session_id)
+    if key == :debug and not enabled, do: Emitter.clear(state.session_id)
     state
   end
 
@@ -798,16 +777,16 @@ defmodule Opal.Agent do
   # Continues finalization after overflow check passes.
   defp finalize_response_continue(state, tool_calls, assistant_msg) do
     if tool_calls != [] do
-      broadcast(state, {:turn_end, assistant_msg, []})
+      Emitter.broadcast(state, {:turn_end, assistant_msg, []})
       Opal.Agent.Tools.start_tool_execution(tool_calls, state)
     else
       # Drain any steering messages that arrived during this turn
-      state = Opal.Agent.Tools.check_for_steering(state)
+      state = Opal.Agent.Tools.drain_pending_messages(state)
       last_msg = List.first(state.messages)
 
       if last_msg && last_msg.role == :user do
-        # Steers were injected — continue with a new turn
-        broadcast(state, {:turn_end, assistant_msg, []})
+        # Pending messages were injected — continue with a new turn
+        Emitter.broadcast(state, {:turn_end, assistant_msg, []})
         run_turn_internal(state)
       else
         context_window = Opal.Provider.Registry.context_window(state.model)
@@ -818,7 +797,7 @@ defmodule Opal.Agent do
             current_context_tokens: state.last_prompt_tokens
           })
 
-        broadcast(state, {:agent_end, Enum.reverse(state.messages), final_usage})
+        Emitter.broadcast(state, {:agent_end, Enum.reverse(state.messages), final_usage})
         maybe_auto_save(state)
         %{state | status: :idle}
       end
@@ -898,9 +877,6 @@ defmodule Opal.Agent do
   end
 
   defp cancel_watchdog(_), do: :ok
-
-  # Broadcasts an event to all subscribers of this session.
-  defp broadcast(%State{} = state, event), do: Opal.Agent.EventLog.broadcast(state, event)
 
   # Appends a single message. When a Session process is attached, the message
   # is also stored in the session tree. The local messages list is always

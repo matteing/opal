@@ -4,8 +4,6 @@ import type { AgentEvent, TokenUsage } from "../sdk/protocol.js";
 export interface Message {
   role: "user" | "assistant";
   content: string;
-  /** True when this message is queued while the agent is busy. */
-  queued?: boolean;
 }
 
 export interface Task {
@@ -63,6 +61,7 @@ export interface ReducerState {
   tokenUsage: TokenUsage | null;
   error: string | null;
   lastDeltaAt: number;
+  queuedMessages: string[];
 }
 
 export function emptyAgentView(): AgentView {
@@ -77,6 +76,7 @@ export function emptyState(): ReducerState {
     tokenUsage: null,
     error: null,
     lastDeltaAt: 0,
+    queuedMessages: [],
   };
 }
 
@@ -266,6 +266,27 @@ export function applyEvent<S extends ReducerState>(state: S, event: AgentEvent):
       }
 
       return { ...state, subAgents: nextSubAgents, activeTab: nextTab };
+    }
+
+    case "messageApplied": {
+      const text = (event as unknown as { text: string }).text;
+      // Remove the first matching queued message
+      const idx = state.queuedMessages.indexOf(text);
+      const nextQueued =
+        idx >= 0
+          ? [...state.queuedMessages.slice(0, idx), ...state.queuedMessages.slice(idx + 1)]
+          : state.queuedMessages;
+      return {
+        ...state,
+        queuedMessages: nextQueued,
+        main: {
+          ...state.main,
+          timeline: state.main.timeline.concat({
+            kind: "message",
+            message: { role: "user", content: text },
+          }),
+        },
+      };
     }
 
     case "turnEnd":

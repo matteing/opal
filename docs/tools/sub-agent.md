@@ -31,62 +31,8 @@ While the sub-agent runs, all its events (text deltas, tool executions, etc.) ar
 
 If `tools` is specified, only those named tools are made available. This lets the parent agent restrict sub-agents to specific capabilities (e.g. read-only tasks).
 
-`Opal.Tool.AskUser` is always removed from the sub-agent's tool list (sub-agents must not prompt the user directly). `Opal.Tool.AskParent` is injected in its place so the sub-agent can ask questions that get routed back through the parent.
-
-## Question Escalation
-
-Sub-agents can ask the user questions via the `ask_user` tool (backed by `Opal.Tool.AskParent`). The mechanism uses plain OTP message passing — no extra processes, no GenServer calls, just `send`/`receive` with a `make_ref` for correlation.
-
-### How it works
-
-When the parent's `sub_agent` tool spawns a child, it creates a `question_handler` closure that captures its own PID (the parent tool task process). This closure is passed through `SubAgent.do_spawn` → `Agent.init` → `build_tool_context` → `AskParent.execute`.
-
-```mermaid
-sequenceDiagram
-    participant SubTask as Sub-Agent Tool Task<br/>(AskParent)
-    participant ParentTask as Parent Tool Task<br/>(collect_and_forward)
-    participant RPC as RPC/Stdio
-    participant CLI as CLI (Ink)
-    participant User
-
-    SubTask->>ParentTask: send {:sub_agent_question, self(), ref, request}
-    Note over SubTask: blocks on receive {:sub_agent_answer, ^ref, ...}
-
-    Note over ParentTask: collect_and_forward matches<br/>:sub_agent_question clause
-    ParentTask->>RPC: Ask.ask_via_rpc → request_client("client/ask_user")
-    RPC->>CLI: JSON-RPC request
-    CLI->>User: Render AskUserDialog
-    User->>CLI: Types answer
-    CLI->>RPC: JSON-RPC response
-    RPC->>ParentTask: {:ok, answer}
-
-    ParentTask->>SubTask: send {:sub_agent_answer, ref, answer}
-    Note over SubTask: receive unblocks, tool returns {:ok, answer}
-    Note over SubTask: Sub-agent continues with the answer
-```
-
-If RPC escalation fails, the parent sends `{:sub_agent_answer_error, ref, reason}` and `AskParent` returns an explicit error to the model (no silent fallback answer).
-
-### Why this works without deadlocks
-
-The parent tool task is **not** the agent state machine process — it's a supervised `Task` started by `Task.Supervisor.async_nolink`. While this task blocks in `collect_and_forward`, the agent process remains responsive (processing mailbox events). The sub-agent's tool task sends directly to the parent task, bypassing both agent server processes entirely.
-
-During the RPC call (waiting for the user), the sub-agent is blocked too (its tool task is in a `receive`), so no new events flow. Once the user answers, everything unblocks in order: parent task replies → sub-agent task resumes → sub-agent continues its agent loop → events flow again → parent task collects them.
-
-### Module wiring
-
-| Layer | What happens |
-|-------|-------------|
-| `Opal.SubAgent.do_spawn` | Removes `AskUser`, injects `AskParent`, passes `question_handler` in opts |
-| `Opal.Agent.init` | Stores `question_handler` in agent state |
-| `Opal.Agent.build_tool_context` | Puts `question_handler` in the tool context map |
-| `Opal.Tool.AskParent.execute` | Calls `handler.(request)` if present; falls back to direct RPC |
-| `Opal.Tool.SubAgent.collect_and_forward` | Receives `:sub_agent_question`, calls `Ask.ask_via_rpc`, replies |
-
-### Placement
-
-`Opal.SubAgent` remains a top-level module because it is a public SDK entry point (`spawn/2`, `run/3`, `stop/1`) used outside the agent internals. Agent-loop internals live under `lib/opal/agent/`, while cross-cutting public APIs stay at `lib/opal/`.
+`Opal.Tool.AskUser` is always removed from the sub-agent's tool list — sub-agents cannot ask the user questions. Only top-level agents have access to `ask_user`.
 
 ## Source
 
-`lib/opal/tool/sub_agent.ex`, `lib/opal/sub_agent.ex`, `lib/opal/tool/ask_parent.ex`, `lib/opal/tool/ask.ex`
+`lib/opal/tool/sub_agent.ex`, `lib/opal/sub_agent.ex`

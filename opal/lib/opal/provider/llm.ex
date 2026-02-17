@@ -30,6 +30,9 @@ defmodule Opal.Provider.LLM do
 
   @behaviour Opal.Provider
 
+  # ReqLLM specs don't match actual runtime behaviour (Context struct vs messages list)
+  @dialyzer [:no_return, :no_match, :no_fail_call]
+
   require Logger
 
   # ── stream/4 ──────────────────────────────────────────────────────────

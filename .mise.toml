@@ -49,9 +49,9 @@ depends = ["test:*"]
 # ── Lint & Format ─────────────────────────────────────────────
 
 [tasks."lint:core"]
-description = "Check Elixir formatting"
+description = "Check Elixir formatting and types"
 dir = "opal"
-run = "mix format --check-formatted"
+run = ["mix format --check-formatted", "mix dialyzer"]
 
 [tasks."lint:cli"]
 description = "Lint and format-check CLI"

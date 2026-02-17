@@ -4,7 +4,7 @@ defmodule Opal.Tool.Debug do
 
   This tool is intended for self-diagnosis and troubleshooting. It includes a
   compact state summary and, when enabled, recent session events captured by
-  `Opal.Agent.EventLog`.
+  `Opal.Agent.Emitter`.
   """
 
   @behaviour Opal.Tool
@@ -66,7 +66,7 @@ defmodule Opal.Tool.Debug do
       provider: inspect(state.provider),
       working_dir: state.working_dir,
       queues: %{
-        pending_steers: length(state.pending_steers),
+        pending_messages: length(state.pending_messages),
         pending_tool_tasks: map_size(state.pending_tool_tasks),
         in_flight_tools:
           state.pending_tool_tasks |> Map.values() |> Enum.map(fn {_task, tc} -> tc.name end)
@@ -94,7 +94,7 @@ defmodule Opal.Tool.Debug do
   def execute(_args, _context), do: {:error, "Missing agent_state in context"}
 
   defp recent_events(session_id, limit) do
-    Opal.Agent.EventLog.recent(session_id, limit)
+    Opal.Agent.Emitter.recent(session_id, limit)
     |> Enum.map(fn %{timestamp_ms: ts, event: event} ->
       %{
         timestamp_ms: ts,

@@ -35,7 +35,6 @@ defmodule Opal.RPC.ProtocolTest do
       names = Protocol.method_names()
       assert "session/start" in names
       assert "agent/prompt" in names
-      assert "agent/steer" in names
       assert "agent/abort" in names
       assert "agent/state" in names
       assert "session/list" in names

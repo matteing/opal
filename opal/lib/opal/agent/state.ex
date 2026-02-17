@@ -23,7 +23,7 @@ defmodule Opal.Agent.State do
   - **Sub-agents / MCP** — `sub_agent_supervisor`, `mcp_supervisor`, `mcp_servers`
   - **Resilience** — `retry_count`, `max_retries`, `retry_base_delay_ms`, `retry_max_delay_ms`,
     `overflow_detected`
-  - **Interaction** — `question_handler`, `pending_steers`
+  - **Interaction** — `pending_messages`
   """
 
   @type t :: %__MODULE__{
@@ -149,11 +149,9 @@ defmodule Opal.Agent.State do
           overflow_detected: boolean(),
 
           # ── Interaction ──────────────────────────────────────────────
-          # Callback for tools that need to ask the user a question
-          # (e.g. sub-agent confirmation). Nil = no interactive handler.
-          question_handler: (map() -> {:ok, String.t()} | {:error, term()}) | nil,
-          # Pending steering messages injected between turns.
-          pending_steers: [String.t()]
+
+          # Pending messages injected between turns (queued while agent is busy).
+          pending_messages: [String.t()]
         }
 
   @enforce_keys [:session_id, :model, :working_dir, :config]
@@ -229,8 +227,7 @@ defmodule Opal.Agent.State do
     overflow_detected: false,
 
     # Interaction
-    question_handler: nil,
-    pending_steers: []
+    pending_messages: []
   ]
 
   @valid_states [:idle, :running, :streaming, :executing_tools]

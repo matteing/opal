@@ -87,6 +87,8 @@ export interface OpalState {
   showDebugPanel: boolean;
   /** Whether the help overlay is visible. */
   showHelp: boolean;
+  /** Steering messages queued while the agent is busy, not yet applied. */
+  queuedMessages: string[];
 }
 
 export interface OpalActions {
@@ -136,6 +138,7 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
     rpcMessages: [],
     showDebugPanel: false,
     showHelp: false,
+    queuedMessages: [],
   });
 
   const sessionRef = useRef<Session | null>(null);
@@ -382,16 +385,10 @@ export function useOpal(opts: SessionOptions): [OpalState, OpalActions] {
 
     setState((s) => ({
       ...s,
-      main: {
-        ...s.main,
-        timeline: [
-          ...s.main.timeline,
-          { kind: "message", message: { role: "user", content: text, queued: true } },
-        ],
-      },
+      queuedMessages: [...s.queuedMessages, text],
     }));
 
-    void session.steer(text);
+    void session.sendPrompt(text);
   }, []);
 
   const abort = useCallback(() => {

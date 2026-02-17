@@ -127,9 +127,9 @@ defmodule OpalTest do
   end
 
   describe "prompt/2" do
-    test "delegates to Agent.prompt and returns :ok" do
+    test "delegates to Agent.prompt and returns queued status" do
       {:ok, pid} = start_test_session()
-      assert :ok = Opal.prompt(pid, "Hello")
+      assert %{queued: false} = Opal.prompt(pid, "Hello")
       Opal.stop_session(pid)
     end
   end
@@ -168,18 +168,10 @@ defmodule OpalTest do
     end
   end
 
-  describe "steer/2" do
-    test "delegates to Agent.steer" do
-      {:ok, pid} = start_test_session()
-      assert :ok = Opal.steer(pid, "Steer this")
-      Opal.stop_session(pid)
-    end
-  end
-
   describe "follow_up/2" do
     test "delegates to Agent.follow_up" do
       {:ok, pid} = start_test_session()
-      assert :ok = Opal.follow_up(pid, "Follow up")
+      assert %{queued: _} = Opal.follow_up(pid, "Follow up")
       Opal.stop_session(pid)
     end
   end

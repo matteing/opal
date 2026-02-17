@@ -15,7 +15,7 @@ export interface MockSession {
   nodeName: string;
   auth: { provider: string; providers: unknown[]; status: string };
   prompt: ReturnType<typeof vi.fn>;
-  steer: ReturnType<typeof vi.fn>;
+  sendPrompt: ReturnType<typeof vi.fn>;
   abort: ReturnType<typeof vi.fn>;
   getState: ReturnType<typeof vi.fn>;
   compact: ReturnType<typeof vi.fn>;
@@ -50,7 +50,7 @@ export function createMockSession(overrides: Partial<MockSession> = {}): MockSes
     nodeName: "opal@test",
     auth: { provider: "copilot", providers: [], status: "ready" },
     prompt: vi.fn(),
-    steer: vi.fn().mockResolvedValue(undefined),
+    sendPrompt: vi.fn().mockResolvedValue({ queued: true }),
     abort: vi.fn().mockResolvedValue(undefined),
     getState: vi.fn().mockResolvedValue({
       model: { id: "gpt-4", provider: "copilot", thinkingLevel: "off" },

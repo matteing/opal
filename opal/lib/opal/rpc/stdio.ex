@@ -357,6 +357,12 @@ defmodule Opal.RPC.Stdio do
   defp serialize_event({:usage_update, token_usage}),
     do: {"usage_update", %{usage: token_usage}}
 
+  defp serialize_event({:message_queued, text}),
+    do: {"message_queued", %{text: text}}
+
+  defp serialize_event({:message_applied, text}),
+    do: {"message_applied", %{text: text}}
+
   defp serialize_event({:status_update, message}),
     do: {"status_update", %{message: message}}
 

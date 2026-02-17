@@ -179,9 +179,9 @@ defmodule Opal.Agent.LifecycleTest do
   # ── prompt/2 ────────────────────────────────────────────────────────
 
   describe "prompt/2" do
-    test "prompt returns :ok immediately (async)" do
+    test "prompt returns queued status immediately" do
       %{pid: pid} = start_agent()
-      assert :ok = Agent.prompt(pid, "Hello")
+      assert %{queued: false} = Agent.prompt(pid, "Hello")
     end
 
     test "prompt triggers agent_start event" do
@@ -246,15 +246,15 @@ defmodule Opal.Agent.LifecycleTest do
     end
   end
 
-  # ── steer/2 ─────────────────────────────────────────────────────────
+  # ── prompt/2 while idle ─────────────────────────────────────────────
 
-  describe "steer/2" do
-    test "steer on idle agent does not crash" do
+  describe "prompt/2 while idle" do
+    test "prompt on idle agent does not crash" do
       %{pid: pid} = start_agent()
 
-      # Steer while idle — should not crash
-      Agent.steer(pid, "Focus on tests")
-      # Give it a moment to process (steer triggers a turn)
+      # Prompt while idle — should not crash
+      Agent.prompt(pid, "Focus on tests")
+      # Give it a moment to process (prompt triggers a turn)
       Process.sleep(100)
       assert Process.alive?(pid)
     end

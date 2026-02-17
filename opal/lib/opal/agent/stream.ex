@@ -43,7 +43,7 @@ defmodule Opal.Agent.Stream do
   """
 
   require Logger
-  alias Opal.Agent.State
+  alias Opal.Agent.{Emitter, State}
 
   # ── SSE Parsing ──────────────────────────────────────────────────────
 
@@ -136,7 +136,7 @@ defmodule Opal.Agent.Stream do
   # ── Text ──
 
   def handle_stream_event({:text_start, _info}, state) do
-    broadcast(state, {:message_start})
+    Emitter.broadcast(state, {:message_start})
     state
   end
 
@@ -146,7 +146,7 @@ defmodule Opal.Agent.Stream do
     {clean, state} = extract_status_tags(delta, state)
     {clean, state} = extract_title_tag(clean, state)
 
-    if clean != "", do: broadcast(state, {:message_delta, %{delta: clean}})
+    if clean != "", do: Emitter.broadcast(state, {:message_delta, %{delta: clean}})
 
     %{state | current_text: state.current_text <> clean}
   end
@@ -158,7 +158,7 @@ defmodule Opal.Agent.Stream do
   # ── Thinking / Chain-of-Thought ──
 
   def handle_stream_event({:thinking_start, _info}, state) do
-    broadcast(state, {:thinking_start})
+    Emitter.broadcast(state, {:thinking_start})
     %{state | current_thinking: ""}
   end
 
@@ -167,13 +167,13 @@ defmodule Opal.Agent.Stream do
     # a preceding :thinking_start.  Auto-emit start so the UI is consistent.
     state =
       if is_nil(state.current_thinking) do
-        broadcast(state, {:thinking_start})
+        Emitter.broadcast(state, {:thinking_start})
         %{state | current_thinking: ""}
       else
         state
       end
 
-    broadcast(state, {:thinking_delta, %{delta: delta}})
+    Emitter.broadcast(state, {:thinking_delta, %{delta: delta}})
     %{state | current_thinking: state.current_thinking <> delta}
   end
 
@@ -266,7 +266,7 @@ defmodule Opal.Agent.Stream do
 
   def handle_stream_event({:error, reason}, state) do
     Logger.error("Stream error: #{inspect(reason)}")
-    broadcast(state, {:error, reason})
+    Emitter.broadcast(state, {:error, reason})
     %{state | status: :idle, streaming_resp: nil, stream_errored: true}
   end
 
@@ -387,7 +387,7 @@ defmodule Opal.Agent.Stream do
   @spec extract_status_tags(String.t(), State.t()) :: {String.t(), State.t()}
   def extract_status_tags(delta, state) do
     extract_xml_tag(delta, :status, state, fn text, st ->
-      broadcast(st, {:status_update, text})
+      Emitter.broadcast(st, {:status_update, text})
       st
     end)
   end
@@ -412,7 +412,7 @@ defmodule Opal.Agent.Stream do
       title = String.slice(text, 0, 60)
 
       if title != "" do
-        broadcast(st, {:title_generated, title})
+        Emitter.broadcast(st, {:title_generated, title})
 
         if st.session do
           Opal.Session.set_metadata(st.session, :title, title)
@@ -640,10 +640,4 @@ defmodule Opal.Agent.Stream do
   end
 
   defp decode_arguments_json(_), do: %{}
-
-  # ── Broadcasting ────────────────────────────────────────────────────
-
-  defp broadcast(%State{} = state, event) do
-    Opal.Agent.EventLog.broadcast(state, event)
-  end
 end

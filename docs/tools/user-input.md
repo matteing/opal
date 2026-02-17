@@ -2,26 +2,24 @@
 
 The `ask_user` tool lets the agent pause execution and ask the user a question — freeform text, multiple choice, or both — then resume with the answer. It bridges the agent loop to the CLI's interactive UI via a server→client RPC request, reusing the same promise-based pattern as `client/confirm`.
 
-Two modules expose this tool to the LLM under the same `ask_user` name — one for top-level agents, one for sub-agents. They share a common spec and RPC helper via `Opal.Tool.Ask` so that only the delivery path differs.
+Only top-level agents have access to this tool. Sub-agents cannot ask questions — `AskUser` is excluded from their tool list at spawn time.
 
 ## Module Structure
 
 ```
 lib/opal/tool/
 ├── ask.ex          # Shared spec (name, description, parameters, meta) + RPC helper
-├── ask_user.ex     # Top-level agent tool — delegates to Ask, calls RPC directly
-└── ask_parent.ex   # Sub-agent tool — tries question_handler callback, falls back to RPC
+└── ask_user.ex     # Top-level agent tool — delegates to Ask, calls RPC directly
 ```
 
-- **`Opal.Tool.Ask`** (`lib/opal/tool/ask.ex`) — Not a tool itself. Holds the shared `name/0`, `description/0`, `parameters/0`, `meta/1`, and `ask_via_rpc/2` so the two real tools stay DRY.
+- **`Opal.Tool.Ask`** (`lib/opal/tool/ask.ex`) — Not a tool itself. Holds the shared `name/0`, `description/0`, `parameters/0`, `meta/1`, and `ask_via_rpc/2` so the tool stays DRY.
 - **`Opal.Tool.AskUser`** (`lib/opal/tool/ask_user.ex`) — Registered in the default tool list for top-level agents. Delegates its spec callbacks to `Ask` and calls `Ask.ask_via_rpc/2` in `execute/2`.
-- **`Opal.Tool.AskParent`** (`lib/opal/tool/ask_parent.ex`) — Injected for sub-agents (replacing `AskUser`). Delegates its spec to `Ask`, but `execute/2` first tries a `question_handler` callback from the tool context. If no handler exists (standalone sub-agent), it falls back to `Ask.ask_via_rpc/2`.
 
 ## Interface
 
 ### Tool Schema
 
-Both tools present identical schemas to the LLM — the shared spec lives in `Opal.Tool.Ask`:
+The schema lives in `Opal.Tool.Ask`:
 
 ```elixir
 defmodule Opal.Tool.Ask do
@@ -85,37 +83,6 @@ defmodule Opal.Tool.AskUser do
 end
 ```
 
-`AskParent` adds the handler path:
-
-```elixir
-defmodule Opal.Tool.AskParent do
-  @behaviour Opal.Tool
-
-  defdelegate name, to: Opal.Tool.Ask
-  defdelegate description, to: Opal.Tool.Ask
-  defdelegate parameters, to: Opal.Tool.Ask
-  defdelegate meta(args), to: Opal.Tool.Ask
-
-  def execute(%{"question" => question} = args, context) do
-    case Map.get(context, :question_handler) do
-      handler when is_function(handler, 1) ->
-        request = %{
-          question: question,
-          choices: Map.get(args, "choices", [])
-        }
-
-        case handler.(request) do
-          {:ok, answer} -> {:ok, answer}
-          {:error, reason} -> {:error, "Question failed: #{inspect(reason)}"}
-        end
-
-      nil ->
-        Opal.Tool.Ask.ask_via_rpc(args, context)
-    end
-  end
-end
-```
-
 ### Protocol: `client/ask_user`
 
 Server→client request method in `Opal.RPC.Protocol` (`lib/opal/rpc/protocol.ex`):
@@ -146,7 +113,7 @@ Server→client request method in `Opal.RPC.Protocol` (`lib/opal/rpc/protocol.ex
 
 ## How It Works
 
-### Data Flow — Top-Level Agent
+### Data Flow
 
 ```mermaid
 sequenceDiagram
@@ -170,37 +137,12 @@ sequenceDiagram
     Tool->>Agent: {:ok, answer}
 ```
 
-### Data Flow — Sub-Agent
-
-When a sub-agent calls `ask_user`, `AskParent` invokes the `question_handler` closure — which sends a message to the parent's tool task process. The parent's `collect_and_forward` loop handles the message, escalates via RPC to the CLI, and replies. See [sub-agent docs](sub-agent.md#question-escalation) for the full sequence diagram.
-
-```mermaid
-sequenceDiagram
-    participant Sub as Sub-Agent Tool Task
-    participant Handler as question_handler closure
-    participant Parent as Parent Tool Task<br/>(collect_and_forward)
-    participant RPC as RPC → CLI → User
-
-    Sub->>Handler: handler.(%{question, choices})
-    Handler->>Parent: send {:sub_agent_question, self(), ref, req}
-    Note over Handler: blocks on receive
-    Parent->>RPC: Ask.ask_via_rpc → user answers
-    RPC->>Parent: {:ok, answer}
-    Parent->>Handler: send {:sub_agent_answer, ref, answer}
-    Handler->>Sub: {:ok, answer}
-```
-
 ### Tool Registration
 
-`AskUser` is in the default tool list (`lib/opal/config.ex`). When spawning sub-agents, `Opal.SubAgent.do_spawn` removes `AskUser` and injects `AskParent` in its place, along with a `question_handler` callback:
+`AskUser` is in the default tool list (`lib/opal/config.ex`). When spawning sub-agents, `Opal.SubAgent.do_spawn` removes `AskUser` from the sub-agent's tool list:
 
 ```elixir
-tools =
-  parent_tools
-  |> Enum.reject(&(&1 == Opal.Tool.AskUser))
-  |> then(fn ts ->
-    if Opal.Tool.AskParent in ts, do: ts, else: ts ++ [Opal.Tool.AskParent]
-  end)
+tools = Enum.reject(parent_tools, &(&1 == Opal.Tool.AskUser))
 ```
 
 ### CLI Integration
@@ -217,7 +159,7 @@ tools =
 
 - **Timeout**: `ask_via_rpc` passes `timeout: :infinity` since user input has no upper bound.
 - **Abort during input**: If the user presses Ctrl+C while `ask_user` is pending, the agent shuts down and the pending `request_client` call fails.
-- **Sub-agents**: `AskUser` is excluded from sub-agent tool lists. Sub-agents get `AskParent` instead, which routes questions through the parent's `question_handler` callback.
+- **Sub-agents**: `AskUser` is excluded from sub-agent tool lists. Sub-agents cannot ask the user questions.
 - **SDK (non-interactive)**: SDK users who don't set `onAskUser` get an error (same as `onInput` today).
 
 ## References
