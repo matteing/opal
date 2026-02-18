@@ -171,8 +171,14 @@ defmodule Opal.Agent.UsageTracker do
   @spec extract(map(), [String.t()]) :: non_neg_integer()
   defp extract(usage, candidates) do
     Enum.find_value(candidates, 0, fn key ->
-      Map.get(usage, key) || Map.get(usage, String.to_existing_atom(key))
+      Map.get(usage, key) || atom_get(usage, key)
     end) || 0
+  end
+
+  defp atom_get(map, key) do
+    Map.get(map, String.to_existing_atom(key))
+  rescue
+    ArgumentError -> nil
   end
 
   defp context_window(%State{model: model}), do: Models.context_window(model)

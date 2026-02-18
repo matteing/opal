@@ -90,7 +90,7 @@ defmodule Opal.SessionServer do
       session_id = Keyword.fetch!(opts, :session_id)
       config = Keyword.get(opts, :config, Opal.Config.new())
       sessions_dir = Opal.Config.sessions_dir(config)
-      session_file = Path.join(sessions_dir, "#{session_id}.jsonl")
+      session_file = Path.join(sessions_dir, "#{session_id}.dets")
 
       session_opts = [
         session_id: session_id,

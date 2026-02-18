@@ -33,7 +33,7 @@ handle_event(event_type, event_content, state_name, state)
 | ------------------ | --------------------------------------------- | --------------------------------- |
 | `:idle`            | Waiting for prompt/steer input                | prompt, steer, calls              |
 | `:running`         | Building context and starting provider stream | steer/prompt queued, abort, calls |
-| `:streaming`       | Processing provider events (SSE/EventStream)  | steer/prompt queued, abort, calls |
+| `:streaming`       | Processing provider SSE events                | steer/prompt queued, abort, calls |
 | `:executing_tools` | Running tool calls through supervised tasks   | steer/prompt queued, abort, calls |
 
 ```mermaid
@@ -73,10 +73,7 @@ stateDiagram-v2
 
 ### 3. Streaming in `:streaming`
 
-The loop consumes either:
-
-- SSE chunks via `Req.parse_message/2`, or
-- native provider events via `Opal.Provider.EventStream`.
+The loop consumes SSE chunks via `Req.parse_message/2`, then passes each JSON line through `provider.parse_stream_event/1`.
 
 `Opal.Agent.Stream` normalizes provider events (`:text_delta`, `:tool_call_done`, `:usage`, `:response_done`, etc.) and updates accumulated response fields.
 

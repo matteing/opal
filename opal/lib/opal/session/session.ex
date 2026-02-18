@@ -1,22 +1,26 @@
 defmodule Opal.Session do
   @moduledoc """
-  GenServer managing a conversation tree with branching and persistence.
+  Conversation tree with branching and DETS-backed persistence.
 
-  Each message is stored in an ETS table keyed by its ID, with a parent_id
-  forming a tree structure. A `current_id` pointer tracks the active leaf,
-  enabling branching by rewinding to any past message.
+  Messages live in an ETS table keyed by ID, linked by `parent_id` into
+  a tree. A `current_id` pointer tracks the active leaf. Branching simply
+  moves the pointer; subsequent appends grow from the new position.
+
+  Persistence uses DETS — Erlang terms written directly to disk, zero
+  serialization overhead. DETS files live in the configured sessions dir.
 
   ## Usage
 
       {:ok, session} = Opal.Session.start_link(session_id: "abc")
       :ok = Opal.Session.append(session, message)
       path = Opal.Session.get_path(session)
-      tree = Opal.Session.get_tree(session)
       :ok = Opal.Session.branch(session, some_message_id)
       :ok = Opal.Session.save(session, "/path/to/sessions")
   """
 
   use GenServer
+
+  # ── State ──────────────────────────────────────────────────────────
 
   defmodule State do
     @moduledoc false
@@ -33,236 +37,107 @@ defmodule Opal.Session do
     defstruct [:session_id, :table, current_id: nil, metadata: %{}, sessions_dir: nil]
   end
 
-  # --- Public API ---
+  # ── Public API ─────────────────────────────────────────────────────
 
-  @doc "Starts the session GenServer."
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
-    name = Keyword.get(opts, :name)
-    start_opts = if name, do: [name: name], else: []
-    GenServer.start_link(__MODULE__, opts, start_opts)
+    server_opts = if name = opts[:name], do: [name: name], else: []
+    GenServer.start_link(__MODULE__, opts, server_opts)
   end
 
-  @doc """
-  Appends a message to the session tree.
-
-  The message's `parent_id` is set to the current leaf. After appending,
-  `current_id` advances to this new message.
-  """
+  @doc "Appends a message, setting its `parent_id` to the current leaf."
   @spec append(GenServer.server(), Opal.Message.t()) :: :ok
-  def append(session, %Opal.Message{} = message) do
-    GenServer.call(session, {:append, message})
-  end
+  def append(session, %Opal.Message{} = msg), do: GenServer.call(session, {:append, msg})
 
-  @doc """
-  Appends multiple messages to the session tree in order.
-
-  Each message's parent_id is set to the previous message's id
-  (or the current leaf for the first one).
-  """
+  @doc "Appends messages in order, chaining `parent_id`s."
   @spec append_many(GenServer.server(), [Opal.Message.t()]) :: :ok
-  def append_many(session, messages) when is_list(messages) do
-    GenServer.call(session, {:append_many, messages})
-  end
+  def append_many(session, msgs) when is_list(msgs),
+    do: GenServer.call(session, {:append_many, msgs})
 
-  @doc """
-  Returns the message with the given ID, or nil.
-  """
+  @doc "Returns the message with the given ID, or `nil`."
   @spec get_message(GenServer.server(), String.t()) :: Opal.Message.t() | nil
-  def get_message(session, message_id) do
-    GenServer.call(session, {:get_message, message_id})
-  end
+  def get_message(session, id), do: GenServer.call(session, {:get_message, id})
 
-  @doc """
-  Returns the path from root to the current leaf as a list of messages.
-  """
+  @doc "Returns the path from root to the current leaf."
   @spec get_path(GenServer.server()) :: [Opal.Message.t()]
-  def get_path(session) do
-    GenServer.call(session, :get_path)
-  end
+  def get_path(session), do: GenServer.call(session, :get_path)
 
-  @doc """
-  Returns the full conversation tree as a nested structure.
-
-  Each node is `%{message: msg, children: [nodes...]}`.
-  """
+  @doc "Returns the full tree as nested `%{message: msg, children: [...]}`."
   @spec get_tree(GenServer.server()) :: [map()]
-  def get_tree(session) do
-    GenServer.call(session, :get_tree)
-  end
+  def get_tree(session), do: GenServer.call(session, :get_tree)
 
-  @doc """
-  Branches the conversation by setting the current pointer to the given message ID.
-
-  All subsequent `append/2` calls will build from this point, creating a new branch.
-  Returns `:ok` if the message exists, `{:error, :not_found}` otherwise.
-  """
+  @doc "Moves the current pointer to `message_id`, creating a branch point."
   @spec branch(GenServer.server(), String.t()) :: :ok | {:error, :not_found}
-  def branch(session, message_id) do
-    GenServer.call(session, {:branch, message_id})
-  end
+  def branch(session, message_id), do: GenServer.call(session, {:branch, message_id})
 
-  @doc """
-  Returns the path from root to the given message ID as a list of messages.
-
-  Unlike `get_path/1`, which returns the path to the current leaf, this
-  returns the path to any arbitrary message in the tree. Used by branch
-  summarization to compare paths and find common ancestors.
-  """
-  @spec get_path_to(GenServer.server(), String.t()) :: [Opal.Message.t()]
-  def get_path_to(session, message_id) do
-    GenServer.call(session, {:get_path_to, message_id})
-  end
-
-  @doc """
-  Branches to a new point, optionally summarizing the abandoned branch.
-
-  When `summarize: true` is passed, generates a compact summary of the
-  abandoned branch and appends it at the new branch point. This gives the
-  LLM context about what was tried so it doesn't repeat failed approaches.
-
-  ## Options
-
-    * `:summarize` — whether to generate a branch summary (default: `false`)
-    * `:provider` — LLM provider module for summary generation
-    * `:model` — `%Opal.Provider.Model{}` for summary generation
-    * `:strategy` — set to `:skip` to disable summarization
-  """
-  @spec branch_with_summary(GenServer.server(), String.t(), keyword()) ::
-          :ok | {:error, :not_found}
-  def branch_with_summary(session, target_id, opts \\ []) do
-    current = current_id(session)
-    result = branch(session, target_id)
-
-    case result do
-      :ok when current != nil ->
-        if Keyword.get(opts, :summarize, false) do
-          case Opal.Session.BranchSummary.summarize_abandoned(
-                 session,
-                 current,
-                 target_id,
-                 opts
-               ) do
-            {:ok, nil} -> :ok
-            {:ok, summary_msg} -> append(session, summary_msg)
-            {:error, _} -> :ok
-          end
-        end
-
-        :ok
-
-      other ->
-        other
-    end
-  end
-
-  @doc """
-  Returns the current leaf message ID, or nil if empty.
-  """
+  @doc "Returns the current leaf message ID, or `nil` if empty."
   @spec current_id(GenServer.server()) :: String.t() | nil
-  def current_id(session) do
-    GenServer.call(session, :current_id)
-  end
+  def current_id(session), do: GenServer.call(session, :current_id)
 
-  @doc """
-  Returns all messages in the session (unordered).
-  """
+  @doc "Returns all messages (unordered)."
   @spec all_messages(GenServer.server()) :: [Opal.Message.t()]
-  def all_messages(session) do
-    GenServer.call(session, :all_messages)
-  end
+  def all_messages(session), do: GenServer.call(session, :all_messages)
 
-  @doc """
-  Returns the session ID.
-  """
+  @doc "Returns the session ID."
   @spec session_id(GenServer.server()) :: String.t()
-  def session_id(session) do
-    GenServer.call(session, :session_id)
-  end
+  def session_id(session), do: GenServer.call(session, :session_id)
 
-  @doc """
-  Gets a metadata value by key.
-  """
+  @doc "Gets a metadata value."
   @spec get_metadata(GenServer.server(), atom() | String.t()) :: term()
-  def get_metadata(session, key) do
-    GenServer.call(session, {:get_metadata, key})
-  end
+  def get_metadata(session, key), do: GenServer.call(session, {:get_metadata, key})
 
-  @doc """
-  Sets a metadata key-value pair.
-  """
+  @doc "Sets a metadata key-value pair."
   @spec set_metadata(GenServer.server(), atom() | String.t(), term()) :: :ok
-  def set_metadata(session, key, value) do
-    GenServer.call(session, {:set_metadata, key, value})
-  end
+  def set_metadata(session, key, value), do: GenServer.call(session, {:set_metadata, key, value})
 
-  @doc """
-  Persists the session to disk as a JSONL file.
-  """
+  @doc "Persists the session to a DETS file in `dir`."
   @spec save(GenServer.server(), String.t()) :: :ok | {:error, term()}
-  def save(session, dir) do
-    GenServer.call(session, {:save, dir})
-  end
+  def save(session, dir), do: GenServer.call(session, {:save, dir})
 
   @doc """
-  Loads a saved session from a JSONL file into a running Session process.
-  """
-  @spec load(GenServer.server(), String.t()) :: :ok | {:error, term()}
-  def load(session, path) do
-    GenServer.call(session, {:load, path})
-  end
-
-  @doc """
-  Lists saved session files in a directory.
-
-  Returns a list of `%{id: session_id, path: file_path, modified: DateTime.t()}`.
-  """
-  @spec list_sessions(String.t()) :: [map()]
-  def list_sessions(dir) do
-    case File.ls(dir) do
-      {:ok, files} ->
-        files
-        |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
-        |> Enum.flat_map(fn file ->
-          path = Path.join(dir, file)
-          id = String.trim_trailing(file, ".jsonl")
-
-          case File.stat(path) do
-            {:ok, stat} ->
-              title = read_session_title(path)
-
-              [
-                %{
-                  id: id,
-                  path: path,
-                  title: title,
-                  modified: stat.mtime |> NaiveDateTime.from_erl!()
-                }
-              ]
-
-            {:error, _} ->
-              # File was deleted between ls and stat — skip it
-              []
-          end
-        end)
-        |> Enum.sort_by(& &1.modified, {:desc, NaiveDateTime})
-
-      {:error, _} ->
-        []
-    end
-  end
-
-  @doc """
-  Replaces a range of messages in the path with a summary message.
+  Replaces a contiguous segment of messages with a summary.
 
   Used by compaction to collapse older messages while preserving the tree.
   """
   @spec replace_path_segment(GenServer.server(), [String.t()], Opal.Message.t()) :: :ok
-  def replace_path_segment(session, message_ids, summary_message) do
-    GenServer.call(session, {:replace_path_segment, message_ids, summary_message})
+  def replace_path_segment(session, ids, summary),
+    do: GenServer.call(session, {:replace_path_segment, ids, summary})
+
+  @doc """
+  Lists saved sessions in a directory.
+
+  Returns `[%{id: String.t(), path: String.t(), title: String.t() | nil, modified: NaiveDateTime.t()}]`,
+  sorted newest-first.
+  """
+  @spec list_sessions(String.t()) :: [map()]
+  def list_sessions(dir) do
+    with {:ok, files} <- File.ls(dir) do
+      files
+      |> Enum.filter(&String.ends_with?(&1, ".dets"))
+      |> Enum.flat_map(fn file ->
+        path = Path.join(dir, file)
+
+        with {:ok, stat} <- File.stat(path),
+             {:ok, meta} <- read_dets_metadata(path) do
+          [
+            %{
+              id: meta.session_id,
+              path: path,
+              title: meta.metadata[:title],
+              modified: NaiveDateTime.from_erl!(stat.mtime)
+            }
+          ]
+        else
+          _ -> []
+        end
+      end)
+      |> Enum.sort_by(& &1.modified, {:desc, NaiveDateTime})
+    else
+      _ -> []
+    end
   end
 
-  # --- GenServer Callbacks ---
+  # ── GenServer Callbacks ────────────────────────────────────────────
 
   @impl true
   def init(opts) do
@@ -272,41 +147,29 @@ defmodule Opal.Session do
     state = %State{
       session_id: session_id,
       table: table,
-      current_id: nil,
       metadata: Keyword.get(opts, :metadata, %{}),
       sessions_dir: Keyword.get(opts, :sessions_dir)
     }
 
-    # If a saved session file was provided, load it during init so the
-    # Agent (started after us in the supervision tree) finds messages ready.
     state =
       case Keyword.get(opts, :load_from) do
-        nil ->
-          state
-
-        path when is_binary(path) ->
-          case do_load(table, path) do
-            {:ok, %{current_id: cid, metadata: meta}} ->
-              %{state | current_id: cid, metadata: meta}
-
-            {:error, _reason} ->
-              state
-          end
+        nil -> state
+        path -> load_from_dets(state, path)
       end
 
     {:ok, state}
   end
 
   @impl true
-  def handle_call({:append, message}, _from, state) do
-    message = %{message | parent_id: state.current_id}
-    :ets.insert(state.table, {message.id, message})
-    {:reply, :ok, %{state | current_id: message.id}}
+  def handle_call({:append, msg}, _from, state) do
+    msg = %{msg | parent_id: state.current_id}
+    :ets.insert(state.table, {msg.id, msg})
+    {:reply, :ok, %{state | current_id: msg.id}}
   end
 
-  def handle_call({:append_many, messages}, _from, state) do
+  def handle_call({:append_many, msgs}, _from, state) do
     state =
-      Enum.reduce(messages, state, fn msg, acc ->
+      Enum.reduce(msgs, state, fn msg, acc ->
         msg = %{msg | parent_id: acc.current_id}
         :ets.insert(acc.table, {msg.id, msg})
         %{acc | current_id: msg.id}
@@ -316,93 +179,60 @@ defmodule Opal.Session do
   end
 
   def handle_call({:get_message, id}, _from, state) do
-    result =
+    reply =
       case :ets.lookup(state.table, id) do
         [{^id, msg}] -> msg
         [] -> nil
       end
 
-    {:reply, result, state}
+    {:reply, reply, state}
   end
 
   def handle_call(:get_path, _from, state) do
-    path = build_path(state.table, state.current_id)
-    {:reply, path, state}
-  end
-
-  def handle_call({:get_path_to, message_id}, _from, state) do
-    path = build_path(state.table, message_id)
-    {:reply, path, state}
+    {:reply, walk_path(state.table, state.current_id), state}
   end
 
   def handle_call(:get_tree, _from, state) do
-    tree = build_tree(state.table)
-    {:reply, tree, state}
+    {:reply, build_tree(state.table), state}
   end
 
-  def handle_call({:branch, message_id}, _from, state) do
-    case :ets.lookup(state.table, message_id) do
-      [{^message_id, _msg}] ->
-        {:reply, :ok, %{state | current_id: message_id}}
-
-      [] ->
-        {:reply, {:error, :not_found}, state}
+  def handle_call({:branch, id}, _from, state) do
+    case :ets.lookup(state.table, id) do
+      [{^id, _}] -> {:reply, :ok, %{state | current_id: id}}
+      [] -> {:reply, {:error, :not_found}, state}
     end
   end
 
-  def handle_call(:current_id, _from, state) do
-    {:reply, state.current_id, state}
-  end
+  def handle_call(:current_id, _from, state), do: {:reply, state.current_id, state}
 
   def handle_call(:all_messages, _from, state) do
-    messages =
-      :ets.tab2list(state.table)
-      |> Enum.map(fn {_id, msg} -> msg end)
-
-    {:reply, messages, state}
+    {:reply, for({_id, msg} <- :ets.tab2list(state.table), do: msg), state}
   end
 
-  def handle_call(:session_id, _from, state) do
-    {:reply, state.session_id, state}
-  end
+  def handle_call(:session_id, _from, state), do: {:reply, state.session_id, state}
 
   def handle_call({:get_metadata, key}, _from, state) do
     {:reply, Map.get(state.metadata, key), state}
   end
 
   def handle_call({:set_metadata, key, value}, _from, state) do
-    metadata = Map.put(state.metadata, key, value)
-    {:reply, :ok, %{state | metadata: metadata}}
+    {:reply, :ok, %{state | metadata: Map.put(state.metadata, key, value)}}
   end
 
   def handle_call({:save, dir}, _from, state) do
-    result = do_save(state, dir)
-    {:reply, result, state}
+    {:reply, persist_to_dets(state, dir), state}
   end
 
-  def handle_call({:load, path}, _from, state) do
-    case do_load(state.table, path) do
-      {:ok, loaded_state} ->
-        {:reply, :ok,
-         %{state | current_id: loaded_state.current_id, metadata: loaded_state.metadata}}
-
-      {:error, _} = err ->
-        {:reply, err, state}
-    end
-  end
-
-  def handle_call({:replace_path_segment, ids_to_remove, summary}, _from, state) do
-    state = do_replace_segment(state, ids_to_remove, summary)
-    {:reply, :ok, state}
+  def handle_call({:replace_path_segment, ids, summary}, _from, state) do
+    {:reply, :ok, do_replace_segment(state, ids, summary)}
   end
 
   @impl true
   def terminate(reason, state) do
-    # Best-effort save before losing the ETS table
     if reason != :normal do
       try do
         dir = state.sessions_dir || Opal.Config.sessions_dir(Opal.Config.new())
-        do_save(state, dir)
+        persist_to_dets(state, dir)
       rescue
         _ -> :ok
       end
@@ -412,282 +242,141 @@ defmodule Opal.Session do
     :ok
   end
 
-  # --- Internal Helpers ---
+  # ── Tree Traversal ─────────────────────────────────────────────────
 
-  # Walks parent_id pointers from current_id back to root, returns in order.
-  defp build_path(_table, nil), do: []
+  defp walk_path(_table, nil), do: []
 
-  defp build_path(table, current_id) do
-    do_build_path(table, current_id, [])
-  end
-
-  defp do_build_path(_table, nil, acc), do: acc
-
-  defp do_build_path(table, id, acc) do
+  defp walk_path(table, id) do
     case :ets.lookup(table, id) do
-      [{^id, msg}] -> do_build_path(table, msg.parent_id, [msg | acc])
-      [] -> acc
+      [{^id, msg}] -> walk_path(table, msg.parent_id) ++ [msg]
+      [] -> []
     end
   end
 
-  # Builds a nested tree from all messages in the ETS table.
   defp build_tree(table) do
-    all = :ets.tab2list(table) |> Enum.map(fn {_id, msg} -> msg end)
+    by_parent =
+      table
+      |> :ets.tab2list()
+      |> Enum.map(&elem(&1, 1))
+      |> Enum.group_by(& &1.parent_id)
 
-    # Group by parent_id
-    by_parent = Enum.group_by(all, & &1.parent_id)
-
-    # Build from roots (parent_id == nil)
     build_children(by_parent, nil)
   end
 
   defp build_children(by_parent, parent_id) do
-    children = Map.get(by_parent, parent_id, [])
-
-    Enum.map(children, fn msg ->
-      %{
-        message: msg,
-        children: build_children(by_parent, msg.id)
-      }
-    end)
-  end
-
-  # Persists session state as JSONL (one JSON object per line).
-  # Line 1: session metadata (session_id, current_id, metadata)
-  # Lines 2+: one message per line
-  defp do_save(state, dir) do
-    File.mkdir_p!(dir)
-    path = Path.join(dir, "#{state.session_id}.jsonl")
-
-    messages = :ets.tab2list(state.table) |> Enum.map(fn {_id, msg} -> msg end)
-
-    header =
-      Jason.encode!(%{
-        session_id: state.session_id,
-        current_id: state.current_id,
-        metadata: state.metadata
-      })
-
-    lines =
-      [header | Enum.map(messages, &message_to_json/1)]
-      |> Enum.join("\n")
-
-    File.write(path, lines <> "\n")
-  end
-
-  # Loads session state from JSONL into the ETS table.
-  defp do_load(table, path) do
-    case File.read(path) do
-      {:ok, content} ->
-        lines =
-          content
-          |> String.split("\n")
-          |> Enum.reject(&(&1 == ""))
-
-        case lines do
-          [] ->
-            {:error, :empty_session_file}
-
-          [header_line | message_lines] ->
-            with {:ok, header} <- Jason.decode(header_line),
-                 {:ok, messages} <- decode_message_lines(message_lines) do
-              # Clear existing data
-              :ets.delete_all_objects(table)
-
-              # Insert all messages
-              Enum.each(messages, fn msg ->
-                :ets.insert(table, {msg.id, msg})
-              end)
-
-              {:ok,
-               %{
-                 current_id: header["current_id"],
-                 metadata: atomize_metadata(Map.get(header, "metadata", %{}))
-               }}
-            end
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+    for msg <- Map.get(by_parent, parent_id, []) do
+      %{message: msg, children: build_children(by_parent, msg.id)}
     end
   end
 
-  defp decode_message_lines(lines) do
-    messages =
-      Enum.reduce_while(lines, {:ok, []}, fn line, {:ok, acc} ->
-        case Jason.decode(line) do
-          {:ok, data} -> {:cont, {:ok, [json_to_message(data) | acc]}}
-          {:error, _} = err -> {:halt, err}
-        end
-      end)
+  # ── Segment Replacement (compaction) ───────────────────────────────
 
-    case messages do
-      {:ok, list} -> {:ok, Enum.reverse(list)}
-      error -> error
-    end
-  end
-
-  defp message_to_json(%Opal.Message{} = msg) do
-    map = %{
-      id: msg.id,
-      parent_id: msg.parent_id,
-      role: msg.role,
-      content: msg.content,
-      is_error: msg.is_error
-    }
-
-    map =
-      if msg.tool_calls && msg.tool_calls != [] do
-        Map.put(
-          map,
-          :tool_calls,
-          Enum.map(msg.tool_calls, fn tc ->
-            %{call_id: tc.call_id, name: tc.name, arguments: tc.arguments}
-          end)
-        )
-      else
-        map
-      end
-
-    map = if msg.call_id, do: Map.put(map, :call_id, msg.call_id), else: map
-    map = if msg.name, do: Map.put(map, :name, msg.name), else: map
-    map = if msg.thinking, do: Map.put(map, :thinking, msg.thinking), else: map
-    # Persist structured metadata (compaction summaries, file-op tracking, etc.)
-    map = if msg.metadata, do: Map.put(map, :metadata, msg.metadata), else: map
-
-    Jason.encode!(map)
-  end
-
-  defp json_to_message(data) do
-    tool_calls =
-      case data["tool_calls"] do
-        nil ->
-          nil
-
-        list ->
-          list
-          |> Enum.map(fn tc ->
-            %{call_id: tc["call_id"], name: tc["name"], arguments: tc["arguments"] || %{}}
-          end)
-          |> Enum.reject(fn tc -> is_nil(tc.call_id) or is_nil(tc.name) end)
-          |> case do
-            [] -> nil
-            valid -> valid
-          end
-      end
-
-    # Restore structured metadata, converting string keys to atoms for
-    # consistent access (e.g. msg.metadata.read_files).
-    metadata =
-      case data["metadata"] do
-        nil -> nil
-        m when is_map(m) -> atomize_metadata(m)
-      end
-
-    %Opal.Message{
-      id: data["id"],
-      parent_id: data["parent_id"],
-      role: safe_to_role(data["role"]),
-      content: data["content"],
-      thinking: data["thinking"],
-      tool_calls: tool_calls,
-      call_id: data["call_id"],
-      name: data["name"],
-      is_error: data["is_error"] || false,
-      metadata: metadata
-    }
-  end
-
-  defp atomize_metadata(map) when is_map(map) do
-    Map.new(map, fn {k, v} -> {safe_to_atom(k), v} end)
-  end
-
-  defp atomize_metadata(_), do: %{}
-
-  @valid_roles %{
-    "system" => :system,
-    "user" => :user,
-    "assistant" => :assistant,
-    "tool_call" => :tool_call,
-    "tool_result" => :tool_result
-  }
-
-  defp safe_to_role(role) when is_map_key(@valid_roles, role), do: @valid_roles[role]
-  defp safe_to_role(role), do: raise(ArgumentError, "unknown message role: #{inspect(role)}")
-
-  defp safe_to_atom(key) when is_binary(key) do
-    String.to_existing_atom(key)
-  rescue
-    ArgumentError -> key
-  end
-
-  defp safe_to_atom(key), do: key
-
-  # Replaces a contiguous segment of the current path with a summary message.
-  # The summary message bridges the gap: its parent_id is set to the parent
-  # of the first removed message, and any children of the last removed message
-  # get re-parented to the summary.
   defp do_replace_segment(state, ids_to_remove, summary) do
     id_set = MapSet.new(ids_to_remove)
-
-    # Find the parent of the first message to remove (the anchor point)
     first_id = List.first(ids_to_remove)
     last_id = List.last(ids_to_remove)
 
-    first_msg =
+    # Anchor the summary to the parent of the first removed message
+    anchor_parent =
       case :ets.lookup(state.table, first_id) do
-        [{_, msg}] -> msg
+        [{_, msg}] -> msg.parent_id
         [] -> nil
       end
 
-    # Set summary's parent to the first removed message's parent
-    summary = %{summary | parent_id: first_msg && first_msg.parent_id}
+    summary = %{summary | parent_id: anchor_parent}
 
-    # Find children of the last removed message and re-parent them
-    all_msgs = :ets.tab2list(state.table) |> Enum.map(fn {_, msg} -> msg end)
-
+    # Re-parent children of the last removed message
     children_of_last =
-      Enum.filter(all_msgs, fn msg ->
-        msg.parent_id == last_id and msg.id not in id_set
-      end)
+      for {_, msg} <- :ets.tab2list(state.table),
+          msg.parent_id == last_id,
+          msg.id not in id_set,
+          do: msg
 
-    # Remove old messages
-    Enum.each(ids_to_remove, fn id -> :ets.delete(state.table, id) end)
-
-    # Insert summary
+    Enum.each(ids_to_remove, &:ets.delete(state.table, &1))
     :ets.insert(state.table, {summary.id, summary})
 
-    # Re-parent children
     Enum.each(children_of_last, fn msg ->
-      updated = %{msg | parent_id: summary.id}
-      :ets.insert(state.table, {updated.id, updated})
+      :ets.insert(state.table, {msg.id, %{msg | parent_id: summary.id}})
     end)
 
-    # Update current_id if it was one of the removed messages
-    current_id =
-      if state.current_id in id_set do
-        summary.id
-      else
-        state.current_id
-      end
-
+    current_id = if state.current_id in id_set, do: summary.id, else: state.current_id
     %{state | current_id: current_id}
   end
 
-  # Reads the title from a saved JSONL file's metadata without fully loading it.
-  defp read_session_title(path) do
-    case File.open(path, [:read, :utf8]) do
-      {:ok, file} ->
-        line = IO.read(file, :line)
-        File.close(file)
+  # ── DETS Persistence ───────────────────────────────────────────────
 
-        case Jason.decode(if(is_binary(line), do: line, else: "")) do
-          {:ok, header} -> get_in(header, ["metadata", "title"])
-          _ -> nil
-        end
+  @meta_key :__session_meta__
 
-      _ ->
-        nil
+  defp persist_to_dets(state, dir) do
+    File.mkdir_p!(dir)
+    path = dets_path(dir, state.session_id)
+
+    with {:ok, ref} <- :dets.open_file(dets_name(state.session_id), file: to_charlist(path)) do
+      :dets.delete_all_objects(ref)
+
+      meta = %{
+        session_id: state.session_id,
+        current_id: state.current_id,
+        metadata: state.metadata
+      }
+
+      :dets.insert(ref, {@meta_key, meta})
+
+      state.table |> :ets.tab2list() |> then(&:dets.insert(ref, &1))
+      :dets.close(ref)
+      :ok
     end
   end
+
+  defp load_from_dets(state, path) do
+    with {:ok, ref} <- :dets.open_file(dets_name(state.session_id), file: to_charlist(path)) do
+      # Load metadata
+      meta =
+        case :dets.lookup(ref, @meta_key) do
+          [{@meta_key, m}] -> m
+          _ -> %{current_id: nil, metadata: %{}}
+        end
+
+      # Load messages into ETS
+      :ets.delete_all_objects(state.table)
+
+      :dets.foldl(
+        fn
+          {@meta_key, _}, acc ->
+            acc
+
+          {id, msg}, acc ->
+            :ets.insert(state.table, {id, msg})
+            acc
+        end,
+        :ok,
+        ref
+      )
+
+      :dets.close(ref)
+      %{state | current_id: meta.current_id, metadata: meta.metadata}
+    else
+      _ -> state
+    end
+  end
+
+  # Opens a DETS file just long enough to read session metadata (for list_sessions).
+  @spec read_dets_metadata(String.t()) :: {:ok, map()} | {:error, term()}
+  defp read_dets_metadata(path) do
+    name = :"dets_peek_#{:erlang.phash2(path)}"
+
+    with {:ok, ref} <- :dets.open_file(name, file: to_charlist(path)) do
+      result =
+        case :dets.lookup(ref, @meta_key) do
+          [{@meta_key, meta}] -> {:ok, meta}
+          _ -> {:error, :no_metadata}
+        end
+
+      :dets.close(ref)
+      result
+    end
+  end
+
+  defp dets_path(dir, session_id), do: Path.join(dir, "#{session_id}.dets")
+  defp dets_name(session_id), do: :"opal_session_#{session_id}"
 end

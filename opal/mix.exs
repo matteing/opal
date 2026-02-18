@@ -148,6 +148,7 @@ defmodule Opal.MixProject do
   defp deps do
     [
       {:req, "~> 0.5"},
+      {:llm_db, "~> 2026.1"},
       {:jason, "~> 1.4"},
       {:yaml_elixir, "~> 2.11"},
       {:anubis_mcp, "~> 0.17"},

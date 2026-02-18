@@ -17,7 +17,7 @@ Opal is two things:
 - A **minimal coding agent CLI** you can use to build things.
 - An **idiomatic Elixir library** you can drop into your app to get an agent system.
 
-It features [built-in tools](docs/tools.md), an [MCP host](docs/mcp.md), support for [Agent Skills](https://agentskills.io), [auto-compaction](docs/compaction.md), [extended thinking](docs/reasoning.md), and a [JSON-RPC transport](docs/rpc.md) for cross-language integrations. Supports [multiple providers](docs/providers.md) — GitHub Copilot, Anthropic, OpenAI, Google, and [more](https://github.com/agentjido/req_llm).
+It features [built-in tools](docs/tools.md), an [MCP host](docs/mcp.md), support for [Agent Skills](https://agentskills.io), [auto-compaction](docs/compaction.md), [extended thinking](docs/reasoning.md), and a [JSON-RPC transport](docs/rpc.md) for cross-language integrations. Currently supports [GitHub Copilot](docs/providers.md) as the built-in provider, with a pluggable behaviour for adding more.
 
 ## What can it do?
 

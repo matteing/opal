@@ -56,44 +56,9 @@ Or in your Elixir config:
 config :opal, copilot: [domain: "github.mycompany.com"]
 ```
 
-### Other providers (Anthropic, OpenAI, Google, etc.)
+### Other Providers
 
-Opal's second provider uses [ReqLLM](https://github.com/doughsay/req_llm), which supports Anthropic, OpenAI, Google, Groq, OpenRouter, xAI, AWS Bedrock, and more. These providers authenticate via API keys.
-
-Set the appropriate environment variable for your provider:
-
-```bash
-# Anthropic
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# OpenAI
-export OPENAI_API_KEY=sk-...
-
-# Google
-export GOOGLE_API_KEY=...
-
-# Groq
-export GROQ_API_KEY=...
-
-# OpenRouter
-export OPENROUTER_API_KEY=...
-```
-
-Then launch Opal with the `--model` flag specifying `provider/model`:
-
-```bash
-opal --model anthropic/claude-sonnet-4
-opal --model openai/gpt-4o
-opal --model google/gemini-2.5-pro
-```
-
-When using Opal as a library, you can also set keys programmatically:
-
-```elixir
-ReqLLM.put_key(:anthropic_api_key, "sk-ant-...")
-```
-
-See the [Providers docs](providers.md) for the full list of supported providers, model discovery, and how auto-selection works.
+Additional LLM providers (Anthropic, OpenAI, Google, etc.) are planned but not yet built in. See [Providers](providers.md) for the behaviour spec and how to add a custom provider.
 
 ## Configuration
 
@@ -113,9 +78,7 @@ Opal stores its data in `~/.opal/` (or `%APPDATA%/opal` on Windows). This includ
 | `OPAL_DATA_DIR` | Override the data directory (default: `~/.opal`) |
 | `OPAL_SHELL` | Shell to use for the `shell` tool (`bash`, `zsh`, `sh`, `cmd`, `powershell`) |
 | `OPAL_COPILOT_DOMAIN` | GitHub domain for Copilot auth (default: `github.com`) |
-| `ANTHROPIC_API_KEY` | Anthropic API key (for ReqLLM provider) |
-| `OPENAI_API_KEY` | OpenAI API key (for ReqLLM provider) |
-| `GOOGLE_API_KEY` | Google API key (for ReqLLM provider) |
+
 
 ### Elixir application config
 
@@ -133,5 +96,4 @@ config :opal,
 
 - [Providers](providers.md) — full provider docs, model discovery, behaviour spec
 - [SDK](sdk.md) — embedding Opal in your Elixir app
-- [ReqLLM](https://github.com/doughsay/req_llm) — the library powering the generic LLM provider
 - GitHub device-code OAuth flow: [RFC 8628](https://datatracker.ietf.org/doc/html/rfc8628)

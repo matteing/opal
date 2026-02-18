@@ -1,83 +1,52 @@
 # Providers
 
-The provider subsystem abstracts LLM APIs behind a common behaviour. The agent loop is provider-agnostic — it works with any model through the same interface.
+The provider subsystem abstracts LLM APIs behind a common behaviour. The agent loop is provider-agnostic — it works with any model through the same `stream/4` → `parse_stream_event/1` pipeline.
 
-## Two Built-in Providers
+## Built-in Provider: Copilot
 
-Opal ships with two providers, auto-selected based on the model specification:
-
-| Provider | Module | Use Case |
-|----------|--------|----------|
-| **Copilot** | `Opal.Provider.Copilot` | GitHub Copilot API (requires OAuth) |
-| **LLM** | `Opal.Provider.LLM` | Any ReqLLM-supported provider (Anthropic, OpenAI, Google, Groq, xAI, etc.) |
-
-**Auto-selection:** Models with provider `:copilot` use the Copilot provider; everything else uses the LLM provider.
+Opal currently ships with one provider — `Opal.Provider.Copilot` — which connects to the GitHub Copilot API. The API proxies multiple model families (Claude, GPT, Gemini, Grok) through a single OAuth-authenticated endpoint.
 
 ```mermaid
 graph TD
     Agent["Opal.Agent<br/><small>provider-agnostic</small>"]
-    Agent --> Copilot["Provider.Copilot<br/><small>direct HTTP</small>"]
-    Agent --> LLM["Provider.LLM<br/><small>ReqLLM bridge</small>"]
-    Copilot --> CopilotAPI["GitHub Copilot API<br/><small>Chat Completions + Responses API</small>"]
-    LLM --> Others["Anthropic, OpenAI, Google,<br/>Groq, OpenRouter, xAI,<br/>AWS Bedrock, ..."]
+    Agent --> Copilot["Provider.Copilot<br/><small>SSE streaming</small>"]
+    Copilot --> CopilotAPI["GitHub Copilot API"]
+    CopilotAPI --> Claude["Claude models"]
+    CopilotAPI --> GPT["GPT models"]
+    CopilotAPI --> Gemini["Gemini models"]
+    CopilotAPI --> Grok["Grok models"]
 ```
 
-## Quick Start
-
 ```elixir
-# Use Anthropic directly
-{:ok, agent} = Opal.start_session(%{
-  model: "anthropic:claude-sonnet-4-5",
-  working_dir: "/project"
-})
-
-# Use OpenAI
-{:ok, agent} = Opal.start_session(%{
-  model: "openai:gpt-4o",
-  working_dir: "/project"
-})
-
 # Use Copilot (default)
 {:ok, agent} = Opal.start_session(%{
   model: {:copilot, "claude-sonnet-4"},
   working_dir: "/project"
 })
 
+# Bare model IDs default to :copilot
+{:ok, agent} = Opal.start_session(%{
+  model: "gpt-5",
+  working_dir: "/project"
+})
+
 # Switch model mid-session
-Opal.set_model(agent, {:anthropic, "claude-sonnet-4-5"})
+Opal.set_model(agent, "claude-opus-4.6")
 ```
-
-### API Key Management (LLM Provider)
-
-The LLM provider uses ReqLLM's key management. Set keys via environment variables:
-
-```bash
-# .env or shell
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-GOOGLE_API_KEY=...
-```
-
-Or save a key via the `auth/set_key` RPC (persists to `~/.opal/settings.json` and takes effect immediately):
-
-```json
-{"method": "auth/set_key", "params": {"provider": "anthropic", "api_key": "sk-ant-..."}}
-```
-
-On first run, if no credentials are found for any provider, the CLI presents a setup wizard. See [Authentication](auth.md) for the full flow.
 
 ## Provider Behaviour
 
+Any module implementing `Opal.Provider` can serve as a provider. The behaviour has four callbacks:
+
 ```elixir
-@callback stream(model, messages, tools, opts) ::
-  {:ok, Req.Response.t() | Opal.Provider.EventStream.t()} | {:error, term()}
-@callback parse_stream_event(String.t()) :: [event]
+@callback stream(model, messages, tools, opts) :: {:ok, Req.Response.t()} | {:error, term()}
+@callback parse_stream_event(String.t()) :: [stream_event()]
 @callback convert_messages(model, [Opal.Message.t()]) :: [map()]
 @callback convert_tools([module()]) :: [map()]
 ```
 
-- `stream/4` — Initiates an async streaming request. Returns either a `Req.Response` (raw SSE — agent uses `parse_stream_event/1` to decode) or an `EventStream` (pre-parsed event tuples sent directly to the agent).
-- `parse_stream_event/1` — Parses one SSE data line into semantic events (`:text_delta`, `:tool_call_start`, etc.). Only called for SSE-mode providers.
+- `stream/4` — Initiates an SSE streaming request. Returns `{:ok, %Req.Response{}}` with an async body. The agent receives chunks in its mailbox via `Req.parse_message/2`.
+- `parse_stream_event/1` — Parses one SSE JSON line into semantic event tuples.
 - `convert_messages/2` — Translates `Opal.Message` structs into the provider's wire format.
 - `convert_tools/1` — Translates tool modules into the provider's function-calling schema.
 
@@ -99,32 +68,51 @@ All providers normalize streaming data into the same event vocabulary:
 | `{:text_done, text}` | Full text block complete (Responses API) |
 | `{:error, reason}` | Provider-level error |
 
+### Shared Helpers
+
+`Opal.Provider` doubles as a utility module with reusable helpers for OpenAI-compatible providers:
+
+- `parse_chat_event/1` — Parses Chat Completions SSE format (`choices[0].delta`)
+- `convert_messages_openai/2` — Converts `Opal.Message` to Chat Completions wire format
+- `convert_tools/2` — Converts tool modules to OpenAI function-calling format
+- `reasoning_effort/1` — Maps thinking level atoms to OpenAI effort strings
+- `compact_map/1` — Strips nil/empty values from maps
+- `decode_json_args/1` — Safe JSON argument decoding
+- `collect_text/3` — Consumes an SSE stream into a plain text string
+
+The `use Opal.Provider` macro injects the behaviour and a default `convert_tools/1`.
+
 ## Model Discovery
 
-`Opal.Models` provides auto-discovery of available models backed by [LLMDB](https://hexdocs.pm/llmdb), which ships with ReqLLM. This replaces hardcoded model lists and context window lookups.
+`Opal.Provider.Registry` provides auto-discovery of available models backed by [LLMDB](https://hexdocs.pm/llmdb), a bundled model database with metadata for context windows, capabilities, and deprecation status.
 
 ```elixir
-# List Copilot models (auto-discovered from LLMDB)
-Opal.Models.list_copilot()
-#=> [%{id: "claude-opus-4.6", name: "Claude Opus 4.6"}, ...]
+# List Copilot models
+Opal.Provider.Registry.list_copilot()
+#=> [%{id: "claude-opus-4.6", name: "Claude Opus 4.6", supports_thinking: true}, ...]
 
-# List models for a direct provider
-Opal.Models.list_provider(:anthropic)
-#=> [%{id: "claude-opus-4-6", name: "Claude Opus 4.6"}, ...]
-
-# Look up context window for any model
-Opal.Models.context_window(%Opal.Model{provider: :copilot, id: "claude-opus-4.6"})
+# Look up context window
+Opal.Provider.Registry.context_window(%Opal.Provider.Model{provider: :copilot, id: "claude-opus-4.6"})
 #=> 128_000
 
-# Resolve full model metadata (limits, capabilities, aliases)
-Opal.Models.resolve(%Opal.Model{provider: :anthropic, id: "claude-sonnet-4-5"})
-#=> {:ok, %LLMDB.Model{limits: %{context: 200_000}, ...}}
+# Resolve full model metadata
+Opal.Provider.Registry.resolve(%Opal.Provider.Model{provider: :copilot, id: "claude-opus-4.6"})
+#=> {:ok, %LLMDB.Model{limits: %{context: 128_000}, ...}}
 ```
 
-The `models/list` RPC also accepts an optional `providers` param to include direct provider models:
+### Model Specification
 
-```json
-{"method": "models/list", "params": {"providers": ["anthropic", "openai"]}}
+All APIs accept any model spec form via `Opal.Provider.Model.coerce/2`:
+
+```elixir
+Opal.Provider.Model.coerce({:copilot, "gpt-5"})
+#=> %Opal.Provider.Model{provider: :copilot, id: "gpt-5"}
+
+Opal.Provider.Model.coerce("claude-sonnet-4")
+#=> %Opal.Provider.Model{provider: :copilot, id: "claude-sonnet-4"}
+
+Opal.Provider.Model.parse("copilot:claude-opus-4.6")
+#=> %Opal.Provider.Model{provider: :copilot, id: "claude-opus-4.6"}
 ```
 
 ### Copilot Naming Quirks
@@ -136,69 +124,12 @@ The Copilot API uses its own model ID scheme that differs from upstream provider
 | `claude-opus-4.6` | `claude-opus-4-6` |
 | `claude-sonnet-4.5` | `claude-sonnet-4-5-20250929` |
 | `claude-haiku-4.5` | `claude-haiku-4-5-20251001` |
-| `claude-opus-41` | `claude-opus-4-1-20250805` |
 
-LLMDB's `github_copilot` provider maps these correctly, so when using the Copilot provider you use the dotted form (e.g., `claude-opus-4.6`), and when using a direct provider you use the upstream form (e.g., `anthropic:claude-opus-4-6`).
-
-Context windows also differ — Copilot typically limits context to 128k even for models that support 200k upstream (e.g., Claude). LLMDB reflects the Copilot-specific limits.
-
-## Streaming Modes
-
-The agent loop supports two streaming modes, selected automatically based on what `stream/4` returns:
-
-```mermaid
-graph TD
-    subgraph "SSE Mode (Copilot)"
-        C[HTTP SSE] -->|Req.parse_message| A1[parse_sse_data]
-        A1 -->|provider.parse_stream_event| A2[handle_stream_event]
-    end
-
-    subgraph "EventStream Mode (LLM)"
-        L["ReqLLM stream"] -->|chunk_to_events| E["{ref, {:events, tuples}}"]
-        E -->|direct dispatch| A3[handle_stream_event]
-    end
-```
-
-- **SSE mode** — `stream/4` returns `{:ok, %Req.Response{}}`. HTTP chunks arrive in the agent's mailbox via `Req.Response.Async`. The agent calls `Req.parse_message/2` to extract raw JSON lines, then `provider.parse_stream_event/1` to decode them into semantic events.
-- **EventStream mode** — `stream/4` returns `{:ok, %Opal.Provider.EventStream{ref, cancel_fun}}`. The provider spawns a process that sends `{ref, {:events, [event_tuples]}}` messages directly to the agent — no JSON serialization round-trip.
-
-## LLM Provider (ReqLLM)
-
-`Opal.Provider.LLM` bridges ReqLLM's streaming into Opal's event-based agent loop using EventStream mode.
-
-### How It Works
-
-1. Converts Opal messages and tools to ReqLLM format (`ReqLLM.Context`, `ReqLLM.Tool`)
-2. Calls `ReqLLM.stream_text/3` to get a `StreamResponse` with a lazy chunk stream
-3. Spawns a bridge process that iterates the stream, converts each `ReqLLM.StreamChunk` into Opal semantic event tuples via `chunk_to_events/3`, and sends them directly as `{ref, {:events, events}}`
-4. The agent's `handle_info` dispatches events straight to `handle_stream_event/2`
-
-Thinking content is preserved during message conversion: assistant messages with a `thinking` field store it in ReqLLM's message metadata for roundtripping.
-
-### Model Specification
-
-All APIs accept any model spec form via `Opal.Model.coerce/2`:
-
-```elixir
-# Tuple form (preferred)
-Opal.Model.coerce({:anthropic, "claude-sonnet-4-5"})
-#=> %Opal.Model{provider: :anthropic, id: "claude-sonnet-4-5"}
-
-# String form
-Opal.Model.coerce("openai:gpt-4o")
-#=> %Opal.Model{provider: :openai, id: "gpt-4o"}
-
-# Bare ID defaults to :copilot
-Opal.Model.coerce("claude-sonnet-4")
-#=> %Opal.Model{provider: :copilot, id: "claude-sonnet-4"}
-
-# Struct passes through as-is
-Opal.Model.coerce(%Opal.Model{provider: :anthropic, id: "claude-sonnet-4-5"})
-```
+LLMDB's `github_copilot` provider maps these correctly, so callers don't need to translate.
 
 ## Copilot Provider
 
-`Opal.Provider.Copilot` implements the behaviour for GitHub Copilot's API, which proxies multiple model families.
+`Opal.Provider.Copilot` implements the behaviour for GitHub Copilot's API, which proxies multiple model families through a single authenticated endpoint.
 
 ### Two API Variants
 
@@ -215,73 +146,62 @@ Detection: model IDs starting with `gpt-5` or `oswe` use Responses API; everythi
 
 Both APIs stream Server-Sent Events, but with different JSON structures:
 
-**Chat Completions:**
+**Chat Completions** — delegates to `Opal.Provider.parse_chat_event/1`:
 ```json
 {"choices": [{"delta": {"content": "Hello"}}]}
 {"choices": [{"delta": {"tool_calls": [...]}}]}
 {"usage": {"prompt_tokens": 1500, "completion_tokens": 200}}
 ```
 
-**Responses API:**
+**Responses API** — parsed inline in Copilot:
 ```json
 {"type": "response.output_text.delta", "delta": "Hello"}
 {"type": "response.function_call_arguments.delta", "delta": "{\"path"}
 {"type": "response.completed", "response": {"usage": {"input_tokens": 1500}}}
 ```
 
-## Auth (Copilot Only)
+## Auth
 
 `Opal.Auth.Copilot` implements GitHub's device-code OAuth flow:
 
 1. `start_device_flow()` — POST to `/login/device/code`, get a user code + verification URL
 2. User visits the URL and enters the code
-3. `poll_for_token()` — Poll until GitHub returns an access token (handles `authorization_pending` and `slow_down`)
+3. `poll_for_token()` — Poll until GitHub returns an access token
 4. `exchange_copilot_token()` — Exchange the GitHub token for a Copilot API token
 
 Tokens are persisted to `~/.opal/auth.json`. `get_token/0` auto-refreshes expired tokens (5-minute buffer before expiry).
 
-The parent module `Opal.Auth` provides `probe/0`, which checks all credential sources (Copilot token, env-var API keys, saved settings) and returns a unified readiness result. See [Authentication](auth.md) for the full probe + setup flow.
-
-Auth is only required for the Copilot provider. The LLM provider uses standard API keys.
+The parent module `Opal.Auth` provides `probe/0`, which checks credential sources and returns a unified readiness result. See [Authentication](auth.md) for the full probe + setup flow.
 
 ## Settings Persistence
 
 Model preferences are saved to `~/.opal/settings.json` via `Opal.Settings`. When a user switches models in the CLI (via `/model` or `/models`), the choice is persisted as `default_model`. On next session start, this saved preference is loaded automatically (unless overridden by `--model` or explicit config).
 
 ```json
-{"default_model": "anthropic:claude-sonnet-4-5"}
+{"default_model": "claude-sonnet-4"}
 ```
 
 RPC methods: `settings/get`, `settings/save`. See [directories.md](directories.md) for the full storage layout.
 
 ## Adding a Custom Provider
 
-To add a custom LLM provider:
-
-1. Create a module implementing `Opal.Provider`
-2. Implement `stream/4` to return either a `Req.Response` (SSE mode) or `Opal.Provider.EventStream` (native events)
-3. Implement `parse_stream_event/1` to normalize your API's events (or return `[]` if using EventStream)
+1. Create a module with `use Opal.Provider, name: :my_provider`
+2. Implement `stream/4` to return `{:ok, %Req.Response{}}` with SSE streaming
+3. Implement `parse_stream_event/1` to normalize your API's SSE events
 4. Implement `convert_messages/2` and `convert_tools/1` for your API's format
 5. Pass it in config: `Opal.start_session(%{provider: MyProvider})`
 
-For OpenAI-compatible APIs, `Opal.Provider.OpenAI` provides shared Chat Completions parsing (`parse_chat_event/1`) and message conversion (`convert_messages/2`) that can be reused.
-
-For most use cases, `Opal.Provider.LLM` already covers the provider via ReqLLM. Custom providers are only needed for proprietary APIs not supported by ReqLLM.
+For OpenAI-compatible APIs, reuse the shared helpers in `Opal.Provider`: `parse_chat_event/1` for SSE parsing and `convert_messages_openai/2` for message conversion.
 
 ## References
 
-- [ReqLLM](https://github.com/agentjido/req_llm) — Composable Elixir LLM library built on Req. Powers the LLM provider with support for 45+ providers and 665+ models.
-- [ReqLLM StreamResponse](https://hexdocs.pm/req_llm/ReqLLM.StreamResponse.html) — Streaming API used by the bridge layer.
-- [LLMDB](https://hexdocs.pm/llmdb) — Model database bundled with ReqLLM. Powers auto-discovery of models, context windows, and capabilities.
+- [LLMDB](https://hexdocs.pm/llmdb) — Model database powering auto-discovery of models, context windows, and capabilities.
 
 ## Source
 
-- `lib/opal/provider.ex` — Behaviour definition and event types
+- `lib/opal/provider/provider.ex` — Behaviour definition, shared helpers, and `collect_text/3`
 - `lib/opal/provider/copilot.ex` — GitHub Copilot implementation (Chat Completions + Responses API)
-- `lib/opal/provider/llm.ex` — ReqLLM-based multi-provider implementation (EventStream mode)
-- `lib/opal/provider/openai.ex` — Shared Chat Completions parsing, message conversion, and reasoning effort mapping
-- `lib/opal/provider/event_stream.ex` — EventStream struct for native event delivery
-- `lib/opal/models.ex` — LLMDB-backed model discovery and metadata
-- `lib/opal/auth.ex` — Provider-agnostic credential probe (`Opal.Auth.probe/0`)
-- `lib/opal/auth/copilot.ex` — Device-code OAuth and token management (Copilot only)
-- `lib/opal/model.ex` — Model struct with `parse/1` and `coerce/1` for string/tuple specs
+- `lib/opal/provider/model.ex` — Model struct with `parse/2` and `coerce/2` for string/tuple specs
+- `lib/opal/provider/registry.ex` — LLMDB-backed model discovery and metadata
+- `lib/opal/auth/auth.ex` — Provider-agnostic credential probe (`Opal.Auth.probe/0`)
+- `lib/opal/auth/copilot.ex` — Device-code OAuth and token management

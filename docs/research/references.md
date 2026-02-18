@@ -26,10 +26,7 @@ Compiled from `## References` sections across the docs.
 
 ## LLM Providers & Models
 
-- [ReqLLM](https://github.com/agentjido/req_llm) — Composable Elixir LLM library built on Req. Powers the LLM provider with support for 45+ providers and 665+ models. ([providers](../providers.md))
-- [ReqLLM StreamResponse](https://hexdocs.pm/req_llm/ReqLLM.StreamResponse.html) — Streaming API used by the bridge layer. ([providers](../providers.md))
-- [LLMDB](https://hexdocs.pm/llmdb) — Model database bundled with ReqLLM. Powers auto-discovery of models, context windows, and capabilities. ([providers](../providers.md))
-- [ReqLLM (doughsay)](https://github.com/doughsay/req_llm) — The library powering the generic LLM provider. ([installing](../installing.md))
+- [LLMDB](https://hexdocs.pm/llm_db/readme.html) — Fast, persistent_term-backed LLM model metadata catalog with O(1) lookups. Powers auto-discovery of models, context windows, and capabilities. ([providers](../providers.md))
 
 ## Reasoning & Thinking
 

@@ -160,7 +160,7 @@ defmodule Opal.Session.Compaction do
           end
 
         summary_msg = %Opal.Message{
-          id: generate_id(),
+          id: Opal.Id.generate(),
           role: :user,
           content: "[Conversation summary — older messages were compacted]\n\n#{summary_content}",
           parent_id: nil,
@@ -312,7 +312,7 @@ defmodule Opal.Session.Compaction do
   @doc """
   Calls the LLM provider to generate a summary from a prompt.
 
-  Used internally by compaction and externally by `BranchSummary`.
+  Used internally by compaction.
   Returns `{:ok, text}` or `{:error, reason}`.
   """
   @spec summarize_with_provider(module(), Opal.Provider.Model.t(), String.t()) ::
@@ -423,10 +423,6 @@ defmodule Opal.Session.Compaction do
     |> then(fn ops ->
       %{read: Enum.uniq(Enum.reverse(ops.read)), modified: Enum.uniq(Enum.reverse(ops.modified))}
     end)
-  end
-
-  defp generate_id do
-    :crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)
   end
 
   # ── Cumulative File-Op Tracking ──────────────────────────────────────

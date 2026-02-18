@@ -101,7 +101,7 @@ defmodule Opal.SubAgent do
   defp start_child(parent, overrides) do
     model = resolve_model(parent, overrides)
     provider = resolve_provider(parent, model, overrides)
-    session_id = generate_session_id()
+    session_id = "sub-" <> Opal.Id.session()
 
     Logger.debug(
       "SubAgent spawn parent=#{parent.session_id} child=#{session_id} model=#{model.id}"
@@ -142,10 +142,5 @@ defmodule Opal.SubAgent do
     overrides
     |> Map.get(:tools, parent.tools)
     |> Enum.reject(&(&1 == Opal.Tool.AskUser))
-  end
-
-  @spec generate_session_id() :: String.t()
-  defp generate_session_id do
-    "sub-" <> Base.encode16(:crypto.strong_rand_bytes(12), case: :lower)
   end
 end

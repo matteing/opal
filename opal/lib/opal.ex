@@ -54,7 +54,7 @@ defmodule Opal do
   """
   @spec start_session(map()) :: {:ok, pid()} | {:error, term()}
   def start_session(config) when is_map(config) do
-    opts = Opal.Session.Builder.build_opts(config)
+    opts = build_session_opts(config)
 
     Opal.Config.ensure_dirs!(opts[:config])
 
@@ -299,6 +299,73 @@ defmodule Opal do
   end
 
   # --- Private Helpers ---
+
+  # Builds the full opts list for SessionServer from user-provided config.
+  # Priority: explicit opts → saved settings → defaults.
+  @spec build_session_opts(map()) :: keyword()
+  defp build_session_opts(config) do
+    cfg = Opal.Config.new(config)
+    model = resolve_model(config, cfg)
+    tools = Map.get(config, :tools) || cfg.default_tools
+
+    [
+      session_id: Map.get(config, :session_id) || Opal.Id.session(),
+      system_prompt: Map.get(config, :system_prompt, ""),
+      model: model,
+      tools: tools,
+      disabled_tools: resolve_disabled_tools(config, tools),
+      working_dir: Map.get(config, :working_dir, File.cwd!()),
+      config: cfg,
+      provider: resolve_provider(config, cfg),
+      session: Map.get(config, :session, false)
+    ]
+  end
+
+  defp resolve_model(config, cfg) do
+    model_opts =
+      case config[:thinking_level],
+        do: (
+          nil -> []
+          level -> [thinking_level: level]
+        )
+
+    case config[:model] do
+      nil ->
+        base =
+          case Opal.Settings.get("default_model") do
+            saved when is_binary(saved) and saved != "" -> saved
+            _ -> cfg.default_model
+          end
+
+        Opal.Provider.Model.coerce(base, model_opts)
+
+      spec ->
+        Opal.Provider.Model.coerce(spec, model_opts)
+    end
+  end
+
+  defp resolve_provider(config, cfg) do
+    case config[:provider] do
+      mod when is_atom(mod) and not is_nil(mod) -> mod
+      _ -> cfg.provider
+    end
+  end
+
+  defp resolve_disabled_tools(config, tools) do
+    all_names = Enum.map(tools, & &1.name())
+
+    case config[:tool_names] do
+      names when is_list(names) ->
+        enabled = MapSet.new(names)
+        Enum.reject(all_names, &MapSet.member?(enabled, &1))
+
+      _ ->
+        case config[:disabled_tools] do
+          names when is_list(names) -> names
+          _ -> []
+        end
+    end
+  end
 
   # Finds the SessionServer supervisor that owns the given agent pid.
   defp find_session_server(agent) do

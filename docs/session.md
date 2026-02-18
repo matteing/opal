@@ -26,7 +26,7 @@ flowchart LR
 
 1. Explicit `:provider` module in the opts map
 2. App-level `Opal.Config` provider (if not the default Copilot)
-3. Auto-derived from the resolved model via `Opal.Model.provider_module/1`
+3. Default: `Opal.Provider.Copilot`
 
 ## Data Model
 

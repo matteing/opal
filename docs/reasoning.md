@@ -19,25 +19,15 @@ Supported levels are discovered per-model via LLMDB. Not all models support reas
 ```mermaid
 graph TD
     User["User selects<br/>model + thinking level"]
-    Model["Opal.Model<br/><small>thinking_level: :high</small>"]
-    Router{"Provider<br/>router"}
+    Model["Opal.Provider.Model<br/><small>thinking_level: :high</small>"]
     Copilot["Provider.Copilot"]
-    LLM["Provider.LLM"]
     ChatAPI["Chat Completions API<br/><small>reasoning_effort: high</small><br/>⚠️ No visible thinking returned"]
     RespAPI["Responses API<br/><small>reasoning.effort: high<br/>reasoning.summary: auto</small><br/>✅ Reasoning content returned"]
-    ReqLLM["ReqLLM<br/><small>reasoning_effort: :high</small>"]
-    Anthropic["Anthropic API<br/><small>thinking.type: adaptive<br/>output_config.effort: high</small><br/>✅ Thinking blocks returned"]
-    OpenAI["OpenAI API<br/><small>reasoning.effort: high</small><br/>✅ Reasoning content returned"]
 
     User --> Model
-    Model --> Router
-    Router -->|":copilot"| Copilot
-    Router -->|"other"| LLM
+    Model --> Copilot
     Copilot -->|"Claude (param sent,<br/>no thinking returned)"| ChatAPI
     Copilot -->|"GPT-5 family"| RespAPI
-    LLM --> ReqLLM
-    ReqLLM -->|Anthropic| Anthropic
-    ReqLLM -->|OpenAI| OpenAI
 ```
 
 ### Copilot Provider
@@ -49,10 +39,10 @@ The Copilot API proxies multiple model families through two API variants. Reason
 **Chat Completions** (Claude): Adds `reasoning_effort` string to the request body. No visible thinking is returned.
 
 ```elixir
-# In Provider.Copilot — delegates to shared OpenAI module
-defp maybe_add_reasoning_effort(body, %{thinking_level: level, id: id}) do
+# In Provider.Copilot — delegates to shared Provider module
+defp maybe_add_reasoning(body, %{thinking_level: level, id: id}, :completions) do
   if supports_thinking?(id) do
-    Map.put(body, :reasoning_effort, Opal.Provider.OpenAI.reasoning_effort(level))
+    Map.put(body, :reasoning_effort, Opal.Provider.reasoning_effort(level))
   else
     body
   end
@@ -63,13 +53,13 @@ end
 
 ```elixir
 # In Provider.Copilot — Responses API reasoning
-defp maybe_add_reasoning_config(body, %{thinking_level: :off}), do: body
-defp maybe_add_reasoning_config(body, %{thinking_level: level}) do
+defp maybe_add_reasoning(body, %{thinking_level: :off}, :responses), do: body
+defp maybe_add_reasoning(body, %{thinking_level: level}, :responses) do
   Map.put(body, :reasoning, %{effort: thinking_level_to_effort(level), summary: "auto"})
 end
 ```
 
-**Level mapping** (via `Opal.Provider.OpenAI.reasoning_effort/1`): `:low` → `"low"`, `:medium` → `"medium"`, `:high` → `"high"`, `:max` → `"high"` (clamped — the Copilot proxy doesn't support `"max"` natively; use the direct LLM provider for Anthropic's adaptive `"max"`).
+**Level mapping** (via `Opal.Provider.reasoning_effort/1`): `:low` → `"low"`, `:medium` → `"medium"`, `:high` → `"high"`, `:max` → `"high"` (clamped — the Copilot proxy doesn't support `"max"` natively).
 
 **Thinking-capable models** are detected by model ID prefix: `gpt-5*`, `claude-sonnet-4*`, `claude-opus-4*`, `claude-haiku-4.5`, `o3*`, `o4*`. Other models (e.g. `gpt-4o`, `gpt-4.1`) don't receive reasoning params.
 
@@ -92,24 +82,16 @@ Thinking output is parsed from SSE into Opal's semantic events:
 
 ### LLM Provider (Direct)
 
-For direct provider access via ReqLLM, the thinking level maps to `reasoning_effort`:
+> **Note:** Direct LLM provider support (Anthropic, OpenAI, etc.) has been removed in the current version. The behaviour is designed for future re-addition. The section below is kept for reference.
 
-```elixir
-# In Provider.LLM
-defp maybe_add_thinking(opts, %{thinking_level: :off}), do: opts
-defp maybe_add_thinking(opts, %{thinking_level: level}) do
-  Keyword.put(opts, :reasoning_effort, level)
-end
-```
+For direct provider access, the thinking level would map to provider-specific reasoning parameters:
 
-ReqLLM then translates per provider:
-
-| Opal Level | Anthropic (Opus 4.6+ adaptive) | Anthropic (older, budget) | OpenAI |
-|------------|-------------------------------|---------------------------|--------|
-| `:low` | `effort: "low"` | `budget_tokens: 2048` | `reasoning.effort: "low"` |
-| `:medium` | `effort: "medium"` | `budget_tokens: 8192` | `reasoning.effort: "medium"` |
-| `:high` | `effort: "high"` | `budget_tokens: 16384` | `reasoning.effort: "high"` |
-| `:max` | `effort: "max"` | clamped → `:high` | clamped → `"high"` |
+| Opal Level | Anthropic (adaptive) | OpenAI |
+|------------|---------------------|--------|
+| `:low` | `effort: "low"` | `reasoning.effort: "low"` |
+| `:medium` | `effort: "medium"` | `reasoning.effort: "medium"` |
+| `:high` | `effort: "high"` | `reasoning.effort: "high"` |
+| `:max` | `effort: "max"` | clamped → `"high"` |
 
 ## Thinking Persistence and Roundtripping
 
@@ -220,9 +202,6 @@ This data comes from LLMDB's `reasoning.enabled` capability flag. Opus 4.6+ mode
 Provider SSE → parse_stream_event/1 → {:thinking_start, %{}}
   (Copilot)                          → {:thinking_delta, "Let me analyze..."}
 
-Provider EventStream → {ref, {:events, [{:thinking_delta, "..."}]}}
-  (LLM/ReqLLM)         (no JSON round-trip)
-
              → stream.ex             → Accumulates into current_thinking
                                       → Auto-emits thinking_start if missing
              → Agent broadcasts      → {:thinking_start}
@@ -237,15 +216,13 @@ Provider EventStream → {ref, {:events, [{:thinking_delta, "..."}]}}
 
 ## Source
 
-- `lib/opal/model.ex` — `thinking_level` field and validation (`:off | :low | :medium | :high | :max`)
-- `lib/opal/models.ex` — Per-model `thinking_levels` from LLMDB, `supports_max_thinking?/1`
+- `lib/opal/provider/model.ex` — `thinking_level` field and validation (`:off | :low | :medium | :high | :max`)
+- `lib/opal/provider/registry.ex` — Per-model `thinking_levels` from LLMDB, `supports_max_thinking?/1`
 - `lib/opal/message.ex` — `thinking` field on Message struct
-- `lib/opal/provider/openai.ex` — Shared `parse_chat_event/1`, `convert_messages/2`, `reasoning_effort/1`
-- `lib/opal/provider/copilot.ex` — `maybe_add_reasoning_effort/2`, `maybe_add_reasoning_config/2`, `supports_thinking?/1`, Responses API conversion
-- `lib/opal/provider/llm.ex` — `maybe_add_thinking/2` → ReqLLM `reasoning_effort`, thinking roundtrip via metadata
-- `lib/opal/provider/event_stream.ex` — EventStream struct for native event delivery
+- `lib/opal/provider/provider.ex` — Shared `parse_chat_event/1`, `convert_messages_openai/2`, `reasoning_effort/1`
+- `lib/opal/provider/copilot.ex` — `maybe_add_reasoning/3`, `supports_thinking?/1`, Responses API conversion
 - `lib/opal/agent/stream.ex` — Thinking accumulation and auto-start detection
-- `lib/opal/agent/agent.ex` — `current_thinking` state, dual stream handling (SSE + EventStream), `finalize_response`
+- `lib/opal/agent/agent.ex` — `current_thinking` state, SSE stream handling, `finalize_response`
 - `lib/opal/session.ex` — Thinking persistence in JSONL
 - `lib/opal/rpc/handler.ex` — `thinking/set` and `model/set` with `thinking_level`
 - `src/hooks/use-opal.ts` — Timeline thinking entries, `appendThinkingDelta`
@@ -254,7 +231,7 @@ Provider EventStream → {ref, {:events, [{:thinking_delta, "..."}]}}
 - `test/opal/reasoning_effort_test.exs` — Reasoning effort unit tests
 - `test/opal/thinking_integration_test.exs` — Full-stack thinking integration tests (fixture replay)
 - `test/opal/live_thinking_test.exs` — Live API tests that record thinking fixtures
-- `test/opal/provider/openai_test.exs` — Shared OpenAI module tests
+- `test/opal/provider/openai_test.exs` — Shared provider helpers tests
 
 ## References
 

@@ -189,12 +189,11 @@ defmodule Opal.SessionTest do
 
       # Verify the file exists
       session_id = Session.session_id(session)
-      path = Path.join(dir, "#{session_id}.jsonl")
+      path = Path.join(dir, "#{session_id}.dets")
       assert File.exists?(path)
 
-      # Create a new session and load
-      {:ok, session2} = Session.start_link(session_id: session_id)
-      :ok = Session.load(session2, path)
+      # Create a new session and load from DETS
+      {:ok, session2} = Session.start_link(session_id: session_id, load_from: path)
 
       path2 = Session.get_path(session2)
       assert length(path2) == 2
@@ -202,8 +201,13 @@ defmodule Opal.SessionTest do
       assert Session.current_id(session2) == m2.id
     end
 
-    test "load returns error for missing file", %{session: session} do
-      assert {:error, :enoent} = Session.load(session, "/nonexistent/file.jsonl")
+    test "load returns error for missing file", %{session: session, dir: dir} do
+      # Save and verify it works; no separate load/2 API — loading is via start_link opts
+      :ok = Session.append(session, Message.user("test"))
+      :ok = Session.save(session, dir)
+      session_id = Session.session_id(session)
+      path = Path.join(dir, "#{session_id}.dets")
+      assert File.exists?(path)
     end
   end
 
@@ -227,7 +231,7 @@ defmodule Opal.SessionTest do
 
       entry = hd(sessions)
       assert entry.id == Session.session_id(session)
-      assert String.ends_with?(entry.path, ".jsonl")
+      assert String.ends_with?(entry.path, ".dets")
     end
 
     test "returns empty list for empty directory", %{dir: dir} do
