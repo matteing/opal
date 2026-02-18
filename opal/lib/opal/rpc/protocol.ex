@@ -14,7 +14,7 @@ defmodule Opal.RPC.Protocol do
       Schema, or documentation.
     * **Self-documenting** — each definition carries its own description,
       required/optional params, and result shape.
-    * **Single source of truth** — `Opal.RPC.Handler` and `Opal.RPC.Stdio`
+    * **Single source of truth** — `Opal.RPC.Server`
       reference these definitions rather than embedding protocol knowledge.
 
   ## Usage
@@ -875,7 +875,7 @@ defmodule Opal.RPC.Protocol do
   ]
 
   # ---------------------------------------------------------------------------
-  # Notification wrapper (the notification method name for all events)
+  # Public API
   # ---------------------------------------------------------------------------
 
   @notification_method "agent/event"
@@ -883,10 +883,6 @@ defmodule Opal.RPC.Protocol do
   @doc "The JSON-RPC method name used for all streaming event notifications."
   @spec notification_method() :: String.t()
   def notification_method, do: @notification_method
-
-  # ---------------------------------------------------------------------------
-  # Public Query API
-  # ---------------------------------------------------------------------------
 
   @doc "Returns all client→server method definitions."
   @spec methods() :: [method_def()]
@@ -908,10 +904,6 @@ defmodule Opal.RPC.Protocol do
   @spec server_request_names() :: [String.t()]
   def server_request_names, do: Enum.map(@server_requests, & &1.method)
 
-  @doc "Returns the definition for a specific server request, or nil."
-  @spec server_request(String.t()) :: server_request_def() | nil
-  def server_request(name), do: Enum.find(@server_requests, &(&1.method == name))
-
   @doc "Returns all event type definitions."
   @spec event_types() :: [event_type_def()]
   def event_types, do: @event_types
@@ -920,26 +912,10 @@ defmodule Opal.RPC.Protocol do
   @spec event_type_names() :: [String.t()]
   def event_type_names, do: Enum.map(@event_types, & &1.type)
 
-  @doc "Returns the definition for a specific event type, or nil."
-  @spec event_type(String.t()) :: event_type_def() | nil
-  def event_type(name), do: Enum.find(@event_types, &(&1.type == name))
-
   @doc """
   Returns the complete protocol specification as a single map.
 
-  Useful for serialization, export, or code generation.
-
-  ## Structure
-
-      %{
-        version: "0.1.0",
-        transport: "stdio",
-        framing: "newline-delimited JSON",
-        methods: [...],
-        server_requests: [...],
-        event_types: [...],
-        notification_method: "agent/event"
-      }
+  Used by `mix opal.gen.json_schema` and the codegen pipeline.
   """
   @spec spec() :: map()
   def spec do
@@ -952,86 +928,5 @@ defmodule Opal.RPC.Protocol do
       event_types: @event_types,
       notification_method: @notification_method
     }
-  end
-
-  @doc """
-  Serializes a type descriptor to a JSON-friendly format.
-
-  ## Examples
-
-      iex> Opal.RPC.Protocol.serialize_type(:string)
-      "string"
-
-      iex> Opal.RPC.Protocol.serialize_type({:array, :string})
-      %{kind: "array", item: "string"}
-
-      iex> Opal.RPC.Protocol.serialize_type({:object, %{"provider" => :string, "id" => :string}})
-      %{kind: "object", fields: %{"provider" => "string", "id" => "string"}}
-  """
-  @spec serialize_type(type_desc()) :: String.t() | map()
-  def serialize_type(:string), do: "string"
-  def serialize_type(:boolean), do: "boolean"
-  def serialize_type(:integer), do: "integer"
-  def serialize_type(:object), do: "object"
-  def serialize_type({:array, inner}), do: %{kind: "array", item: serialize_type(inner)}
-
-  def serialize_type({:object, fields}) when is_map(fields) do
-    %{kind: "object", fields: Map.new(fields, fn {k, v} -> {k, serialize_type(v)} end)}
-  end
-
-  @doc """
-  Returns the spec with all types serialized to JSON-friendly format.
-  """
-  @spec spec_json() :: map()
-  def spec_json do
-    spec = spec()
-
-    %{
-      spec
-      | methods: Enum.map(spec.methods, &serialize_def/1),
-        server_requests: Enum.map(spec.server_requests, &serialize_def/1),
-        event_types: Enum.map(spec.event_types, &serialize_event_type/1)
-    }
-  end
-
-  @doc """
-  Returns true if the given method name is a known client→server method.
-  """
-  @spec known_method?(String.t()) :: boolean()
-  def known_method?(name), do: name in method_names()
-
-  @doc """
-  Returns the required param names for a given method.
-  """
-  @spec required_params(String.t()) :: [String.t()]
-  def required_params(name) do
-    case method(name) do
-      nil -> []
-      m -> m.params |> Enum.filter(& &1.required) |> Enum.map(& &1.name)
-    end
-  end
-
-  @doc """
-  Returns true if the given event type is a known event.
-  """
-  @spec known_event_type?(String.t()) :: boolean()
-  def known_event_type?(name), do: name in event_type_names()
-
-  # -- Private Helpers --
-
-  defp serialize_def(def_map) do
-    def_map
-    |> Map.update!(:params, fn params ->
-      Enum.map(params, fn p -> Map.update!(p, :type, &serialize_type/1) end)
-    end)
-    |> Map.update!(:result, fn fields ->
-      Enum.map(fields, fn f -> Map.update!(f, :type, &serialize_type/1) end)
-    end)
-  end
-
-  defp serialize_event_type(et) do
-    Map.update!(et, :fields, fn fields ->
-      Enum.map(fields, fn f -> Map.update!(f, :type, &serialize_type/1) end)
-    end)
   end
 end

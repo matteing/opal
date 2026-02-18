@@ -164,7 +164,7 @@ defmodule Opal.RPC.IntegrationTest do
     end
 
     defp handle_request(id, method, params, state) do
-      case Opal.RPC.Handler.handle(method, params) do
+      case Opal.RPC.Server.dispatch(method, params) do
         {:ok, result} ->
           write_to_client(state.test_pid, RPC.encode_response(id, result))
 

@@ -17,7 +17,7 @@ defmodule Opal.Application do
     # set `config :opal, start_rpc: false` for embedded SDK use).
     children =
       if Application.get_env(:opal, :start_rpc, true) do
-        children ++ [Opal.RPC.Stdio]
+        children ++ [Opal.RPC.Server]
       else
         children
       end

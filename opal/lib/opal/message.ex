@@ -141,4 +141,36 @@ defmodule Opal.Message do
       is_error: is_error
     }
   end
+
+  # -- Serialization --
+
+  @doc """
+  Serializes a message to a plain map suitable for JSON encoding.
+
+  Optional fields (`:thinking`, `:tool_calls`, `:call_id`, `:name`,
+  `:metadata`) are included only when present.
+  """
+  @spec to_map(t()) :: map()
+  def to_map(%__MODULE__{} = msg) do
+    %{id: msg.id, role: to_string(msg.role), content: msg.content, is_error: msg.is_error}
+    |> put_if(msg.thinking, :thinking)
+    |> put_if(msg.call_id, :call_id)
+    |> put_if(msg.name, :name)
+    |> put_if(msg.metadata, :metadata)
+    |> maybe_put_tool_calls(msg.tool_calls)
+  end
+
+  defp put_if(map, nil, _key), do: map
+  defp put_if(map, val, key), do: Map.put(map, key, val)
+
+  defp maybe_put_tool_calls(map, nil), do: map
+  defp maybe_put_tool_calls(map, []), do: map
+
+  defp maybe_put_tool_calls(map, tcs) do
+    Map.put(
+      map,
+      :tool_calls,
+      Enum.map(tcs, &%{call_id: &1.call_id, name: &1.name, arguments: &1.arguments})
+    )
+  end
 end

@@ -2,7 +2,7 @@ defmodule Opal.RPC do
   @moduledoc """
   JSON-RPC 2.0 encoding/decoding. Transport-agnostic.
 
-  Used by `Opal.RPC.Stdio` today; could be used by a WebSocket or HTTP
+  Used by `Opal.RPC.Server` today; could be used by a WebSocket or HTTP
   transport later. All functions are stateless — pure encode/decode.
 
   ## Wire Format

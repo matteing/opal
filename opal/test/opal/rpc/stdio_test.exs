@@ -1,24 +1,15 @@
-defmodule Opal.RPC.StdioTest do
+defmodule Opal.RPC.ServerTransportTest do
   @moduledoc """
-  Tests for the STDIO transport GenServer.
+  Tests for the RPC Server's transport and event serialization logic.
 
-  Since `Opal.RPC.Stdio` uses raw file descriptor ports (:fd 0, :fd 1) that
-  cannot be safely mocked in unit tests, we test the transport by directly
-  exercising its internal logic:
-
-    - `extract_lines/1` — newline-delimited buffering
-    - `serialize_event/1` — internal event → JSON-RPC notification
-    - `process_line/2` — JSON-RPC dispatch (request, response, errors)
-    - `handle_call/handle_cast` — GenServer request/response lifecycle
-    - `handle_info` — event forwarding, EOF handling
-
-  We construct a `%Opal.RPC.Stdio{}` state manually and call the callbacks
-  directly, capturing stdout writes via a test port.
+  Since `Opal.RPC.Server` uses raw file descriptor ports (:fd 0, :fd 1) that
+  cannot be safely mocked in unit tests, we test by exercising the logic
+  directly with replicated helpers and the public `dispatch/2` function.
   """
   use ExUnit.Case, async: true
 
   alias Opal.RPC
-  alias Opal.RPC.Stdio
+  alias Opal.RPC.Server
 
   # ── extract_lines/1 ──────────────────────────────────────────────────
   #
@@ -339,7 +330,7 @@ defmodule Opal.RPC.StdioTest do
 
       assert decoded1["id"] == "s2c-1"
       assert decoded2["id"] == "s2c-2"
-      assert state2.next_server_id == 3
+      assert state2.next_id == 3
 
       # Both should be pending
       assert map_size(state2.pending_requests) == 2
@@ -372,7 +363,7 @@ defmodule Opal.RPC.StdioTest do
 
     test "unknown messages are silently ignored" do
       # Should not crash
-      {:noreply, state} = Stdio.handle_info(:unexpected_message, new_state())
+      {:noreply, state} = Server.handle_info(:unexpected_message, new_state())
       assert state == new_state()
     end
   end
@@ -405,17 +396,17 @@ defmodule Opal.RPC.StdioTest do
 
   describe "struct defaults" do
     test "new state has empty pending requests" do
-      state = %Stdio{}
+      state = %Server{}
       assert state.pending_requests == %{}
     end
 
     test "new state starts with server id 1" do
-      state = %Stdio{}
-      assert state.next_server_id == 1
+      state = %Server{}
+      assert state.next_id == 1
     end
 
     test "new state has empty subscriptions" do
-      state = %Stdio{}
+      state = %Server{}
       assert state.subscriptions == MapSet.new()
     end
   end
@@ -441,32 +432,22 @@ defmodule Opal.RPC.StdioTest do
   end
 
   defp new_state do
-    %Stdio{
+    %Server{
       reader: nil,
       pending_requests: %{},
-      next_server_id: 1,
+      next_id: 1,
       subscriptions: MapSet.new()
     }
   end
 
-  # Captures write_stdout output by temporarily setting a test port
-  # (Not used directly — process_line_capture reimplements the dispatch
-  # logic to avoid needing real fd ports.)
-
-  # Process a line through the Stdio state machine, capturing any output
+  # Process a line through the dispatch logic, capturing any output
   defp process_line_capture(line, state) do
-    # We call the internal process_line function by sending a message
-    # and intercepting the GenServer behavior. Since process_line is private,
-    # we simulate it through handle_info.
-    #
-    # For testing, we replicate the dispatch logic since it's pure
-    # (modulo write_stdout side effect).
     outputs =
       capture_writes(fn ->
         case RPC.decode(line) do
           {:request, id, method, params} ->
             try do
-              case Opal.RPC.Handler.handle(method, params) do
+              case Server.dispatch(method, params) do
                 {:ok, result} ->
                   write_capture(RPC.encode_response(id, result))
 
@@ -553,11 +534,11 @@ defmodule Opal.RPC.StdioTest do
   end
 
   defp handle_call_capture({:request_client, method, params}, state) do
-    id = "s2c-#{state.next_server_id}"
+    id = "s2c-#{state.next_id}"
     output = RPC.encode_request(id, method, params)
     from = {self(), make_ref()}
     pending = Map.put(state.pending_requests, id, from)
-    new_state = %{state | pending_requests: pending, next_server_id: state.next_server_id + 1}
+    new_state = %{state | pending_requests: pending, next_id: state.next_id + 1}
     {new_state, output}
   end
 
@@ -646,7 +627,10 @@ defmodule Opal.RPC.StdioTest do
 
   defp serialize_event({:agent_end, _msgs}), do: {"agent_end", %{}}
   defp serialize_event({:agent_end, _msgs, usage}), do: {"agent_end", %{usage: usage}}
+  defp serialize_event({:agent_recovered}), do: {"agent_recovered", %{}}
   defp serialize_event({:usage_update, usage}), do: {"usage_update", %{usage: usage}}
+  defp serialize_event({:message_queued, text}), do: {"message_queued", %{text: text}}
+  defp serialize_event({:message_applied, text}), do: {"message_applied", %{text: text}}
   defp serialize_event({:status_update, msg}), do: {"status_update", %{message: msg}}
   defp serialize_event({:error, reason}), do: {"error", %{reason: inspect(reason)}}
   defp serialize_event(other), do: {"unknown", %{raw: inspect(other)}}

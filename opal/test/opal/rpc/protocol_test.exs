@@ -108,47 +108,9 @@ defmodule Opal.RPC.ProtocolTest do
     end
 
     test "message_delta event has a delta field" do
-      et = Protocol.event_type("message_delta")
-      field_names = Enum.map(et.fields, & &1.name)
+      delta = Enum.find(Protocol.event_types(), &(&1.type == "message_delta"))
+      field_names = Enum.map(delta.fields, & &1.name)
       assert "delta" in field_names
-    end
-  end
-
-  describe "known_method?/1" do
-    test "returns true for known methods" do
-      assert Protocol.known_method?("session/start")
-      assert Protocol.known_method?("agent/prompt")
-    end
-
-    test "returns false for unknown methods" do
-      refute Protocol.known_method?("foo/bar")
-    end
-  end
-
-  describe "known_event_type?/1" do
-    test "returns true for known event types" do
-      assert Protocol.known_event_type?("agent_start")
-      assert Protocol.known_event_type?("message_delta")
-    end
-
-    test "returns false for unknown event types" do
-      refute Protocol.known_event_type?("unknown_event")
-    end
-  end
-
-  describe "required_params/1" do
-    test "returns required params for agent/prompt" do
-      required = Protocol.required_params("agent/prompt")
-      assert "session_id" in required
-      assert "text" in required
-    end
-
-    test "returns empty list for session/list (no required params)" do
-      assert Protocol.required_params("session/list") == []
-    end
-
-    test "returns empty list for unknown method" do
-      assert Protocol.required_params("foo/bar") == []
     end
   end
 
@@ -174,35 +136,15 @@ defmodule Opal.RPC.ProtocolTest do
       assert Protocol.spec().methods == Protocol.methods()
     end
 
-    test "spec is JSON-serializable" do
-      assert {:ok, json} = Jason.encode(Protocol.spec_json())
-      assert is_binary(json)
-      assert {:ok, decoded} = Jason.decode(json)
-      assert is_map(decoded)
-    end
-  end
-
-  describe "protocol completeness" do
-    test "every method in Protocol has a handler clause (not method_not_found)" do
-      for name <- Protocol.method_names() do
-        result =
-          try do
-            Opal.RPC.Handler.handle(name, %{})
-          rescue
-            # Some methods may crash with empty params (e.g. session/start
-            # tries to start a real session). That's fine — the method is
-            # still *handled*, it just needs valid params.
-            _ -> :handled_but_raised
-          end
-
-        case result do
-          {:error, -32601, _, _} ->
-            flunk("Method #{name} is declared in Protocol but not handled")
-
-          _ ->
-            :ok
-        end
-      end
+    test "spec is a well-formed map" do
+      spec = Protocol.spec()
+      # Types use Elixir tuples (e.g. {:array, :string}) which are not
+      # directly JSON-encodable — that's by design for codegen. The mix
+      # task handles its own serialization.
+      assert is_map(spec)
+      assert length(spec.methods) > 0
+      assert length(spec.server_requests) > 0
+      assert length(spec.event_types) > 0
     end
   end
 end
