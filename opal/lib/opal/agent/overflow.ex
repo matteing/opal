@@ -29,11 +29,14 @@ defmodule Opal.Agent.Overflow do
     "context_length_exceeded",
     "maximum context length",
     "max_tokens",
+    "max_prompt_tokens",
     "too many tokens",
     "prompt is too long",
+    "prompt_tokens_exceeded",
     "request too large",
     "context window",
     "token limit",
+    "exceeds the limit",
     "input too long",
     "exceeds the model's maximum",
     "reduce the length",
@@ -66,11 +69,29 @@ defmodule Opal.Agent.Overflow do
 
       iex> Opal.Agent.Overflow.context_overflow?("rate_limit")
       false
+
+      iex> Opal.Agent.Overflow.context_overflow?(%{"code" => "model_max_prompt_tokens_exceeded"})
+      true
   """
   @spec context_overflow?(term()) :: boolean()
   def context_overflow?(reason) do
-    text = reason |> to_string() |> String.downcase()
+    text = stringify_reason(reason) |> String.downcase()
     Enum.any?(@overflow_patterns, &String.contains?(text, &1))
+  end
+
+  # Converts an error reason to a string for pattern matching.
+  # Maps (common from JSON API errors) are inspected since they don't
+  # implement String.Chars. Binaries and other String.Chars types are
+  # converted directly.
+  @spec stringify_reason(term()) :: String.t()
+  defp stringify_reason(reason) when is_binary(reason), do: reason
+  defp stringify_reason(reason) when is_map(reason), do: inspect(reason)
+  defp stringify_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+
+  defp stringify_reason(reason) do
+    String.Chars.to_string(reason)
+  rescue
+    Protocol.UndefinedError -> inspect(reason)
   end
 
   @doc """

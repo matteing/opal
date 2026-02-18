@@ -1165,24 +1165,6 @@ defmodule Opal.AgentTest do
   end
 
   # ============================================================
-  # Follow-up
-  # ============================================================
-
-  describe "follow_up/2" do
-    test "follow_up acts like prompt" do
-      %{pid: pid, session_id: sid} = start_agent()
-
-      Agent.follow_up(pid, "Follow-up text")
-
-      assert_receive {:opal_event, ^sid, {:agent_start}}, 1000
-      assert_receive {:opal_event, ^sid, {:agent_end, messages, _usage}}, 2000
-
-      [user_msg | _] = messages
-      assert user_msg.content == "Follow-up text"
-    end
-  end
-
-  # ============================================================
   # Tool Failure Isolation
   # ============================================================
 

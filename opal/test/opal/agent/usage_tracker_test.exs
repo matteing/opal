@@ -98,7 +98,7 @@ defmodule Opal.Agent.UsageTrackerTest do
     end
   end
 
-  describe "maybe_auto_compact/1" do
+  describe "maybe_auto_compact/2" do
     test "returns state unchanged when session is nil" do
       state = %State{
         session: nil,
@@ -108,11 +108,11 @@ defmodule Opal.Agent.UsageTrackerTest do
         config: Opal.Config.new()
       }
 
-      assert UsageTracker.maybe_auto_compact(state) == state
+      assert UsageTracker.maybe_auto_compact(state, & &1.messages) == state
     end
   end
 
-  describe "handle_overflow_compaction/2 without session" do
+  describe "handle_overflow/2 without session" do
     test "returns noreply with idle status and broadcasts error" do
       session_id = "overflow-test-#{System.unique_integer([:positive])}"
       Opal.Events.subscribe(session_id)
@@ -125,13 +125,13 @@ defmodule Opal.Agent.UsageTrackerTest do
         config: Opal.Config.new(%{features: %{debug: %{enabled: true}}})
       }
 
-      new_state = UsageTracker.handle_overflow_compaction(state, :overflow)
+      new_state = UsageTracker.handle_overflow(state, :overflow)
       assert new_state.status == :idle
       assert_receive {:opal_event, ^session_id, {:error, {:overflow_no_session, :overflow}}}
     end
   end
 
-  describe "estimate_current_tokens/2" do
+  describe "estimate_tokens/2" do
     test "uses heuristic when no usage data" do
       state = %State{
         session_id: "est-#{System.unique_integer([:positive])}",
@@ -141,7 +141,7 @@ defmodule Opal.Agent.UsageTrackerTest do
         messages: [Opal.Message.user("Hello")]
       }
 
-      estimate = UsageTracker.estimate_current_tokens(state, 128_000)
+      estimate = UsageTracker.estimate_tokens(state, & &1.messages)
       assert is_integer(estimate) and estimate > 0
     end
 
@@ -156,7 +156,7 @@ defmodule Opal.Agent.UsageTrackerTest do
         last_usage_msg_index: 1
       }
 
-      estimate = UsageTracker.estimate_current_tokens(state, 128_000)
+      estimate = UsageTracker.estimate_tokens(state, & &1.messages)
       # Should be at least the base prompt tokens
       assert estimate >= 500
     end

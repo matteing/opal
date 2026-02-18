@@ -283,7 +283,7 @@ defmodule Opal.RPC.Handler do
   end
 
   def handle("auth/poll", %{"device_code" => device_code, "interval" => interval}) do
-    domain = Opal.Config.new().copilot.domain
+    domain = Opal.Config.new().copilot_domain
 
     case Opal.Auth.Copilot.poll_for_token(domain, device_code, interval * 1_000) do
       {:ok, github_token} ->
@@ -320,7 +320,7 @@ defmodule Opal.RPC.Handler do
     # Save to persistent settings so it survives restarts
     Opal.Settings.save(%{"#{provider}_api_key" => api_key})
 
-    # Set in process env so ReqLLM picks it up immediately
+    # Set in process env so providers can pick it up
     System.put_env(env_var, api_key)
 
     {:ok, %{ok: true}}
@@ -663,7 +663,7 @@ defmodule Opal.RPC.Handler do
 
   defp serialize_runtime_config(%Opal.Agent.State{} = state) do
     all_tools = Enum.map(state.tools, & &1.name())
-    enabled_tools = Opal.Agent.Tools.active_tools(state) |> Enum.map(& &1.name())
+    enabled_tools = Opal.Agent.ToolRunner.active_tools(state) |> Enum.map(& &1.name())
 
     %{
       features: %{

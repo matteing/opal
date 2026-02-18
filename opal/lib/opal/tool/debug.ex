@@ -73,7 +73,7 @@ defmodule Opal.Tool.Debug do
       },
       tools: %{
         all: Enum.map(state.tools, & &1.name()),
-        enabled: Opal.Agent.Tools.active_tools(state) |> Enum.map(& &1.name()),
+        enabled: Opal.Agent.ToolRunner.active_tools(state) |> Enum.map(& &1.name()),
         disabled: state.disabled_tools
       },
       token_usage: state.token_usage,

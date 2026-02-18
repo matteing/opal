@@ -71,7 +71,7 @@ defmodule Opal.Agent.SystemPrompt do
       format_context_entries(state.context_entries),
       format_skills(state.available_skills, state.config),
       format_environment(state.working_dir),
-      build_guidelines(Opal.Agent.Tools.active_tools(state), state),
+      build_guidelines(Opal.Agent.ToolRunner.active_tools(state), state),
       format_planning(state)
     ]
 

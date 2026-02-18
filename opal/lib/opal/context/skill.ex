@@ -1,60 +1,32 @@
 defmodule Opal.Skill do
   @moduledoc """
-  Parses and validates Agent Skills following the [agentskills.io specification](https://agentskills.io/specification).
+  Parses and validates Agent Skills per the [agentskills.io spec](https://agentskills.io/specification).
 
-  A skill is a directory containing a `SKILL.md` file with YAML frontmatter
-  (metadata) and a Markdown body (instructions). Skills support progressive
-  disclosure: metadata is loaded at discovery time, and full instructions are
-  loaded on demand when the agent activates the skill.
+  A skill is a directory with a `SKILL.md` — YAML frontmatter for metadata,
+  Markdown body for instructions. Metadata loads at discovery; full
+  instructions load on activation (progressive disclosure).
 
-  ## SKILL.md Format
+  ## Frontmatter Fields
 
-      ---
-      name: my-skill
-      description: What this skill does and when to use it.
-      ---
-
-      # Instructions
-
-      Step-by-step instructions for the agent...
-
-  ## Required Fields
-
-    * `name` — 1–64 characters, lowercase alphanumeric and hyphens only.
-      Must not start/end with `-` or contain `--`. Must match the parent
-      directory name.
-
-    * `description` — 1–1024 characters describing what the skill does
-      and when to use it.
-
-  ## Optional Fields
-
-    * `license` — License name or reference to a bundled file.
-    * `compatibility` — 1–500 characters indicating environment requirements.
-    * `metadata` — Arbitrary key-value map for additional properties.
-    * `allowed-tools` — Space-delimited list of pre-approved tools (experimental).
-
-  ## Usage
-
-      # Parse a single SKILL.md file
-      {:ok, skill} = Opal.Skill.parse_file("/path/to/my-skill/SKILL.md")
-
-      # Parse raw markdown content
-      {:ok, skill} = Opal.Skill.parse("---\\nname: my-skill\\n...")
-
-      # Validate a parsed skill against its directory
-      :ok = Opal.Skill.validate(skill, dir_name: "my-skill")
+  | Field           | Required | Constraint                         |
+  |-----------------|----------|------------------------------------|
+  | `name`          | yes      | 1–64 chars, `[a-z0-9-]`, no `--`  |
+  | `description`   | yes      | 1–1024 chars                       |
+  | `license`       | no       | free-form string                   |
+  | `compatibility` | no       | ≤ 500 chars                        |
+  | `metadata`      | no       | arbitrary map                      |
+  | `allowed-tools` | no       | space-delimited list               |
   """
 
   @type t :: %__MODULE__{
-          name: String.t(),
-          description: String.t(),
+          name: String.t() | nil,
+          description: String.t() | nil,
           license: String.t() | nil,
           compatibility: String.t() | nil,
           metadata: map() | nil,
           allowed_tools: [String.t()] | nil,
           instructions: String.t(),
-          path: String.t() | nil
+          path: Path.t() | nil
         }
 
   defstruct [
@@ -68,217 +40,152 @@ defmodule Opal.Skill do
     :path
   ]
 
-  @name_pattern ~r/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
+  @name_re ~r/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
+  @frontmatter_re ~r/\A\s*---\n(.*?)\n---[ \t]*(?:\n(.*))?\z/s
 
-  @doc """
-  Parses a `SKILL.md` file from disk.
+  # ── Public API ──────────────────────────────────────────────────────
 
-  Returns `{:ok, skill}` with the full struct including `:path`, or
-  `{:error, reason}` if the file cannot be read or parsed.
-  """
-  @spec parse_file(String.t()) :: {:ok, t()} | {:error, term()}
+  @doc "Parses a `SKILL.md` from disk, setting `:path` on success."
+  @spec parse_file(Path.t()) :: {:ok, t()} | {:error, term()}
   def parse_file(path) do
-    case File.read(path) do
-      {:ok, content} ->
-        case parse(content) do
-          {:ok, skill} -> {:ok, %{skill | path: path}}
-          error -> error
-        end
-
-      {:error, reason} ->
-        {:error, {:file_error, reason, path}}
+    with {:ok, content} <- read(path),
+         {:ok, skill} <- parse(content) do
+      {:ok, %{skill | path: path}}
     end
   end
 
-  @doc """
-  Parses raw SKILL.md content (YAML frontmatter + Markdown body).
-
-  The content must begin with `---` followed by YAML frontmatter and
-  a closing `---`. Everything after the closing delimiter is treated
-  as the Markdown instructions body.
-
-  Returns `{:ok, skill}` or `{:error, reason}`.
-
-  ## Examples
-
-      iex> Opal.Skill.parse("---\\nname: test\\ndescription: A test skill.\\n---\\n# Hello")
-      {:ok, %Opal.Skill{name: "test", description: "A test skill.", instructions: "# Hello"}}
-  """
+  @doc "Parses raw SKILL.md content (YAML frontmatter + Markdown body)."
   @spec parse(String.t()) :: {:ok, t()} | {:error, term()}
   def parse(content) when is_binary(content) do
-    case split_frontmatter(content) do
-      {:ok, yaml_str, body} ->
-        case YamlElixir.read_from_string(yaml_str) do
-          {:ok, frontmatter} when is_map(frontmatter) ->
-            build_skill(frontmatter, body)
-
-          {:ok, _} ->
-            {:error, :invalid_frontmatter}
-
-          {:error, reason} ->
-            {:error, {:yaml_parse_error, reason}}
-        end
-
-      {:error, _} = err ->
-        err
+    with {:ok, yaml, body} <- split_frontmatter(content),
+         {:ok, fm} <- decode_yaml(yaml) do
+      {:ok, from_frontmatter(fm, body)}
     end
   end
 
   @doc """
-  Validates a parsed skill struct.
-
-  Checks all field constraints from the agentskills.io spec. Returns
-  `:ok` or `{:error, reasons}` where `reasons` is a list of validation
-  error strings.
+  Validates field constraints per the agentskills.io spec.
 
   ## Options
 
-    * `:dir_name` — if provided, validates that `skill.name` matches
-      the parent directory name.
+    * `:dir_name` — asserts `skill.name` matches the parent directory.
   """
   @spec validate(t(), keyword()) :: :ok | {:error, [String.t()]}
   def validate(%__MODULE__{} = skill, opts \\ []) do
-    errors =
-      []
-      |> validate_name(skill.name)
-      |> validate_description(skill.description)
-      |> validate_compatibility(skill.compatibility)
-      |> validate_dir_name(skill.name, Keyword.get(opts, :dir_name))
-
-    case errors do
+    case Enum.flat_map(checks(opts), & &1.(skill)) do
       [] -> :ok
-      errs -> {:error, Enum.reverse(errs)}
+      errors -> {:error, errors}
     end
   end
 
-  @doc """
-  Returns a short summary string for progressive disclosure.
-
-  Only includes `name` and `description` — suitable for injecting into
-  the agent's context at startup without loading full instructions.
-  """
+  @doc "Formats a one-line summary for progressive disclosure."
   @spec summary(t()) :: String.t()
-  def summary(%__MODULE__{name: name, description: desc}) do
-    "- **#{name}**: #{desc}"
-  end
+  def summary(%__MODULE__{name: name, description: desc}),
+    do: "- **#{name}**: #{desc}"
 
-  # --- Private ---
+  # ── Parsing ─────────────────────────────────────────────────────────
 
-  # Splits "---\nyaml\n---\nbody" into {yaml, body}.
-  defp split_frontmatter(content) do
-    content = String.trim_leading(content)
-
-    case String.split(content, ~r/\n---\s*\n/, parts: 2) do
-      [front, body] ->
-        case String.starts_with?(front, "---") do
-          true ->
-            yaml = String.trim_leading(front, "---") |> String.trim()
-            {:ok, yaml, String.trim(body)}
-
-          false ->
-            {:error, :no_frontmatter}
-        end
-
-      _ ->
-        # Try trailing --- at end of file (no body)
-        if String.starts_with?(content, "---") do
-          trimmed = String.trim_leading(content, "---") |> String.trim()
-
-          if String.ends_with?(trimmed, "---") do
-            yaml = String.trim_trailing(trimmed, "---") |> String.trim()
-            {:ok, yaml, ""}
-          else
-            {:error, :no_frontmatter}
-          end
-        else
-          {:error, :no_frontmatter}
-        end
+  @spec read(Path.t()) :: {:ok, binary()} | {:error, term()}
+  defp read(path) do
+    case File.read(path) do
+      {:ok, _} = ok -> ok
+      {:error, reason} -> {:error, {:file_error, reason, path}}
     end
   end
 
-  defp build_skill(frontmatter, body) do
-    allowed_tools =
-      case Map.get(frontmatter, "allowed-tools") do
-        nil -> nil
-        str when is_binary(str) -> String.split(str, ~r/\s+/, trim: true)
-        _ -> nil
-      end
+  @spec split_frontmatter(String.t()) :: {:ok, String.t(), String.t()} | {:error, :no_frontmatter}
+  defp split_frontmatter(content) do
+    case Regex.run(@frontmatter_re, content, capture: :all_but_first) do
+      [yaml, body] -> {:ok, String.trim(yaml), String.trim(body)}
+      [yaml] -> {:ok, String.trim(yaml), ""}
+      _ -> {:error, :no_frontmatter}
+    end
+  end
 
-    skill = %__MODULE__{
-      name: Map.get(frontmatter, "name"),
-      description: Map.get(frontmatter, "description"),
-      license: Map.get(frontmatter, "license"),
-      compatibility: Map.get(frontmatter, "compatibility"),
-      metadata: Map.get(frontmatter, "metadata"),
-      allowed_tools: allowed_tools,
+  @spec decode_yaml(String.t()) :: {:ok, map()} | {:error, term()}
+  defp decode_yaml(yaml) do
+    case YamlElixir.read_from_string(yaml) do
+      {:ok, %{} = fm} -> {:ok, fm}
+      {:ok, _} -> {:error, :invalid_frontmatter}
+      {:error, reason} -> {:error, {:yaml_parse_error, reason}}
+    end
+  end
+
+  @spec from_frontmatter(map(), String.t()) :: t()
+  defp from_frontmatter(fm, body) do
+    %__MODULE__{
+      name: fm["name"],
+      description: fm["description"],
+      license: fm["license"],
+      compatibility: fm["compatibility"],
+      metadata: fm["metadata"],
+      allowed_tools: parse_tools(fm["allowed-tools"]),
       instructions: body
     }
-
-    {:ok, skill}
   end
 
-  # --- Validation helpers ---
+  @spec parse_tools(term()) :: [String.t()] | nil
+  defp parse_tools(tools) when is_binary(tools), do: String.split(tools)
+  defp parse_tools(_), do: nil
 
-  defp validate_name(errors, nil), do: ["name is required" | errors]
+  # ── Validation ──────────────────────────────────────────────────────
 
-  defp validate_name(errors, name) when not is_binary(name),
-    do: ["name must be a string" | errors]
+  @spec checks(keyword()) :: [(t() -> [String.t()])]
+  defp checks(opts) do
+    base = [&check_name/1, &check_description/1, &check_compatibility/1]
+    if dir = opts[:dir_name], do: base ++ [&check_dir_name(&1, dir)], else: base
+  end
 
-  defp validate_name(errors, name) do
+  @spec check_name(t()) :: [String.t()]
+  defp check_name(%{name: nil}), do: ["name is required"]
+  defp check_name(%{name: n}) when not is_binary(n), do: ["name must be a string"]
+
+  defp check_name(%{name: n}) do
     cond do
-      String.length(name) < 1 ->
-        ["name must be at least 1 character" | errors]
+      String.length(n) > 64 ->
+        ["name must be at most 64 characters"]
 
-      String.length(name) > 64 ->
-        ["name must be at most 64 characters" | errors]
+      String.contains?(n, "--") ->
+        ["name must not contain consecutive hyphens"]
 
-      String.contains?(name, "--") ->
-        ["name must not contain consecutive hyphens" | errors]
-
-      not Regex.match?(@name_pattern, name) ->
+      not Regex.match?(@name_re, n) ->
         [
-          "name must contain only lowercase alphanumeric characters and hyphens, and must not start or end with a hyphen"
-          | errors
+          "name must contain only lowercase alphanumeric characters and hyphens, " <>
+            "and must not start or end with a hyphen"
         ]
 
       true ->
-        errors
+        []
     end
   end
 
-  defp validate_description(errors, nil), do: ["description is required" | errors]
+  @spec check_description(t()) :: [String.t()]
+  defp check_description(%{description: nil}), do: ["description is required"]
 
-  defp validate_description(errors, desc) when not is_binary(desc),
-    do: ["description must be a string" | errors]
+  defp check_description(%{description: d}) when not is_binary(d),
+    do: ["description must be a string"]
 
-  defp validate_description(errors, desc) do
+  defp check_description(%{description: d}) do
     cond do
-      String.length(desc) < 1 -> ["description must not be empty" | errors]
-      String.length(desc) > 1024 -> ["description must be at most 1024 characters" | errors]
-      true -> errors
+      byte_size(d) == 0 -> ["description must not be empty"]
+      String.length(d) > 1024 -> ["description must be at most 1024 characters"]
+      true -> []
     end
   end
 
-  defp validate_compatibility(errors, nil), do: errors
+  @spec check_compatibility(t()) :: [String.t()]
+  defp check_compatibility(%{compatibility: nil}), do: []
 
-  defp validate_compatibility(errors, compat) when not is_binary(compat),
-    do: ["compatibility must be a string" | errors]
+  defp check_compatibility(%{compatibility: c}) when not is_binary(c),
+    do: ["compatibility must be a string"]
 
-  defp validate_compatibility(errors, compat) do
-    if String.length(compat) > 500 do
-      ["compatibility must be at most 500 characters" | errors]
-    else
-      errors
-    end
+  defp check_compatibility(%{compatibility: c}) do
+    if String.length(c) > 500, do: ["compatibility must be at most 500 characters"], else: []
   end
 
-  defp validate_dir_name(errors, _name, nil), do: errors
+  @spec check_dir_name(t(), String.t()) :: [String.t()]
+  defp check_dir_name(%{name: name}, dir) when name != dir,
+    do: ["name '#{name}' must match directory name '#{dir}'"]
 
-  defp validate_dir_name(errors, name, dir_name) do
-    if name != dir_name do
-      ["name '#{name}' must match directory name '#{dir_name}'" | errors]
-    else
-      errors
-    end
-  end
+  defp check_dir_name(_, _), do: []
 end

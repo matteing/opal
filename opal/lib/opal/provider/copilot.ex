@@ -1,26 +1,22 @@
 defmodule Opal.Provider.Copilot do
   @moduledoc """
-  GitHub Copilot provider implementation.
+  GitHub Copilot provider.
 
   Supports two OpenAI API variants based on the model:
 
-  - **Chat Completions** (`/v1/chat/completions`) — used by most models
-    (Claude, GPT-4o, Gemini, o3/o4, etc.)
-  - **Responses API** (`/v1/responses`) — used by GPT-5 family models
+    * **Chat Completions** (`/v1/chat/completions`) — most models
+      (Claude, GPT-4o, Gemini, o3/o4, etc.)
+    * **Responses API** (`/v1/responses`) — GPT-5 family models
 
-  Streams responses via SSE into the calling process's mailbox using
-  `Req.post/2` with `into: :self`. The caller (typically `Opal.Agent`)
-  iterates chunks with `Req.parse_message/2`.
+  Streams SSE into the calling process's mailbox via `Req.post/2`
+  with `into: :self`.
   """
 
   @behaviour Opal.Provider
 
-  # Models that require the Responses API; all others use Chat Completions
-  defp use_responses_api?(model_id) do
-    String.starts_with?(model_id, "gpt-5") or String.starts_with?(model_id, "oswe")
-  end
+  import Opal.Provider, only: [compact_map: 1, decode_json_args: 1]
 
-  # ── stream/4 ──────────────────────────────────────────────────────────
+  # ── Callbacks ──────────────────────────────────────────────────────
 
   @impl true
   def stream(model, messages, tools, opts \\ []) do
@@ -32,94 +28,82 @@ defmodule Opal.Provider.Copilot do
         Req.new(
           base_url: base,
           auth: {:bearer, copilot_token},
-          headers: copilot_headers(messages, opts)
+          headers: build_headers(messages, opts)
         )
 
-      tool_context = Keyword.get(opts, :tool_context, %{})
+      ctx = Keyword.get(opts, :tool_context, %{})
 
-      if use_responses_api?(model.id) do
-        stream_responses_api(req, model, messages, tools, tool_context)
-      else
-        stream_chat_completions(req, model, messages, tools, tool_context)
-      end
+      if responses_api?(model.id),
+        do: do_stream_responses(req, model, messages, tools, ctx),
+        else: do_stream_completions(req, model, messages, tools, ctx)
     end
   end
 
-  # ── Chat Completions variant (/v1/chat/completions) ──
-
-  defp stream_chat_completions(req, model, messages, tools, tool_context) do
-    converted_messages = convert_messages_completions(model, messages)
-    converted_tools = convert_tools(tools, tool_context)
-
-    body = %{
-      model: model.id,
-      messages: converted_messages,
-      stream: true,
-      stream_options: %{include_usage: true}
-    }
-
-    body = if converted_tools != [], do: Map.put(body, :tools, converted_tools), else: body
-    body = maybe_add_reasoning_effort(body, model)
-
-    case Req.post(req,
-           url: "/chat/completions",
-           json: body,
-           into: :self,
-           receive_timeout: 120_000
-         ) do
-      {:ok, resp} -> {:ok, resp}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  # ── Responses API variant (/v1/responses) ──
-
-  defp stream_responses_api(req, model, messages, tools, tool_context) do
-    converted_messages = convert_messages_responses(model, messages)
-    converted_tools = convert_tools_responses(tools, tool_context)
-
-    body = %{
-      model: model.id,
-      input: converted_messages,
-      stream: true,
-      store: false
-    }
-
-    body = if converted_tools != [], do: Map.put(body, :tools, converted_tools), else: body
-    body = maybe_add_reasoning_config(body, model)
-
-    case Req.post(req, url: "/responses", json: body, into: :self, receive_timeout: 120_000) do
-      {:ok, resp} -> {:ok, resp}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  # ── parse_stream_event/1 ──────────────────────────────────────────────
-
-  @doc """
-  Parses a raw SSE JSON line into stream event tuples.
-
-  Handles both Chat Completions format (`choices[0].delta`) and
-  Responses API format (`response.output_text.delta`, etc.).
-  """
   @impl true
   def parse_stream_event(data) do
     case Jason.decode(data) do
-      {:ok, parsed} -> do_parse_event(parsed)
+      {:ok, %{"choices" => _} = event} -> Opal.Provider.parse_chat_event(event)
+      {:ok, parsed} -> parse_responses_event(parsed)
       {:error, _} -> []
     end
   end
 
-  # ── Chat Completions SSE format ──
-  # Delegates to shared OpenAI module for standard choices[0].delta parsing.
-
-  defp do_parse_event(%{"choices" => _} = event) do
-    Opal.Provider.OpenAI.parse_chat_event(event)
+  @impl true
+  def convert_messages(model, messages) do
+    if responses_api?(model.id),
+      do: messages_to_responses(model, messages),
+      else: Opal.Provider.convert_messages_openai(messages, include_thinking: true)
   end
 
-  # ── Responses API SSE format ──
+  @impl true
+  defdelegate convert_tools(tools), to: Opal.Provider
 
-  defp do_parse_event(%{"type" => "response.output_item.added", "item" => item}) do
+  @doc false
+  defdelegate convert_tools(tools, ctx), to: Opal.Provider
+
+  # ── Chat Completions (/v1/chat/completions) ────────────────────────
+
+  defp do_stream_completions(req, model, messages, tools, ctx) do
+    body =
+      %{model: model.id, stream: true, stream_options: %{include_usage: true}}
+      |> put_unless_empty(:tools, Opal.Provider.convert_tools(tools, ctx))
+      |> put_unless_empty(
+        :messages,
+        Opal.Provider.convert_messages_openai(messages, include_thinking: true)
+      )
+      |> maybe_add_reasoning(model, :completions)
+
+    Req.post(req, url: "/chat/completions", json: body, into: :self, receive_timeout: 120_000)
+  end
+
+  # ── Responses API (/v1/responses) ──────────────────────────────────
+
+  defp do_stream_responses(req, model, messages, tools, ctx) do
+    body =
+      %{model: model.id, stream: true, store: false}
+      |> put_unless_empty(:tools, tools_to_responses(tools, ctx))
+      |> put_unless_empty(:input, messages_to_responses(model, messages))
+      |> maybe_add_reasoning(model, :responses)
+
+    Req.post(req, url: "/responses", json: body, into: :self, receive_timeout: 120_000)
+  end
+
+  # Responses API uses a flat tool format (no nested "function" key)
+  defp tools_to_responses(tools, ctx) do
+    Enum.map(tools, fn tool ->
+      %{
+        type: "function",
+        name: tool.name(),
+        description: Opal.Tool.description(tool, ctx),
+        parameters: tool.parameters(),
+        strict: false
+      }
+    end)
+  end
+
+  # ── Responses API SSE Parsing ──────────────────────────────────────
+
+  defp parse_responses_event(%{"type" => "response.output_item.added", "item" => item}) do
     case item["type"] do
       "reasoning" ->
         [{:thinking_start, %{item_id: item["id"]}}]
@@ -130,11 +114,7 @@ defmodule Opal.Provider.Copilot do
       "function_call" ->
         [
           {:tool_call_start,
-           %{
-             item_id: item["id"],
-             call_id: item["call_id"],
-             name: item["name"]
-           }}
+           compact_map(%{item_id: item["id"], call_id: item["call_id"], name: item["name"]})}
         ]
 
       _ ->
@@ -142,26 +122,26 @@ defmodule Opal.Provider.Copilot do
     end
   end
 
-  defp do_parse_event(%{"type" => "response.reasoning_summary_text.delta", "delta" => delta}),
-    do: [{:thinking_delta, delta}]
+  defp parse_responses_event(%{"type" => "response.reasoning_summary_text.delta", "delta" => d}),
+    do: [{:thinking_delta, d}]
 
-  defp do_parse_event(%{"type" => "response.output_text.delta", "delta" => delta}),
-    do: [{:text_delta, delta}]
+  defp parse_responses_event(%{"type" => "response.output_text.delta", "delta" => d}),
+    do: [{:text_delta, d}]
 
-  defp do_parse_event(%{"type" => "response.output_text.done", "text" => text}),
-    do: [{:text_done, text}]
+  defp parse_responses_event(%{"type" => "response.output_text.done", "text" => t}),
+    do: [{:text_done, t}]
 
-  defp do_parse_event(%{"type" => "response.function_call_arguments.delta"} = event) do
-    case event["delta"] do
-      delta when is_binary(delta) ->
+  defp parse_responses_event(%{"type" => "response.function_call_arguments.delta"} = e) do
+    case e["delta"] do
+      d when is_binary(d) ->
         [
           {:tool_call_delta,
-           compact_tool_info(%{
-             delta: delta,
-             item_id: event["item_id"],
-             call_id: event["call_id"],
-             call_index: event["output_index"],
-             name: event["name"]
+           compact_map(%{
+             delta: d,
+             item_id: e["item_id"],
+             call_id: e["call_id"],
+             call_index: e["output_index"],
+             name: e["name"]
            })}
         ]
 
@@ -170,178 +150,75 @@ defmodule Opal.Provider.Copilot do
     end
   end
 
-  defp do_parse_event(%{"type" => "response.function_call_arguments.done"} = event) do
+  defp parse_responses_event(%{"type" => "response.function_call_arguments.done"} = e) do
     info =
-      compact_tool_info(%{
-        item_id: event["item_id"],
-        call_id: event["call_id"],
-        call_index: event["output_index"],
-        name: event["name"]
+      compact_map(%{
+        item_id: e["item_id"],
+        call_id: e["call_id"],
+        call_index: e["output_index"],
+        name: e["name"]
       })
 
-    case decode_tool_arguments(event["arguments"]) do
-      {:ok, parsed_args} -> [{:tool_call_done, Map.put(info, :arguments, parsed_args)}]
+    case decode_json_args(e["arguments"]) do
+      {:ok, args} -> [{:tool_call_done, Map.put(info, :arguments, args)}]
       {:error, raw} -> [{:tool_call_done, Map.put(info, :arguments_raw, raw)}]
     end
   end
 
-  defp do_parse_event(%{
+  defp parse_responses_event(%{
          "type" => "response.output_item.done",
          "item" => %{"type" => "function_call"} = item
        }) do
-    # Complements response.function_call_arguments.done — duplicate
-    # finalization is harmless since finalize_tool_call/2 merges idempotently.
-    # Uses safe argument parsing (default %{}) since the primary handler
-    # already captured arguments_raw when JSON is malformed.
-    info =
-      compact_tool_info(%{
-        item_id: item["id"],
-        call_id: item["call_id"],
-        name: item["name"]
-      })
+    info = compact_map(%{item_id: item["id"], call_id: item["call_id"], name: item["name"]})
 
     args =
-      case decode_tool_arguments(item["arguments"]) do
-        {:ok, parsed} -> parsed
-        {:error, _} -> %{}
-      end
+      case decode_json_args(item["arguments"]),
+        do: (
+          {:ok, a} -> a
+          {:error, _} -> %{}
+        )
 
     [{:tool_call_done, Map.put(info, :arguments, args)}]
   end
 
-  defp do_parse_event(%{"type" => "response.completed", "response" => response}) do
-    [
-      {:response_done,
-       %{
-         usage: Map.get(response, "usage", %{}),
-         status: Map.get(response, "status"),
-         id: Map.get(response, "id")
-       }}
-    ]
-  end
+  defp parse_responses_event(%{"type" => "response.completed", "response" => r}),
+    do: [{:response_done, %{usage: Map.get(r, "usage", %{}), status: r["status"], id: r["id"]}}]
 
-  # ── Error handling (both APIs) ──
+  defp parse_responses_event(%{"type" => "error"} = e),
+    do: [{:error, Map.get(e, "error", e)}]
 
-  defp do_parse_event(%{"type" => "error"} = event),
-    do: [{:error, Map.get(event, "error", event)}]
+  defp parse_responses_event(%{"type" => "response.failed", "response" => r}),
+    do: [{:error, r["error"] || r}]
 
-  defp do_parse_event(%{"type" => "response.failed", "response" => response}),
-    do: [{:error, get_in(response, ["error"]) || response}]
-
-  defp do_parse_event(%{"error" => error}),
+  defp parse_responses_event(%{"error" => error}),
     do: [{:error, error}]
 
-  defp do_parse_event(_), do: []
+  defp parse_responses_event(_), do: []
 
-  defp decode_tool_arguments(args) when is_binary(args) do
-    case Jason.decode(args) do
-      {:ok, parsed_args} -> {:ok, parsed_args}
-      {:error, _} -> {:error, args}
-    end
+  # ── Responses API Message Conversion ───────────────────────────────
+
+  defp messages_to_responses(model, messages) do
+    Enum.flat_map(messages, &msg_to_responses(model, &1))
   end
 
-  defp decode_tool_arguments(_), do: {:ok, %{}}
-
-  defp compact_tool_info(map) do
-    Enum.reduce(map, %{}, fn
-      {_k, nil}, acc -> acc
-      {_k, ""}, acc -> acc
-      {k, v}, acc -> Map.put(acc, k, v)
-    end)
-  end
-
-  # ── convert_messages/2 (behaviour callback) ──────────────────────────
-
-  @impl true
-  def convert_messages(model, messages) do
-    if use_responses_api?(model.id) do
-      convert_messages_responses(model, messages)
-    else
-      convert_messages_completions(model, messages)
-    end
-  end
-
-  # ── convert_tools/1 ──────────────────────────────────────────────────
-
-  @impl true
-  defdelegate convert_tools(tools), to: Opal.Provider
-
-  @doc false
-  defdelegate convert_tools(tools, tool_context), to: Opal.Provider
-
-  # Responses API uses a flat tool format: {type, name, description, parameters}
-  # Unlike Chat Completions which nests under "function".
-  defp convert_tools_responses(tools, tool_context) do
-    Enum.map(tools, fn tool ->
-      %{
-        type: "function",
-        name: tool.name(),
-        description: Opal.Tool.description(tool, tool_context),
-        parameters: tool.parameters(),
-        strict: false
-      }
-    end)
-  end
-
-  # ── Chat Completions message format ──────────────────────────────────
-  # Delegates to shared OpenAI module for standard message conversion.
-
-  defp convert_messages_completions(_model, messages) do
-    Opal.Provider.OpenAI.convert_messages(messages, include_thinking: true)
-  end
-
-  # ── Responses API message format ─────────────────────────────────────
-
-  defp convert_messages_responses(model, messages) do
-    Enum.flat_map(messages, fn msg -> convert_msg_responses(model, msg) end)
-  end
-
-  defp convert_msg_responses(model, %Opal.Message{role: :system, content: content}) do
+  defp msg_to_responses(model, %Opal.Message{role: :system, content: c}) do
     role = if model.thinking_level != :off, do: "developer", else: "system"
-    [%{role: role, content: content}]
+    [%{role: role, content: c}]
   end
 
-  defp convert_msg_responses(_model, %Opal.Message{role: :user, content: content}) do
-    [%{role: "user", content: [%{type: "input_text", text: content}]}]
-  end
+  defp msg_to_responses(_, %Opal.Message{role: :user, content: c}),
+    do: [%{role: "user", content: [%{type: "input_text", text: c}]}]
 
-  defp convert_msg_responses(_model, %Opal.Message{
+  defp msg_to_responses(_, %Opal.Message{
          role: :assistant,
-         content: content,
-         thinking: thinking,
-         tool_calls: tool_calls
+         content: c,
+         thinking: t,
+         tool_calls: calls
        })
-       when is_list(tool_calls) and tool_calls != [] do
-    # Reasoning item for roundtripping (OpenAI recommends passing back reasoning items)
-    reasoning_item =
-      if thinking do
-        [
-          %{
-            type: "reasoning",
-            id: "rs_roundtrip",
-            summary: [%{type: "summary_text", text: thinking}]
-          }
-        ]
-      else
-        []
-      end
-
-    text_item =
-      if content && content != "" do
-        [
-          %{
-            type: "message",
-            role: "assistant",
-            content: [%{type: "output_text", text: content}],
-            status: "completed"
-          }
-        ]
-      else
-        []
-      end
-
-    call_items =
-      Enum.map(tool_calls, fn tc ->
+       when is_list(calls) and calls != [] do
+    reasoning_items(t) ++
+      text_items(c) ++
+      Enum.map(calls, fn tc ->
         %{
           type: "function_call",
           call_id: tc.call_id,
@@ -349,74 +226,92 @@ defmodule Opal.Provider.Copilot do
           arguments: Jason.encode!(tc.arguments)
         }
       end)
-
-    reasoning_item ++ text_item ++ call_items
   end
 
-  defp convert_msg_responses(_model, %Opal.Message{
-         role: :assistant,
-         content: content,
-         thinking: thinking
-       }) do
-    reasoning_item =
-      if thinking do
-        [
-          %{
-            type: "reasoning",
-            id: "rs_roundtrip",
-            summary: [%{type: "summary_text", text: thinking}]
-          }
-        ]
-      else
-        []
-      end
-
-    reasoning_item ++
+  defp msg_to_responses(_, %Opal.Message{role: :assistant, content: c, thinking: t}) do
+    reasoning_items(t) ++
       [
         %{
           type: "message",
           role: "assistant",
-          content: [%{type: "output_text", text: content || ""}],
+          content: [%{type: "output_text", text: c || ""}],
           status: "completed"
         }
       ]
   end
 
-  defp convert_msg_responses(_model, %Opal.Message{
-         role: :tool_call,
-         call_id: call_id,
-         name: name,
-         content: content
-       }) do
+  defp msg_to_responses(_, %Opal.Message{role: :tool_call, call_id: id, name: name, content: c}) do
     args =
-      case Jason.decode(content || "{}") do
-        {:ok, parsed} -> Jason.encode!(parsed)
-        {:error, _} -> content || "{}"
-      end
+      case Jason.decode(c || "{}"),
+        do: (
+          {:ok, p} -> Jason.encode!(p)
+          {:error, _} -> c || "{}"
+        )
 
-    [%{type: "function_call", call_id: call_id, name: name, arguments: args}]
+    [%{type: "function_call", call_id: id, name: name, arguments: args}]
   end
 
-  defp convert_msg_responses(_model, %Opal.Message{
-         role: :tool_result,
-         call_id: call_id,
-         content: content
-       }) do
-    [%{type: "function_call_output", call_id: call_id, output: content || ""}]
+  defp msg_to_responses(_, %Opal.Message{role: :tool_result, call_id: id, content: c}),
+    do: [%{type: "function_call_output", call_id: id, output: c || ""}]
+
+  defp msg_to_responses(_, _), do: []
+
+  defp reasoning_items(nil), do: []
+  defp reasoning_items(""), do: []
+
+  defp reasoning_items(t),
+    do: [%{type: "reasoning", id: "rs_roundtrip", summary: [%{type: "summary_text", text: t}]}]
+
+  defp text_items(nil), do: []
+  defp text_items(""), do: []
+
+  defp text_items(c),
+    do: [
+      %{
+        type: "message",
+        role: "assistant",
+        content: [%{type: "output_text", text: c}],
+        status: "completed"
+      }
+    ]
+
+  # ── Reasoning ──────────────────────────────────────────────────────
+
+  defp maybe_add_reasoning(body, %{thinking_level: :off}, _api), do: body
+
+  defp maybe_add_reasoning(body, %{thinking_level: level, id: id}, :completions) do
+    if thinking_capable?(id),
+      do: Map.put(body, :reasoning_effort, Opal.Provider.reasoning_effort(level)),
+      else: body
   end
 
-  defp convert_msg_responses(_model, _msg), do: []
+  defp maybe_add_reasoning(body, %{thinking_level: level}, :responses),
+    do:
+      Map.put(body, :reasoning, %{effort: Opal.Provider.reasoning_effort(level), summary: "auto"})
 
-  # ── Copilot Headers ──────────────────────────────────────────────────
+  defp thinking_capable?(id) do
+    Enum.any?(
+      ~w(gpt-5 claude-sonnet-4 claude-opus-4 claude-haiku-4.5 o3 o4),
+      &String.starts_with?(id, &1)
+    )
+  end
 
-  defp copilot_headers(messages, opts) do
+  # ── Helpers ────────────────────────────────────────────────────────
+
+  defp responses_api?(id),
+    do: String.starts_with?(id, "gpt-5") or String.starts_with?(id, "oswe")
+
+  defp put_unless_empty(map, _key, []), do: map
+  defp put_unless_empty(map, key, val), do: Map.put(map, key, val)
+
+  defp build_headers(messages, opts) do
     last_role =
       case List.last(messages) do
         %{role: role} -> to_string(role)
         _ -> "user"
       end
 
-    base_headers = %{
+    base = %{
       "user-agent" => "GitHubCopilotChat/0.35.0",
       "editor-version" => "vscode/1.107.0",
       "editor-plugin-version" => "copilot-chat/0.35.0",
@@ -425,48 +320,13 @@ defmodule Opal.Provider.Copilot do
       "x-initiator" => if(last_role != "user", do: "agent", else: "user")
     }
 
-    override_headers =
-      opts
-      |> Keyword.get(:headers, %{})
-      |> normalize_headers()
+    override =
+      case Keyword.get(opts, :headers, %{}) do
+        h when is_map(h) -> h
+        h when is_list(h) -> Map.new(h)
+        _ -> %{}
+      end
 
-    Map.merge(base_headers, override_headers)
-  end
-
-  defp normalize_headers(headers) when is_map(headers), do: headers
-  defp normalize_headers(headers) when is_list(headers), do: Map.new(headers)
-  defp normalize_headers(_), do: %{}
-
-  # ── Reasoning Effort ─────────────────────────────────────────────────
-
-  # Chat Completions: add reasoning_effort string param
-  defp maybe_add_reasoning_effort(body, %{thinking_level: :off}), do: body
-
-  defp maybe_add_reasoning_effort(body, %{thinking_level: level, id: id}) do
-    if supports_thinking?(id) do
-      Map.put(body, :reasoning_effort, Opal.Provider.OpenAI.reasoning_effort(level))
-    else
-      body
-    end
-  end
-
-  # Responses API: add reasoning object with effort + summary
-  defp maybe_add_reasoning_config(body, %{thinking_level: :off}), do: body
-
-  defp maybe_add_reasoning_config(body, %{thinking_level: level}) do
-    Map.put(body, :reasoning, %{
-      effort: Opal.Provider.OpenAI.reasoning_effort(level),
-      summary: "auto"
-    })
-  end
-
-  # Modern thinking-capable models served through Copilot proxy
-  defp supports_thinking?(id) do
-    String.starts_with?(id, "gpt-5") or
-      String.starts_with?(id, "claude-sonnet-4") or
-      String.starts_with?(id, "claude-opus-4") or
-      String.starts_with?(id, "claude-haiku-4.5") or
-      String.starts_with?(id, "o3") or
-      String.starts_with?(id, "o4")
+    Map.merge(base, override)
   end
 end

@@ -3,45 +3,6 @@ defmodule Opal.PathTest do
 
   alias Opal.Path, as: OpalPath
 
-  # Validates path normalization (backslash replacement and expansion)
-  describe "normalize/1" do
-    test "replaces backslashes with forward slashes" do
-      result = OpalPath.normalize("foo\\bar\\baz")
-      assert not String.contains?(result, "\\")
-    end
-
-    test "expands relative paths to absolute" do
-      result = OpalPath.normalize("foo/bar")
-      assert String.starts_with?(result, "/")
-    end
-
-    test "expands tilde paths" do
-      result = OpalPath.normalize("~/something")
-      home = System.user_home!()
-      assert String.starts_with?(result, home)
-      assert String.ends_with?(result, "/something")
-    end
-
-    test "handles mixed separators" do
-      result = OpalPath.normalize("foo\\bar/baz")
-      assert not String.contains?(result, "\\")
-      assert String.ends_with?(result, "foo/bar/baz")
-    end
-  end
-
-  # Validates native path conversion
-  describe "to_native/1" do
-    test "returns path unchanged on Unix (forward slashes preserved)" do
-      # On macOS/Linux, forward slashes should remain
-      assert OpalPath.to_native("foo/bar/baz") == "foo/bar/baz"
-    end
-
-    test "preserves absolute paths" do
-      assert OpalPath.to_native("/usr/local/bin") == "/usr/local/bin"
-    end
-  end
-
-  # Validates safe_relative path security checks
   describe "safe_relative/2" do
     @tag :tmp_dir
     test "accepts a path within the base directory", %{tmp_dir: tmp_dir} do
@@ -83,6 +44,17 @@ defmodule Opal.PathTest do
     test "handles nested subdirectories correctly", %{tmp_dir: tmp_dir} do
       assert {:ok, expanded} = OpalPath.safe_relative("a/b/c/d.txt", tmp_dir)
       assert expanded == Path.join(tmp_dir, "a/b/c/d.txt")
+    end
+  end
+
+  describe "posix_relative/2" do
+    test "returns path relative to base with forward slashes" do
+      assert OpalPath.posix_relative("/project/src/main.ex", "/project") == "src/main.ex"
+    end
+
+    test "returns full path when not relative to base" do
+      result = OpalPath.posix_relative("/other/file.ex", "/project")
+      assert result == "/other/file.ex"
     end
   end
 end

@@ -33,10 +33,7 @@ defmodule Opal.MixProject do
           Opal.MCP.Resources,
           # MCP client/bridge — requires live MCP servers to test
           Opal.MCP.Client,
-          Opal.MCP.Bridge,
-          # ReqLLM provider — stream/4 and private helpers require ReqLLM
-          # mocking; convert_messages tested in llm_test.exs
-          Opal.Provider.LLM
+          Opal.MCP.Bridge
         ]
       ]
     ]
@@ -93,7 +90,6 @@ defmodule Opal.MixProject do
         Providers: [
           Opal.Provider,
           Opal.Provider.Copilot,
-          Opal.Provider.LLM,
           Opal.Provider.Model,
           Opal.Provider.Registry,
           Opal.Auth,
@@ -152,7 +148,6 @@ defmodule Opal.MixProject do
   defp deps do
     [
       {:req, "~> 0.5"},
-      {:req_llm, "~> 1.5"},
       {:jason, "~> 1.4"},
       {:yaml_elixir, "~> 2.11"},
       {:anubis_mcp, "~> 0.17"},

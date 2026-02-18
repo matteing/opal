@@ -557,7 +557,7 @@ defmodule Opal.Inspect do
     File.mkdir_p!(dir)
 
     context_messages = Opal.Agent.get_context(pid)
-    active = Opal.Agent.Tools.active_tools(s)
+    active = Opal.Agent.ToolRunner.active_tools(s)
 
     # Extract system prompt into its own file
     {system_prompt, conversation_messages} = split_system_prompt(context_messages)

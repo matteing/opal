@@ -118,7 +118,7 @@ defmodule Opal.Provider.Registry do
 
   # Supported thinking levels per model family.
   # OpenAI: low/medium/high per their reasoning docs.
-  # Anthropic: low/medium/high mapped to budget_tokens by ReqLLM.
+  # Anthropic: low/medium/high mapped to budget_tokens.
   # Anthropic Opus 4.6+: low/medium/high/max via adaptive thinking.
   @standard_thinking_levels ["low", "medium", "high"]
   @max_thinking_levels ["low", "medium", "high", "max"]

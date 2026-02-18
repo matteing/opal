@@ -168,14 +168,6 @@ defmodule OpalTest do
     end
   end
 
-  describe "follow_up/2" do
-    test "delegates to Agent.follow_up" do
-      {:ok, pid} = start_test_session()
-      assert %{queued: _} = Opal.follow_up(pid, "Follow up")
-      Opal.stop_session(pid)
-    end
-  end
-
   describe "abort/1" do
     test "delegates to Agent.abort" do
       {:ok, pid} = start_test_session()

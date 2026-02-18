@@ -24,7 +24,7 @@ defmodule Opal.ThinkingIntegrationTest do
   alias Opal.Events
   alias Opal.Provider.Model
   alias Opal.Message
-  alias Opal.Provider.OpenAI, as: OpenAIShared
+  alias Opal.Provider, as: OpenAIShared
   alias Opal.Provider.Copilot
   alias Opal.Test.FixtureHelper
 
@@ -628,7 +628,7 @@ defmodule Opal.ThinkingIntegrationTest do
         Message.assistant("Response", [], thinking: "My thinking process")
       ]
 
-      [converted] = OpenAIShared.convert_messages(messages)
+      [converted] = OpenAIShared.convert_messages_openai(messages)
       assert converted[:reasoning_content] == "My thinking process"
       assert converted.content == "Response"
       assert converted.role == "assistant"
@@ -636,7 +636,7 @@ defmodule Opal.ThinkingIntegrationTest do
 
     test "omits reasoning_content when thinking is nil" do
       messages = [Message.assistant("Hello")]
-      [converted] = OpenAIShared.convert_messages(messages)
+      [converted] = OpenAIShared.convert_messages_openai(messages)
       refute Map.has_key?(converted, :reasoning_content)
     end
 
@@ -645,7 +645,7 @@ defmodule Opal.ThinkingIntegrationTest do
         Message.assistant("Response", [], thinking: "thinking content")
       ]
 
-      [converted] = OpenAIShared.convert_messages(messages, include_thinking: false)
+      [converted] = OpenAIShared.convert_messages_openai(messages, include_thinking: false)
       refute Map.has_key?(converted, :reasoning_content)
     end
 
@@ -653,7 +653,7 @@ defmodule Opal.ThinkingIntegrationTest do
       tc = %{call_id: "c1", name: "test", arguments: %{}}
       messages = [Message.assistant("Text", [tc], thinking: "Thought process")]
 
-      [converted] = OpenAIShared.convert_messages(messages)
+      [converted] = OpenAIShared.convert_messages_openai(messages)
       assert converted[:reasoning_content] == "Thought process"
       assert length(converted.tool_calls) == 1
     end

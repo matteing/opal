@@ -4,15 +4,13 @@ defmodule Opal.ReasoningEffortTest do
 
   Verifies:
   - Model-level thinking level validation
-  - Provider handling (Copilot role switching, LLM reasoning_effort mapping)
+  - Provider handling (Copilot role switching, reasoning effort mapping)
   - Model discovery exposes supported thinking levels per model
-  - RPC thinking/set and model/set with thinking_level
   """
   use ExUnit.Case, async: true
 
   alias Opal.Provider.Model
   alias Opal.Provider.Copilot
-  alias Opal.Provider.LLM
   alias Opal.Message
 
   # ============================================================
@@ -192,24 +190,13 @@ defmodule Opal.ReasoningEffortTest do
   end
 
   # ============================================================
-  # LLM provider: thinking maps to reasoning_effort
+  # ============================================================
+  # Reasoning effort mapping
   # ============================================================
 
-  describe "LLM provider reasoning effort" do
-    test "thinking events bypass SSE parsing (EventStream sends tuples directly)" do
-      # LLM provider now uses EventStream — parse_stream_event is a stub.
-      # Thinking events are sent as native tuples via {ref, {:events, [...]}}
-      # and never go through JSON encoding. Verify the stub returns [].
-      data = Jason.encode!(%{"_opal" => "thinking_start", "info" => %{}})
-      assert [] = LLM.parse_stream_event(data)
-    end
-
-    # The maybe_add_thinking/2 function is private, but we can verify
-    # its effect indirectly through the stream options it would produce.
-    # The key contract: thinking_level != :off → reasoning_effort is set.
+  describe "reasoning effort mapping" do
     test "model with thinking :off does not add reasoning_effort" do
       model = Model.new(:anthropic, "claude-sonnet-4-5", thinking_level: :off)
-      # Verify the model struct is correctly configured
       assert model.thinking_level == :off
     end
 
@@ -319,20 +306,11 @@ defmodule Opal.ReasoningEffortTest do
       assert model.provider == :anthropic
       assert model.id == "claude-sonnet-4-5"
       assert model.thinking_level == :medium
-      assert Model.provider_module(model) == Opal.Provider.LLM
     end
 
     test "non-reasoning model defaults to off" do
       model = Model.parse("gpt-4o")
       assert model.thinking_level == :off
-    end
-
-    test "provider_module routes correctly regardless of thinking level" do
-      copilot_model = Model.new(:copilot, "gpt-5", thinking_level: :high)
-      assert Model.provider_module(copilot_model) == Opal.Provider.Copilot
-
-      direct_model = Model.new(:anthropic, "claude-sonnet-4-5", thinking_level: :high)
-      assert Model.provider_module(direct_model) == Opal.Provider.LLM
     end
   end
 end

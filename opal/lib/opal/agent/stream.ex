@@ -267,7 +267,7 @@ defmodule Opal.Agent.Stream do
   def handle_stream_event({:error, reason}, state) do
     Logger.error("Stream error: #{inspect(reason)}")
     Emitter.broadcast(state, {:error, reason})
-    %{state | status: :idle, streaming_resp: nil, stream_errored: true}
+    %{state | status: :idle, streaming_resp: nil, stream_errored: reason}
   end
 
   # Forward-compatibility: ignore unknown event types from newer provider versions.

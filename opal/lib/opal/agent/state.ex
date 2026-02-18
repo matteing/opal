@@ -8,14 +8,12 @@ defmodule Opal.Agent.State do
 
   - **Identity** — `session_id`, `model`, `working_dir`, `config`, `provider`
   - **Conversation** — `system_prompt`, `messages`, `session`
-  - **Tool registry** — `tools`, `disabled_tools` (use `Opal.Agent.Tools.active_tools/1`
-    for the filtered set; never read `tools` directly for availability decisions)
+  - **Tool registry** — `tools`, `disabled_tools` (use `Opal.Agent.ToolRunner.active_tools/1`
+    for the filtered set; never read `tools` directly)
   - **Tool execution** — `tool_supervisor`, `pending_tool_tasks`, `tool_results`, `tool_context`
   - **Streaming accumulator** — `current_text`, `current_tool_calls`, `current_thinking`,
     `tag_buffers` (ephemeral, reset every turn)
-  - **Stream transport** — `streaming_resp`/`streaming_ref`/`streaming_cancel`
-    (mutually exclusive: `streaming_resp` for HTTP/SSE, `streaming_ref`+`streaming_cancel`
-    for native EventStream)
+  - **Stream transport** — `streaming_resp` (SSE via `Req.Response`)
   - **Stream health** — `last_chunk_at`, `stream_watchdog`, `stream_errored`
   - **Token tracking** — `token_usage`, `last_prompt_tokens`, `last_usage_msg_index`
   - **Context** — `context_entries` (raw discovered file data), `context_files` (paths for UI)
@@ -52,8 +50,8 @@ defmodule Opal.Agent.State do
           # ── Tool registry ────────────────────────────────────────────
           # Full pool of registered tool modules (built-in + MCP + custom).
           # ⚠ Do NOT read directly for availability — use
-          #   `Opal.Agent.Tools.active_tools(state)` which applies
-          #   feature gates and disabled_tools filtering.
+          #   `Opal.Agent.ToolRunner.active_tools/1` which applies
+          #   feature gates and the disabled list.
           tools: [module()],
           # Per-name disable list (from config or RPC). A tool whose name
           # appears here is excluded by active_tools/1. Stored as names
@@ -82,22 +80,20 @@ defmodule Opal.Agent.State do
           # Keyed by tag name atom; each value is the buffered partial text.
           tag_buffers: %{atom() => String.t()},
 
-          # ── Stream transport (mutually exclusive) ────────────────────
+          # ── Stream transport ─────────────────────────────────────
           # HTTP/SSE: Req.Response for async SSE streams (Provider.Copilot).
           streaming_resp: Req.Response.t() | nil,
-          # Native EventStream: ref for matching {ref, {:events, …}} messages.
-          streaming_ref: reference() | nil,
-          # Native EventStream: zero-arity cancel function.
-          streaming_cancel: (-> :ok) | nil,
 
           # ── Stream health ────────────────────────────────────────────
           # Monotonic timestamp of the last received chunk (for stall detection).
           last_chunk_at: integer() | nil,
           # Timer ref for the periodic stall-detection watchdog.
           stream_watchdog: reference() | nil,
-          # Set to true when a stream error event arrives; signals the
-          # agent to discard partial output and go idle.
-          stream_errored: boolean(),
+          # Set to the error reason when a stream error event arrives;
+          # signals the agent to discard partial output. If the reason
+          # matches a context overflow pattern, the agent triggers
+          # compaction instead of going idle. `false` when no error.
+          stream_errored: false | term(),
 
           # ── Token tracking ───────────────────────────────────────────
           # Cumulative session-wide counters (prompt, completion, total,
@@ -187,8 +183,6 @@ defmodule Opal.Agent.State do
 
     # Stream transport
     streaming_resp: nil,
-    streaming_ref: nil,
-    streaming_cancel: nil,
 
     # Stream health
     last_chunk_at: nil,
@@ -235,4 +229,39 @@ defmodule Opal.Agent.State do
   @doc "Maps the status field to a valid gen_statem state name."
   @spec state_name(t()) :: :idle | :running | :streaming | :executing_tools
   def state_name(%__MODULE__{status: status}) when status in @valid_states, do: status
+
+  @doc "Appends a message to history, persisting to Session if attached."
+  @spec append_message(t(), Opal.Message.t()) :: t()
+  def append_message(%__MODULE__{session: nil} = state, msg) do
+    %{state | messages: [msg | state.messages]}
+  end
+
+  def append_message(%__MODULE__{session: session} = state, msg) do
+    Opal.Session.append(session, msg)
+    %{state | messages: [msg | state.messages]}
+  end
+
+  @doc "Appends multiple messages to history, persisting to Session if attached."
+  @spec append_messages(t(), [Opal.Message.t()]) :: t()
+  def append_messages(%__MODULE__{session: nil} = state, msgs) do
+    %{state | messages: Enum.reverse(msgs) ++ state.messages}
+  end
+
+  def append_messages(%__MODULE__{session: session} = state, msgs) do
+    Opal.Session.append_many(session, msgs)
+    %{state | messages: Enum.reverse(msgs) ++ state.messages}
+  end
+
+  @doc "Resets ephemeral streaming accumulator fields."
+  @spec reset_stream_fields(t()) :: t()
+  def reset_stream_fields(%__MODULE__{} = state) do
+    %{
+      state
+      | current_text: "",
+        current_tool_calls: [],
+        current_thinking: nil,
+        stream_watchdog: nil,
+        last_chunk_at: nil
+    }
+  end
 end

@@ -115,7 +115,7 @@ defmodule Opal.Agent.SupervisorFailureTest do
     def execute(_args, _ctx), do: {:ok, "result"}
   end
 
-  describe "cancel_all_tasks with empty pending" do
+  describe "cancel_all with empty pending" do
     test "no-op when no tasks are pending" do
       state = %Opal.Agent.State{
         session_id: "sup-fail",
@@ -125,7 +125,7 @@ defmodule Opal.Agent.SupervisorFailureTest do
         pending_tool_tasks: %{}
       }
 
-      result = ToolRunner.cancel_all_tasks(state)
+      result = ToolRunner.cancel_all(state)
       assert result.pending_tool_tasks == %{}
     end
   end

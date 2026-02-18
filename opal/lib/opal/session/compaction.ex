@@ -333,7 +333,7 @@ defmodule Opal.Session.Compaction do
 
     case provider.stream(model, summary_messages, []) do
       {:ok, resp} ->
-        text = Opal.Provider.StreamCollector.collect_text(resp, provider, 30_000)
+        text = Opal.Provider.collect_text(resp, provider, 30_000)
         if text != "", do: {:ok, String.trim(text)}, else: {:error, :empty}
 
       {:error, reason} ->

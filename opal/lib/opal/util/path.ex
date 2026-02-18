@@ -1,52 +1,13 @@
 defmodule Opal.Path do
-  @moduledoc """
-  Cross-platform path normalization and security utilities.
+  @moduledoc "Cross-platform path security and normalization."
 
-  Provides functions for normalizing file paths across operating systems
-  and ensuring paths stay within allowed base directories to prevent
-  path traversal attacks.
-  """
+  @type safe_error :: :outside_base_dir
 
   @doc """
-  Normalizes a path by replacing backslashes with forward slashes and expanding it.
+  Ensures `path` resolves safely within `base_dir`.
 
-  This ensures consistent path representation regardless of the source OS.
-
-  ## Examples
-
-      iex> Opal.Path.normalize("foo\\\\bar/baz")
-      Path.expand("foo/bar/baz")
-  """
-  @spec normalize(String.t()) :: String.t()
-  def normalize(path) when is_binary(path) do
-    path
-    |> String.replace("\\", "/")
-    |> Path.expand()
-  end
-
-  @doc """
-  Converts a path to use native OS separators.
-
-  Uses backslashes on Windows and forward slashes elsewhere.
-
-  ## Examples
-
-      iex> Opal.Path.to_native("foo/bar/baz")
-      "foo/bar/baz"
-  """
-  @spec to_native(String.t()) :: String.t()
-  def to_native(path) when is_binary(path) do
-    if Opal.Platform.windows?(), do: String.replace(path, "/", "\\"), else: path
-  end
-
-  @doc """
-  Ensures a path is safely contained within a base directory.
-
-  Expands both paths and verifies the target is a child of the base directory.
-  This prevents path traversal attacks (e.g. `../../etc/passwd`).
-
-  Returns `{:ok, expanded_path}` if the path is within the base directory,
-  or `{:error, :outside_base_dir}` if it escapes.
+  Expands both paths and verifies the target is the base itself or a
+  descendant — preventing traversal attacks like `../../etc/passwd`.
 
   ## Examples
 
@@ -56,28 +17,23 @@ defmodule Opal.Path do
       iex> Opal.Path.safe_relative("../../etc/passwd", "/project")
       {:error, :outside_base_dir}
   """
-  @spec safe_relative(String.t(), String.t()) :: {:ok, String.t()} | {:error, :outside_base_dir}
-  def safe_relative(path, base_dir)
-      when is_binary(path) and is_binary(base_dir) do
-    expanded_base = Path.expand(base_dir)
-    expanded_path = Path.expand(path, expanded_base)
+  @spec safe_relative(String.t(), String.t()) :: {:ok, String.t()} | {:error, safe_error()}
+  def safe_relative(path, base_dir) when is_binary(path) and is_binary(base_dir) do
+    base = Path.expand(base_dir)
+    full = Path.expand(path, base)
 
-    # Ensure the expanded path is within the base directory.
-    # Path.relative_to/2 returns the input unchanged when it's not a child.
-    if expanded_path == expanded_base or
-         Path.relative_to(expanded_path, expanded_base) != expanded_path do
-      {:ok, expanded_path}
+    if full == base or String.starts_with?(full, base <> "/") do
+      {:ok, full}
     else
       {:error, :outside_base_dir}
     end
   end
 
   @doc """
-  Returns the relative path from `base` to `path`, always using forward slashes.
+  Returns `path` relative to `base`, always using POSIX `/` separators.
 
-  On Windows, `Path.relative_to/2` returns backslash-separated paths.
-  This function normalizes to POSIX separators so tool output is
-  consistent across platforms and the LLM always sees `/` paths.
+  Normalizes `Path.relative_to/2` output so tool results are consistent
+  across platforms and the LLM always sees `/`-separated paths.
 
   ## Examples
 
@@ -86,8 +42,31 @@ defmodule Opal.Path do
   """
   @spec posix_relative(String.t(), String.t()) :: String.t()
   def posix_relative(path, base) when is_binary(path) and is_binary(base) do
-    path
-    |> Path.relative_to(base)
-    |> String.replace("\\", "/")
+    path |> Path.relative_to(base) |> String.replace("\\", "/")
+  end
+
+  @doc """
+  Returns every directory from the filesystem root down to `path`.
+
+  Walks up from the given path, collecting each ancestor, and returns
+  them ordered root-first (deepest directory last). Handles both Unix
+  `/` and Windows `C:/` roots.
+
+  ## Examples
+
+      iex> Opal.Path.ancestors("/a/b/c")
+      ["/", "/a", "/a/b", "/a/b/c"]
+  """
+  @spec ancestors(String.t()) :: [String.t()]
+  def ancestors(path) when is_binary(path) do
+    path |> Path.expand() |> do_ancestors([])
+  end
+
+  defp do_ancestors(path, acc) do
+    parent = Path.dirname(path)
+
+    if parent == path,
+      do: [path | acc],
+      else: do_ancestors(parent, [path | acc])
   end
 end

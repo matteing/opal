@@ -1,168 +1,151 @@
 defmodule Opal.SubAgent do
   @moduledoc """
-  Spawns and manages child agents that work in parallel.
+  Spawns and manages child agents that run in parallel.
 
-  A sub-agent is another `Opal.Agent` started under `Opal.SessionSupervisor`.
-  It gets its own process, message history, and tool set. The supervision tree
-  ensures cleanup — if the parent session is torn down, sub-agents started by
-  tools within that session are cleaned up when those tool tasks terminate.
+  Each sub-agent is a full `Opal.Agent` process started under the parent's
+  `DynamicSupervisor`. It inherits the parent's configuration by default —
+  model, provider, tools, working directory — but any field can be overridden.
 
-  ## Usage
+  ## Example
 
-      # From within a tool or the parent agent:
-      {:ok, sub} = Opal.SubAgent.spawn(parent_agent, %{
+      {:ok, sub} = Opal.SubAgent.spawn(parent_pid, %{
         system_prompt: "You are a test-writing specialist.",
-        tools: [Opal.Tool.Read, Opal.Tool.Write, Opal.Tool.Shell],
         model: {:copilot, "claude-haiku-3-5"}
       })
 
-      {:ok, result} = Opal.SubAgent.run(sub, "Write tests for lib/opal/agent.ex")
-
-  Multiple sub-agents can be spawned in parallel, each working on different
-  files or tasks. If a sub-agent crashes, only that sub-agent is affected.
+      {:ok, response} = Opal.SubAgent.run(sub, "Write tests for lib/opal/agent.ex")
   """
 
   require Logger
 
+  alias Opal.Agent
+  alias Opal.Agent.State
+  alias Opal.Provider.Model
+
+  @type overrides :: %{
+          optional(:system_prompt) => String.t(),
+          optional(:tools) => [module()],
+          optional(:model) => Model.t() | {atom(), String.t()} | String.t(),
+          optional(:working_dir) => String.t(),
+          optional(:provider) => module()
+        }
+
+  # ── Spawn ──────────────────────────────────────────────────────────
+
   @doc """
-  Spawns a new sub-agent inheriting defaults from the parent agent.
+  Spawns a sub-agent, inheriting defaults from the parent agent process.
 
-  The parent agent's config, working directory, model, provider, and tools
-  are used as defaults. Any key in `overrides` replaces the parent's value.
-
-  ## Overrides
-
-    * `:system_prompt` — system prompt for the sub-agent (default: parent's)
-    * `:tools` — tool modules (default: parent's tools)
-    * `:model` — `{provider, model_id}` tuple (default: parent's model)
-    * `:working_dir` — working directory (default: parent's)
-    * `:provider` — provider module (default: parent's)
-
-  Returns `{:ok, sub_agent_pid}` or `{:error, reason}`.
+  Calls `Opal.Agent.get_state/1` on `parent` — do **not** call this from
+  inside a tool callback (it will deadlock). Use `spawn_from_state/2` instead.
   """
-  @spec spawn(GenServer.server(), map()) :: {:ok, pid()} | {:error, term()}
-  def spawn(parent_agent, overrides \\ %{}) do
-    parent_state = Opal.Agent.get_state(parent_agent)
-    spawn_from_state(parent_state, overrides)
+  @spec spawn(GenServer.server(), overrides()) :: {:ok, pid()} | {:error, term()}
+  def spawn(parent, overrides \\ %{}) do
+    parent |> Agent.get_state() |> spawn_from_state(overrides)
   end
 
   @doc """
-  Like `spawn/2`, but takes an already-captured `Opal.Agent.State` struct
-  instead of a pid. Use this from within tool execution to avoid calling
-  back into the blocked Agent GenServer (which would deadlock).
+  Spawns a sub-agent from an already-captured `State` struct.
+
+  Use this inside tool execution where the agent GenServer is blocked.
   """
-  @spec spawn_from_state(Opal.Agent.State.t(), map()) :: {:ok, pid()} | {:error, term()}
-  def spawn_from_state(parent_state, overrides \\ %{}) do
-    if not parent_state.config.features.sub_agents.enabled do
-      {:error, :sub_agents_disabled}
-    else
-      do_spawn(parent_state, overrides)
-    end
-  end
+  @spec spawn_from_state(State.t(), overrides()) :: {:ok, pid()} | {:error, term()}
+  def spawn_from_state(%State{config: %{features: %{sub_agents: %{enabled: false}}}} = _state, _),
+    do: {:error, :sub_agents_disabled}
 
-  defp do_spawn(parent_state, overrides) do
-    model =
-      case Map.get(overrides, :model) do
-        nil -> parent_state.model
-        spec -> Opal.Provider.Model.coerce(spec)
-      end
+  def spawn_from_state(%State{} = parent, overrides),
+    do: start_child(parent, overrides)
 
-    # Auto-select provider: explicit override wins.
-    # If model is explicitly overridden, align provider module to that model.
-    # Otherwise inherit the parent's provider module.
-    provider =
-      case Map.fetch(overrides, :provider) do
-        {:ok, mod} ->
-          mod
-
-        :error ->
-          cond do
-            not Map.has_key?(overrides, :model) ->
-              parent_state.provider
-
-            model.provider == parent_state.model.provider ->
-              parent_state.provider
-
-            true ->
-              Opal.Provider.Model.provider_module(model)
-          end
-      end
-
-    session_id = generate_session_id()
-
-    Logger.debug(
-      "SubAgent spawn parent=#{parent_state.session_id} child=#{session_id} model=#{model.id}"
-    )
-
-    # Filter out tools that shouldn't be available to sub-agents.
-    # Sub-agents cannot ask questions — only top-level agents can.
-    parent_tools = Map.get(overrides, :tools, parent_state.tools)
-    tools = Enum.reject(parent_tools, &(&1 == Opal.Tool.AskUser))
-
-    opts = [
-      session_id: session_id,
-      system_prompt: Map.get(overrides, :system_prompt, parent_state.system_prompt),
-      model: model,
-      tools: tools,
-      working_dir: Map.get(overrides, :working_dir, parent_state.working_dir),
-      config: parent_state.config,
-      provider: provider,
-      tool_supervisor: parent_state.tool_supervisor
-    ]
-
-    DynamicSupervisor.start_child(parent_state.sub_agent_supervisor, {Opal.Agent, opts})
-  end
+  # ── Run ────────────────────────────────────────────────────────────
 
   @doc """
-  Sends a prompt to a sub-agent and synchronously collects the response.
+  Sends a prompt to a sub-agent and blocks until the response is complete.
 
-  Subscribes to the sub-agent's events, sends the prompt, and waits for
-  `:agent_end`. Returns the accumulated text response.
-
-  ## Options
-
-    * `timeout` — maximum wait time in milliseconds (default: `120_000`)
+  Returns the full accumulated text. Subscribes to the sub-agent's event
+  stream for the duration of the call.
   """
   @spec run(pid(), String.t(), timeout()) :: {:ok, String.t()} | {:error, term()}
   def run(sub_agent, prompt, timeout \\ 120_000) do
-    state = Opal.Agent.get_state(sub_agent)
-    session_id = state.session_id
-    Logger.debug("SubAgent run session=#{session_id} prompt=\"#{String.slice(prompt, 0, 80)}\"")
+    %{session_id: session_id} = Agent.get_state(sub_agent)
+
+    Logger.debug(
+      "SubAgent run session=#{session_id} prompt=#{inspect(String.slice(prompt, 0, 80))}"
+    )
+
     Opal.Events.subscribe(session_id)
 
     try do
-      Opal.Agent.prompt(sub_agent, prompt)
-      Opal.Agent.Collector.collect_response(session_id, "", timeout)
+      Agent.prompt(sub_agent, prompt)
+      Agent.Collector.collect_response(session_id, "", timeout)
     after
       Opal.Events.unsubscribe(session_id)
     end
   end
 
-  @doc """
-  Stops a sub-agent and cleans up its process.
+  # ── Stop ───────────────────────────────────────────────────────────
 
-  Accepts either just the sub-agent pid (looks up the parent supervisor
-  from process ancestry) or the sub-agent pid and the supervisor to
-  terminate it from.
+  @doc """
+  Terminates a sub-agent by locating its supervisor from process ancestry.
   """
   @spec stop(pid()) :: :ok | {:error, :not_found}
   def stop(sub_agent) when is_pid(sub_agent) do
-    case Process.info(sub_agent, :dictionary) do
-      {:dictionary, dict} ->
-        case Keyword.get(dict, :"$ancestors") do
-          [parent | _] when is_pid(parent) ->
-            DynamicSupervisor.terminate_child(parent, sub_agent)
-
-          _ ->
-            {:error, :not_found}
-        end
-
-      nil ->
-        {:error, :not_found}
+    with {:dictionary, dict} <- Process.info(sub_agent, :dictionary),
+         [sup | _] when is_pid(sup) <- Keyword.get(dict, :"$ancestors", []) do
+      DynamicSupervisor.terminate_child(sup, sub_agent)
+    else
+      _ -> {:error, :not_found}
     end
   end
 
+  # ── Internals ──────────────────────────────────────────────────────
+
+  defp start_child(parent, overrides) do
+    model = resolve_model(parent, overrides)
+    provider = resolve_provider(parent, model, overrides)
+    session_id = generate_session_id()
+
+    Logger.debug(
+      "SubAgent spawn parent=#{parent.session_id} child=#{session_id} model=#{model.id}"
+    )
+
+    opts = [
+      session_id: session_id,
+      system_prompt: Map.get(overrides, :system_prompt, parent.system_prompt),
+      model: model,
+      tools: resolve_tools(parent, overrides),
+      working_dir: Map.get(overrides, :working_dir, parent.working_dir),
+      config: parent.config,
+      provider: provider,
+      tool_supervisor: parent.tool_supervisor
+    ]
+
+    DynamicSupervisor.start_child(parent.sub_agent_supervisor, {Agent, opts})
+  end
+
+  @spec resolve_model(State.t(), overrides()) :: Model.t()
+  defp resolve_model(parent, overrides) do
+    case Map.get(overrides, :model) do
+      nil -> parent.model
+      spec -> Model.coerce(spec)
+    end
+  end
+
+  # Explicit provider override always wins.
+  # When only the model changes and the provider atom differs, derive the
+  # provider module from the new model. Otherwise inherit the parent's.
+  @spec resolve_provider(State.t(), Model.t(), overrides()) :: module()
+  defp resolve_provider(_parent, _model, %{provider: mod}), do: mod
+  defp resolve_provider(parent, _model, _overrides), do: parent.provider
+
+  # Sub-agents never get AskUser — only top-level agents may prompt the user.
+  @spec resolve_tools(State.t(), overrides()) :: [module()]
+  defp resolve_tools(parent, overrides) do
+    overrides
+    |> Map.get(:tools, parent.tools)
+    |> Enum.reject(&(&1 == Opal.Tool.AskUser))
+  end
+
+  @spec generate_session_id() :: String.t()
   defp generate_session_id do
-    "sub-" <> (:crypto.strong_rand_bytes(12) |> Base.encode16(case: :lower))
+    "sub-" <> Base.encode16(:crypto.strong_rand_bytes(12), case: :lower)
   end
 end

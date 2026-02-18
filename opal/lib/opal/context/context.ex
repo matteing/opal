@@ -2,137 +2,100 @@ defmodule Opal.Context do
   @moduledoc """
   Discovers project context files and agent skills from the filesystem.
 
-  Context is gathered from two sources:
+  ## Context Files
 
-  ## Context Files (walk-up discovery)
+  Starting from `working_dir`, walks up the directory tree to the root,
+  collecting known instruction files at each level. Files closer to
+  `working_dir` appear last (highest priority).
 
-  Starting from the agent's `working_dir`, walks up the directory tree to
-  the filesystem root, collecting known context files at each level. These
-  files provide project-specific instructions that are prepended to the
-  agent's system prompt.
+  Checked at every ancestor:
 
-  Files checked at each directory level:
-    * `AGENTS.md`
-    * `OPAL.md`
-    * `.agents/AGENTS.md`
-    * `.opal/OPAL.md`
+    * `AGENTS.md`, `OPAL.md`
+    * `.agents/AGENTS.md`, `.opal/OPAL.md`
 
-  The filename list is configurable via `Opal.Config.Features` `:context` subsystem.
-  Files found closer to `working_dir` appear later in the list (higher priority).
+  ## Skills
 
-  ## Skills (directory discovery)
+  Scans well-known directories for skill subdirectories, each containing
+  a `SKILL.md` per the [agentskills.io spec](https://agentskills.io/specification).
 
-  Scans well-known directories for skill subdirectories, each containing a
-  `SKILL.md` file per the [agentskills.io spec](https://agentskills.io/specification).
+  Search locations (project-local then user-global):
 
-  Standard search locations:
-    * `<working_dir>/.agents/skills/*/SKILL.md`
-    * `<working_dir>/.github/skills/*/SKILL.md`
-    * `<working_dir>/.claude/skills/*/SKILL.md`
-    * `~/.agents/skills/*/SKILL.md`
-    * `~/.opal/skills/*/SKILL.md`
-    * `~/.claude/skills/*/SKILL.md`
+    * `<working_dir>/.{agents,github,claude}/skills/*/SKILL.md`
+    * `~/.{agents,opal,claude}/skills/*/SKILL.md`
 
-  Additional directories can be specified via `Opal.Config.Features` `:skills` subsystem.
-
-  Skills use **progressive disclosure**: only `name` and `description` are
-  loaded into the agent's context at startup. Full instructions are loaded
-  when a skill is activated.
+  Only `name` and `description` are loaded upfront — full instructions
+  load on activation (progressive disclosure).
   """
 
-  # ── Centralized directory & filename constants ──────────────────────────
-  # Edit these to add/remove context files or skill search locations.
+  @typedoc "A discovered context file with its absolute path and content."
+  @type entry :: %{path: String.t(), content: String.t()}
 
-  # Filenames looked for at every directory level during walk-up discovery.
-  @default_context_filenames ~w(AGENTS.md OPAL.md)
-
-  # Hidden-directory prefixes checked for context files (e.g. `.agents/AGENTS.md`).
-  @context_hidden_dirs ~w(.agents .opal)
-
-  # Hidden-directory prefixes under `working_dir` that may contain a `skills/` folder.
+  @context_filenames ~w(AGENTS.md OPAL.md)
+  @hidden_dirs ~w(.agents .opal)
   @project_skill_dirs ~w(.agents .github .claude)
-
-  # Hidden-directory prefixes under `$HOME` that may contain a `skills/` folder.
   @home_skill_dirs ~w(.agents .opal .claude)
 
-  # ── Public API ──────────────────────────────────────────────────────────
+  # ── Public API ──────────────────────────────────────────────────────
 
   @doc """
   Discovers context files by walking up from `working_dir`.
 
-  Returns a list of `%{path: String.t(), content: String.t()}` maps,
-  ordered from root-most to deepest (closest to `working_dir` comes last).
+  Returns entries ordered root-first (closest to `working_dir` last).
 
   ## Options
 
-    * `:filenames` — list of filenames to look for (default from config).
-      Also searches hidden-directory variants defined in `@context_hidden_dirs`.
+    * `:filenames` — filenames to look for (default: `#{inspect(@context_filenames)}`).
   """
-  @spec discover_context(String.t(), keyword()) :: [%{path: String.t(), content: String.t()}]
+  @spec discover_context(String.t(), keyword()) :: [entry()]
   def discover_context(working_dir, opts \\ []) do
-    filenames = Keyword.get(opts, :filenames, @default_context_filenames)
+    filenames = Keyword.get(opts, :filenames, @context_filenames)
 
     working_dir
-    |> Path.expand()
-    |> walk_up()
-    |> Enum.flat_map(fn dir ->
-      filenames
-      |> Enum.flat_map(fn filename ->
-        root = [Path.join(dir, filename)]
-        hidden = Enum.map(@context_hidden_dirs, &Path.join([dir, &1, filename]))
-        root ++ hidden
-      end)
-      |> Enum.filter(&File.regular?/1)
-      |> Enum.map(&%{path: &1, content: File.read!(&1)})
-    end)
+    |> Opal.Path.ancestors()
+    |> Enum.flat_map(&candidate_paths(&1, filenames))
+    |> Enum.filter(&File.regular?/1)
+    |> Enum.map(fn path -> %{path: path, content: File.read!(path)} end)
   end
 
   @doc """
   Discovers skills from standard and configured directories.
 
-  Returns a list of `Opal.Skill.t()` structs with metadata parsed.
-  Only valid skills (those that parse and pass validation) are included;
-  invalid `SKILL.md` files are silently skipped.
+  Returns valid `Opal.Skill.t()` structs; invalid `SKILL.md` files are
+  silently skipped. Deduplicates by name (first occurrence wins).
 
   ## Options
 
-    * `:extra_dirs` — additional directories containing skill subdirectories
-      (default: `[]`).
+    * `:extra_dirs` — additional directories containing skill subdirectories.
   """
   @spec discover_skills(String.t(), keyword()) :: [Opal.Skill.t()]
   def discover_skills(working_dir, opts \\ []) do
-    extra_dirs = Keyword.get(opts, :extra_dirs, [])
-    expanded = Path.expand(working_dir)
+    project = Path.expand(working_dir)
     home = System.user_home!()
+    extras = opts |> Keyword.get(:extra_dirs, []) |> Enum.map(&Path.expand/1)
 
-    project = Enum.map(@project_skill_dirs, &Path.join([expanded, &1, "skills"]))
-    user = Enum.map(@home_skill_dirs, &Path.join([home, &1, "skills"]))
-    extra = Enum.map(extra_dirs, &Path.expand/1)
-
-    (project ++ user ++ extra)
+    (skills_under(project, @project_skill_dirs) ++
+       skills_under(home, @home_skill_dirs) ++
+       extras)
     |> Enum.uniq()
     |> Enum.flat_map(&scan_skills_dir/1)
     |> Enum.uniq_by(& &1.name)
   end
 
-  # ── Private ─────────────────────────────────────────────────────────────
+  # ── Private ─────────────────────────────────────────────────────────
 
-  # Returns directories from the given path up to the filesystem root.
-  # Result is ordered root-first (deepest directory last).
-  defp walk_up(path), do: do_walk_up(path, [])
-
-  defp do_walk_up(path, acc) do
-    parent = Path.dirname(path)
-
-    if parent == path do
-      # Filesystem root (Unix "/" or Windows "C:/")
-      [path | acc]
-    else
-      do_walk_up(parent, [path | acc])
-    end
+  @spec candidate_paths(String.t(), [String.t()]) :: [String.t()]
+  defp candidate_paths(dir, filenames) do
+    Enum.flat_map(filenames, fn file ->
+      [Path.join(dir, file) | Enum.map(@hidden_dirs, &Path.join([dir, &1, file]))]
+    end)
   end
 
-  # Scans a directory for skill subdirectories containing SKILL.md.
+  @spec skills_under(String.t(), [String.t()]) :: [String.t()]
+  defp skills_under(base, prefixes) do
+    Enum.map(prefixes, &Path.join([base, &1, "skills"]))
+  end
+
+  @spec scan_skills_dir(String.t()) :: [Opal.Skill.t()]
   defp scan_skills_dir(dir) do
     with true <- File.dir?(dir),
          {:ok, entries} <- File.ls(dir) do
@@ -145,13 +108,13 @@ defmodule Opal.Context do
     end
   end
 
+  @spec parse_skill(String.t()) :: [Opal.Skill.t()]
   defp parse_skill(skill_dir) do
     skill_md = Path.join(skill_dir, "SKILL.md")
-    dir_name = Path.basename(skill_dir)
 
     with true <- File.regular?(skill_md),
          {:ok, skill} <- Opal.Skill.parse_file(skill_md),
-         :ok <- Opal.Skill.validate(skill, dir_name: dir_name) do
+         :ok <- Opal.Skill.validate(skill, dir_name: Path.basename(skill_dir)) do
       [skill]
     else
       _ -> []

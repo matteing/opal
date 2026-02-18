@@ -95,19 +95,6 @@ defmodule Opal.ModelTest do
     end
   end
 
-  # Validates ReqLLM spec conversion
-  describe "to_req_llm_spec/1" do
-    test "converts to provider:model string" do
-      model = Model.new(:anthropic, "claude-sonnet-4-5")
-      assert Model.to_req_llm_spec(model) == "anthropic:claude-sonnet-4-5"
-    end
-
-    test "converts copilot model" do
-      model = Model.new(:copilot, "gpt-5")
-      assert Model.to_req_llm_spec(model) == "copilot:gpt-5"
-    end
-  end
-
   describe "coerce/2" do
     test "passes through Model struct as-is" do
       model = Model.new(:anthropic, "claude-sonnet-4-5")
@@ -141,23 +128,6 @@ defmodule Opal.ModelTest do
     test "passes thinking_level option" do
       model = Model.coerce({:anthropic, "claude-sonnet-4-5"}, thinking_level: :high)
       assert model.thinking_level == :high
-    end
-  end
-
-  describe "provider_module/1" do
-    test "returns Copilot provider for copilot models" do
-      model = Model.new(:copilot, "gpt-5")
-      assert Model.provider_module(model) == Opal.Provider.Copilot
-    end
-
-    test "returns LLM provider for anthropic models" do
-      model = Model.new(:anthropic, "claude-sonnet-4-5")
-      assert Model.provider_module(model) == Opal.Provider.LLM
-    end
-
-    test "returns LLM provider for openai models" do
-      model = Model.new(:openai, "gpt-4o")
-      assert Model.provider_module(model) == Opal.Provider.LLM
     end
   end
 end

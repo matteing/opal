@@ -1,7 +1,7 @@
-defmodule Opal.Provider.OpenAITest do
+defmodule Opal.Provider.SharedHelpersTest do
   use ExUnit.Case, async: true
 
-  alias Opal.Provider.OpenAI
+  alias Opal.Provider
   alias Opal.Message
 
   # ============================================================
@@ -11,17 +11,17 @@ defmodule Opal.Provider.OpenAITest do
   describe "parse_chat_event/1 — text events" do
     test "text_delta from content" do
       event = %{"choices" => [%{"delta" => %{"content" => "Hello"}, "finish_reason" => nil}]}
-      assert [{:text_delta, "Hello"}] = OpenAI.parse_chat_event(event)
+      assert [{:text_delta, "Hello"}] = Provider.parse_chat_event(event)
     end
 
     test "ignores empty content" do
       event = %{"choices" => [%{"delta" => %{"content" => ""}, "finish_reason" => nil}]}
-      assert [] = OpenAI.parse_chat_event(event)
+      assert [] = Provider.parse_chat_event(event)
     end
 
     test "text_start on role announcement" do
       event = %{"choices" => [%{"delta" => %{"role" => "assistant"}, "finish_reason" => nil}]}
-      assert [{:text_start, %{}}] = OpenAI.parse_chat_event(event)
+      assert [{:text_start, %{}}] = Provider.parse_chat_event(event)
     end
 
     test "text_start prepended when role + nil content" do
@@ -31,7 +31,7 @@ defmodule Opal.Provider.OpenAITest do
         ]
       }
 
-      assert [{:text_start, %{}}] = OpenAI.parse_chat_event(event)
+      assert [{:text_start, %{}}] = Provider.parse_chat_event(event)
     end
   end
 
@@ -43,7 +43,7 @@ defmodule Opal.Provider.OpenAITest do
         ]
       }
 
-      assert [{:thinking_delta, "Let me think..."}] = OpenAI.parse_chat_event(event)
+      assert [{:thinking_delta, "Let me think..."}] = Provider.parse_chat_event(event)
     end
 
     test "ignores empty reasoning_content" do
@@ -51,7 +51,7 @@ defmodule Opal.Provider.OpenAITest do
         "choices" => [%{"delta" => %{"reasoning_content" => ""}, "finish_reason" => nil}]
       }
 
-      assert [] = OpenAI.parse_chat_event(event)
+      assert [] = Provider.parse_chat_event(event)
     end
   end
 
@@ -69,7 +69,7 @@ defmodule Opal.Provider.OpenAITest do
       }
 
       assert [{:tool_call_start, %{call_id: "call_abc", name: "read_file"}}] =
-               OpenAI.parse_chat_event(event)
+               Provider.parse_chat_event(event)
     end
 
     test "tool_call_start includes call_index when present" do
@@ -91,7 +91,7 @@ defmodule Opal.Provider.OpenAITest do
       }
 
       assert [{:tool_call_start, %{call_id: "call_def", call_index: 1, name: "sub_agent"}}] =
-               OpenAI.parse_chat_event(event)
+               Provider.parse_chat_event(event)
     end
 
     test "tool_call_delta with arguments" do
@@ -106,7 +106,7 @@ defmodule Opal.Provider.OpenAITest do
         ]
       }
 
-      assert [{:tool_call_delta, %{delta: "{\"path\":"}}] = OpenAI.parse_chat_event(event)
+      assert [{:tool_call_delta, %{delta: "{\"path\":"}}] = Provider.parse_chat_event(event)
     end
 
     test "tool_call_delta includes call identifiers when present" do
@@ -131,7 +131,7 @@ defmodule Opal.Provider.OpenAITest do
                {:tool_call_start, %{call_id: "call_xyz", call_index: 0}},
                {:tool_call_delta,
                 %{call_id: "call_xyz", call_index: 0, delta: "{\"prompt\":\"write tests\"}"}}
-             ] = OpenAI.parse_chat_event(event)
+             ] = Provider.parse_chat_event(event)
     end
   end
 
@@ -141,17 +141,17 @@ defmodule Opal.Provider.OpenAITest do
         "choices" => [%{"delta" => %{}, "finish_reason" => "tool_calls"}]
       }
 
-      assert [{:response_done, %{stop_reason: :tool_calls}}] = OpenAI.parse_chat_event(event)
+      assert [{:response_done, %{stop_reason: :tool_calls}}] = Provider.parse_chat_event(event)
     end
 
     test "stop finish reason" do
       event = %{"choices" => [%{"delta" => %{}, "finish_reason" => "stop"}]}
-      assert [{:response_done, %{stop_reason: :stop}}] = OpenAI.parse_chat_event(event)
+      assert [{:response_done, %{stop_reason: :stop}}] = Provider.parse_chat_event(event)
     end
 
     test "nil finish reason produces no event" do
       event = %{"choices" => [%{"delta" => %{}, "finish_reason" => nil}]}
-      assert [] = OpenAI.parse_chat_event(event)
+      assert [] = Provider.parse_chat_event(event)
     end
   end
 
@@ -163,50 +163,50 @@ defmodule Opal.Provider.OpenAITest do
       }
 
       assert [{:usage, %{"prompt_tokens" => 100, "completion_tokens" => 50}}] =
-               OpenAI.parse_chat_event(event)
+               Provider.parse_chat_event(event)
     end
 
     test "empty choices with no usage" do
-      assert [] = OpenAI.parse_chat_event(%{"choices" => []})
+      assert [] = Provider.parse_chat_event(%{"choices" => []})
     end
 
     test "unknown event" do
-      assert [] = OpenAI.parse_chat_event(%{"unknown" => true})
+      assert [] = Provider.parse_chat_event(%{"unknown" => true})
     end
   end
 
   # ============================================================
-  # convert_messages/2
+  # convert_messages_openai/2
   # ============================================================
 
-  describe "convert_messages/2" do
+  describe "convert_messages_openai/2" do
     test "converts system message" do
       msg = %Message{id: "s1", role: :system, content: "Be helpful."}
-      [result] = OpenAI.convert_messages([msg])
+      [result] = Provider.convert_messages_openai([msg])
       assert result == %{role: "system", content: "Be helpful."}
     end
 
     test "converts user message" do
       msg = Message.user("Hello")
-      [result] = OpenAI.convert_messages([msg])
+      [result] = Provider.convert_messages_openai([msg])
       assert result == %{role: "user", content: "Hello"}
     end
 
     test "converts assistant message" do
       msg = Message.assistant("Sure!")
-      [result] = OpenAI.convert_messages([msg])
+      [result] = Provider.convert_messages_openai([msg])
       assert result == %{role: "assistant", content: "Sure!"}
     end
 
     test "converts assistant with nil content" do
       msg = Message.assistant(nil)
-      [result] = OpenAI.convert_messages([msg])
+      [result] = Provider.convert_messages_openai([msg])
       assert result.content == ""
     end
 
     test "converts tool_result message" do
       msg = Message.tool_result("call_1", "result text")
-      [result] = OpenAI.convert_messages([msg])
+      [result] = Provider.convert_messages_openai([msg])
       assert result == %{role: "tool", tool_call_id: "call_1", content: "result text"}
     end
 
@@ -216,7 +216,7 @@ defmodule Opal.Provider.OpenAITest do
           %{call_id: "call_1", name: "read_file", arguments: %{"path" => "/tmp"}}
         ])
 
-      [result] = OpenAI.convert_messages([msg])
+      [result] = Provider.convert_messages_openai([msg])
       assert result.role == "assistant"
       assert length(result.tool_calls) == 1
       assert hd(result.tool_calls).id == "call_1"
@@ -225,24 +225,24 @@ defmodule Opal.Provider.OpenAITest do
 
     test "includes reasoning_content when thinking present" do
       msg = Message.assistant("Response", [], thinking: "Let me think...")
-      [result] = OpenAI.convert_messages([msg])
+      [result] = Provider.convert_messages_openai([msg])
       assert result.reasoning_content == "Let me think..."
     end
 
     test "omits reasoning_content when include_thinking: false" do
       msg = Message.assistant("Response", [], thinking: "Secret thoughts")
-      [result] = OpenAI.convert_messages([msg], include_thinking: false)
+      [result] = Provider.convert_messages_openai([msg], include_thinking: false)
       refute Map.has_key?(result, :reasoning_content)
     end
 
     test "no reasoning_content when thinking is nil" do
       msg = Message.assistant("Response")
-      [result] = OpenAI.convert_messages([msg])
+      [result] = Provider.convert_messages_openai([msg])
       refute Map.has_key?(result, :reasoning_content)
     end
 
     test "handles empty message list" do
-      assert [] = OpenAI.convert_messages([])
+      assert [] = Provider.convert_messages_openai([])
     end
   end
 
@@ -252,23 +252,23 @@ defmodule Opal.Provider.OpenAITest do
 
   describe "reasoning_effort/1" do
     test "off returns nil" do
-      assert OpenAI.reasoning_effort(:off) == nil
+      assert Provider.reasoning_effort(:off) == nil
     end
 
     test "low returns string" do
-      assert OpenAI.reasoning_effort(:low) == "low"
+      assert Provider.reasoning_effort(:low) == "low"
     end
 
     test "medium returns string" do
-      assert OpenAI.reasoning_effort(:medium) == "medium"
+      assert Provider.reasoning_effort(:medium) == "medium"
     end
 
     test "high returns string" do
-      assert OpenAI.reasoning_effort(:high) == "high"
+      assert Provider.reasoning_effort(:high) == "high"
     end
 
     test "max clamps to high" do
-      assert OpenAI.reasoning_effort(:max) == "high"
+      assert Provider.reasoning_effort(:max) == "high"
     end
   end
 end

@@ -52,17 +52,10 @@ defmodule Opal.Session.Builder do
     end
   end
 
-  defp resolve_provider(config, cfg, model) do
+  defp resolve_provider(config, cfg, _model) do
     case Map.get(config, :provider) do
-      mod when is_atom(mod) and not is_nil(mod) ->
-        mod
-
-      _ ->
-        if cfg.provider != Opal.Provider.Copilot do
-          cfg.provider
-        else
-          Opal.Provider.Model.provider_module(model)
-        end
+      mod when is_atom(mod) and not is_nil(mod) -> mod
+      _ -> cfg.provider
     end
   end
 

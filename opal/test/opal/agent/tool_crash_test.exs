@@ -399,8 +399,8 @@ defmodule Opal.Agent.ToolCrashTest do
   end
 
   describe "tool returns unexpected value" do
-    test "execute_single_tool handles exception from bad return" do
-      # Direct unit test of ToolRunner.execute_single_tool
+    test "execute_tool handles exception from bad return" do
+      # Direct unit test of ToolRunner.execute_tool
       defmodule BadReturnTool do
         @behaviour Opal.Tool
         def name, do: "bad_return"
@@ -410,13 +410,13 @@ defmodule Opal.Agent.ToolCrashTest do
       end
 
       result =
-        Opal.Agent.ToolRunner.execute_single_tool(
+        Opal.Agent.ToolRunner.execute_tool(
           BadReturnTool,
           %{},
           %{working_dir: "/tmp"}
         )
 
-      # The raw return is passed through since execute_single_tool only rescues exceptions
+      # The raw return is passed through since execute_tool only rescues exceptions
       assert result == :not_a_valid_return
     end
   end

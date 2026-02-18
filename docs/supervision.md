@@ -190,7 +190,7 @@ sequenceDiagram
     Note right of Agent: begins turn...
 ```
 
-Used for: `Agent.prompt/2`, `Agent.follow_up/2`, `Agent.abort/1`
+Used for: `Agent.prompt/2`, `Agent.abort/1`
 
 Prompts are synchronous calls that return `%{queued: boolean}`. The caller
 observes progress through events (pattern 3). This keeps the UI responsive —
@@ -306,7 +306,7 @@ def handle_info(
     ) when is_map_key(tasks, ref) do
   {_task, tc} = Map.fetch!(tasks, ref)
   error_msg = "Tool execution crashed: #{inspect(reason)}"
-  Opal.Agent.Tools.handle_tool_result(ref, tc, {:error, error_msg}, state)
+  Opal.Agent.ToolRunner.handle_tool_result(ref, tc, {:error, error_msg}, state)
 end
 ```
 

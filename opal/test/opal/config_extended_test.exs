@@ -1,30 +1,3 @@
-defmodule Opal.Config.CopilotTest do
-  use ExUnit.Case, async: true
-
-  alias Opal.Config.Copilot
-
-  describe "new/1" do
-    test "builds from keyword list" do
-      c = Copilot.new(client_id: "custom", domain: "ghe.example.com")
-      assert c.client_id == "custom"
-      assert c.domain == "ghe.example.com"
-    end
-
-    test "builds from map" do
-      c = Copilot.new(%{domain: "enterprise.github.com"})
-      assert c.domain == "enterprise.github.com"
-      # Default client_id preserved
-      assert c.client_id == "Iv1.b507a08c87ecfe98"
-    end
-
-    test "defaults" do
-      c = %Copilot{}
-      assert c.client_id == "Iv1.b507a08c87ecfe98"
-      assert c.domain == "github.com"
-    end
-  end
-end
-
 defmodule Opal.Config.FeaturesTest do
   use ExUnit.Case, async: true
 
@@ -98,9 +71,9 @@ defmodule Opal.ConfigTest2 do
       assert c.shell != nil
     end
 
-    test "copilot override with keyword list" do
-      c = Config.new(%{copilot: [domain: "ghe.example.com"]})
-      assert c.copilot.domain == "ghe.example.com"
+    test "copilot_domain override" do
+      c = Config.new(%{copilot_domain: "ghe.example.com"})
+      assert c.copilot_domain == "ghe.example.com"
     end
 
     test "features override with map" do

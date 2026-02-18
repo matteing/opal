@@ -160,13 +160,13 @@ defmodule Opal.SubAgentTest do
       assert sub_state.model.id == "different-model"
     end
 
-    test "model override auto-selects matching provider module" do
+    test "model override inherits parent provider" do
       %{pid: parent} = start_parent()
 
       {:ok, sub} = SubAgent.spawn(parent, %{model: {:copilot, "gpt-5"}})
       sub_state = Agent.get_state(sub)
 
-      assert sub_state.provider == Opal.Provider.Copilot
+      assert sub_state.provider == TestProvider
     end
 
     test "explicit provider override wins over model-derived provider" do

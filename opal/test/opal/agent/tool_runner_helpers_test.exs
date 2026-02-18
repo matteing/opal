@@ -6,25 +6,31 @@ defmodule Opal.Agent.ToolRunnerHelpersTest do
 
   alias Opal.Agent.ToolRunner
 
-  describe "make_relative/2" do
-    test "converts absolute path under working_dir to relative" do
-      assert ToolRunner.make_relative("/home/user/project/src/foo.ex", "/home/user/project") ==
-               "src/foo.ex"
+  defmodule EchoTool do
+    @behaviour Opal.Tool
+    def name, do: "echo"
+    def description, do: "Echoes input"
+    def parameters, do: %{"type" => "object", "properties" => %{}}
+    def execute(%{"text" => text}, _ctx), do: {:ok, text}
+  end
+
+  describe "find_tool/2" do
+    test "returns matching module" do
+      assert ToolRunner.find_tool("echo", [EchoTool]) == EchoTool
     end
 
-    test "returns path unchanged if already relative" do
-      assert ToolRunner.make_relative("src/foo.ex", "/home/user/project") == "src/foo.ex"
+    test "returns nil when empty list" do
+      assert ToolRunner.find_tool("echo", []) == nil
+    end
+  end
+
+  describe "execute_tool/3" do
+    test "returns :error tuple for nil module" do
+      assert {:error, "Tool not found"} = ToolRunner.execute_tool(nil, %{}, %{})
     end
 
-    test "returns path unchanged if outside working_dir" do
-      result = ToolRunner.make_relative("/other/path/foo.ex", "/home/user/project")
-      # Should not be relative to working_dir
-      assert result == "/other/path/foo.ex"
-    end
-
-    test "handles same directory" do
-      assert ToolRunner.make_relative("/home/user/project/file.ex", "/home/user/project") ==
-               "file.ex"
+    test "delegates to tool module" do
+      assert {:ok, "hello"} = ToolRunner.execute_tool(EchoTool, %{"text" => "hello"}, %{})
     end
   end
 end

@@ -12,6 +12,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
   use ExUnit.Case, async: false
 
   alias Opal.Agent
+  alias Opal.Agent.Repair
   alias Opal.Events
   alias Opal.Message
   alias Opal.Provider.Model
@@ -32,7 +33,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "4", role: :assistant, content: "done"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
       assert length(result) == 4
       assert Enum.map(result, & &1.role) == [:user, :assistant, :tool_result, :assistant]
     end
@@ -50,7 +51,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "3", role: :user, content: "continue"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
       assert length(result) == 4
 
       # Synthetic result should be right after the assistant message
@@ -89,7 +90,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "7", role: :assistant, content: "final answer"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
 
       # orphan1 should have a synthetic result injected right after the first assistant
       roles = Enum.map(result, & &1.role)
@@ -134,7 +135,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "3", role: :tool_result, call_id: "b", content: "ok"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
 
       result_ids = result |> Enum.filter(&(&1.role == :tool_result)) |> Enum.map(& &1.call_id)
       assert "a" in result_ids
@@ -156,7 +157,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "3", role: :user, content: "thanks"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
       assert length(result) == 3
     end
 
@@ -167,7 +168,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "3", role: :user, content: "thanks"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
       assert length(result) == 3
     end
 
@@ -193,7 +194,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "6", role: :assistant, content: "done"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
 
       result_ids = result |> Enum.filter(&(&1.role == :tool_result)) |> Enum.map(& &1.call_id)
       assert "orphan_a" in result_ids
@@ -217,7 +218,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "3", role: :assistant, content: "done"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
       assert length(result) == 2
 
       # The orphaned tool_result should be stripped
@@ -241,7 +242,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "5", role: :assistant, content: "done"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
 
       result_ids = result |> Enum.filter(&(&1.role == :tool_result)) |> Enum.map(& &1.call_id)
       assert "valid" in result_ids
@@ -268,7 +269,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "7", role: :assistant, content: "done"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
 
       assert Enum.map(result, & &1.role) == [
                :user,
@@ -307,7 +308,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "5", role: :assistant, content: "done"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
       [result_a, result_b] = Enum.slice(result, 2, 2)
 
       assert Enum.map(result, & &1.role) == [
@@ -351,7 +352,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "5", role: :tool_result, call_id: "str_2", content: "docs loaded"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
 
       tool_results =
         result
@@ -380,7 +381,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "6", role: :assistant, content: "done"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
 
       assert Enum.map(result, & &1.role) == [:user, :assistant, :tool_result, :user, :assistant]
 
@@ -410,7 +411,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         %Message{id: "7", role: :assistant, content: "done"}
       ]
 
-      result = Agent.ensure_tool_results(messages)
+      result = Repair.ensure_tool_results(messages)
 
       assert Enum.map(result, & &1.role) == [
                :user,
@@ -481,7 +482,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
           [{:error, error}]
 
         {:ok, %{"choices" => _} = event} ->
-          Opal.Provider.OpenAI.parse_chat_event(event)
+          Opal.Provider.parse_chat_event(event)
 
         _ ->
           []
@@ -563,7 +564,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
           [{:error, Map.get(event, "error", event)}]
 
         {:ok, %{"choices" => _} = event} ->
-          Opal.Provider.OpenAI.parse_chat_event(event)
+          Opal.Provider.parse_chat_event(event)
 
         {:ok, %{"type" => "response.output_item.added", "item" => item}} ->
           case item["type"] do
@@ -713,7 +714,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
 
       # Test through the public ensure_tool_results
       chronological = Enum.reverse(messages)
-      result = Agent.ensure_tool_results(chronological)
+      result = Repair.ensure_tool_results(chronological)
 
       # orphan1 should now have a synthetic result
       orphan_result = Enum.find(result, &(&1.call_id == "orphan1"))

@@ -34,10 +34,10 @@ defmodule Opal.Agent.CompactionTest do
     end
   end
 
-  describe "maybe_auto_compact/1" do
+  describe "maybe_auto_compact/2" do
     test "returns state unchanged when under threshold" do
       state = base_state()
-      assert UsageTracker.maybe_auto_compact(state) == state
+      assert UsageTracker.maybe_auto_compact(state, & &1.messages) == state
     end
   end
 end

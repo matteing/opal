@@ -36,9 +36,7 @@ defmodule Opal do
     * `:tools` — list of modules implementing `Opal.Tool`
     * `:system_prompt` — the system prompt string (default: `""`)
     * `:working_dir` — base directory for tool execution (default: current dir)
-    * `:provider` — module implementing `Opal.Provider`. Auto-selected based on
-      model provider: `Opal.Provider.Copilot` for `:copilot`, `Opal.Provider.LLM`
-      for all others (Anthropic, OpenAI, Google, etc.)
+    * `:provider` — module implementing `Opal.Provider` (default: `Opal.Provider.Copilot`)
     * `:session` — if `true`, starts an `Opal.Session` process for persistence/branching
     * `:shell` — shell type for `Opal.Tool.Shell` (default: platform auto-detect)
     * `:data_dir` — override data directory (default: `~/.opal`)
@@ -48,19 +46,7 @@ defmodule Opal do
       # Minimal — everything from config :opal
       {:ok, agent} = Opal.start_session(%{working_dir: "/project"})
 
-      # Use Anthropic directly (auto-selects Opal.Provider.LLM)
-      {:ok, agent} = Opal.start_session(%{
-        model: {:anthropic, "claude-sonnet-4-5"},
-        working_dir: "/project"
-      })
-
-      # Equivalent string form
-      {:ok, agent} = Opal.start_session(%{
-        model: "anthropic:claude-sonnet-4-5",
-        working_dir: "/project"
-      })
-
-      # Use Copilot (auto-selects Opal.Provider.Copilot)
+      # Use Copilot (default provider)
       {:ok, agent} = Opal.start_session(%{
         model: {:copilot, "gpt-5"},
         working_dir: "/project"
@@ -118,14 +104,6 @@ defmodule Opal do
   end
 
   @doc """
-  Sends a follow-up prompt to the agent. Convenience wrapper for `prompt/2`.
-  """
-  @spec follow_up(GenServer.server(), String.t()) :: %{queued: boolean()}
-  def follow_up(agent, text) do
-    Opal.Agent.follow_up(agent, text)
-  end
-
-  @doc """
   Aborts the current agent run.
   """
   @spec abort(GenServer.server()) :: :ok
@@ -137,29 +115,24 @@ defmodule Opal do
   Changes the model on a running agent session.
 
   The new model takes effect on the next prompt. Conversation history is preserved.
-  The provider is automatically updated based on the model's provider atom:
-  `:copilot` uses `Opal.Provider.Copilot`, all others use `Opal.Provider.LLM`.
 
   Accepts any model specification that `Opal.Provider.Model.coerce/2` supports:
 
-    * A `"provider:model_id"` string (e.g. `"anthropic:claude-sonnet-4-5"`)
+    * A `"provider:model_id"` string (e.g. `"copilot:claude-sonnet-4-5"`)
     * A `{provider, model_id}` tuple (e.g. `{:copilot, "gpt-5"}`)
     * An `%Opal.Provider.Model{}` struct
 
   ## Examples
 
       Opal.set_model(agent, {:copilot, "gpt-5"})
-      Opal.set_model(agent, "anthropic:claude-sonnet-4-5")
-      Opal.set_model(agent, "anthropic:claude-sonnet-4-5", thinking_level: :high)
+      Opal.set_model(agent, "claude-sonnet-4-5")
+      Opal.set_model(agent, "claude-sonnet-4-5", thinking_level: :high)
   """
   @spec set_model(pid(), Opal.Provider.Model.t() | String.t() | {atom(), String.t()}, keyword()) ::
           :ok
   def set_model(agent, model_spec, opts \\ []) do
     model = Opal.Provider.Model.coerce(model_spec, opts)
-    provider_module = Opal.Provider.Model.provider_module(model)
-
     Opal.Agent.set_model(agent, model)
-    Opal.Agent.set_provider(agent, provider_module)
   end
 
   @doc """

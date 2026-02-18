@@ -11,8 +11,16 @@ defmodule Opal.Auth.Copilot do
   5. Persist tokens to disk for reuse across sessions
 
   Configuration (client ID, domain) comes from `Opal.Config`.
+  The OAuth client ID is defined as a module attribute here; the GitHub
+  domain is read from `Opal.Config.copilot_domain` (default: `"github.com"`).
   Tokens are stored at `Opal.Config.auth_file/1` (default: `~/.opal/auth.json`).
   """
+
+  # NOTE: This is the GitHub Copilot Chat VS Code extension's OAuth App
+  # client ID, borrowed from Pi's source. It works because Copilot's
+  # device-code flow doesn't enforce redirect URIs. Replace with Opal's
+  # own registered OAuth App client ID when one exists.
+  @client_id "Iv1.b507a08c87ecfe98"
 
   @copilot_headers %{
     "user-agent" => "GitHubCopilotChat/0.35.0",
@@ -21,10 +29,8 @@ defmodule Opal.Auth.Copilot do
     "copilot-integration-id" => "vscode-chat"
   }
 
-  defp client_id, do: default_config().copilot.client_id
-  defp domain, do: default_config().copilot.domain
-
-  defp default_config, do: Opal.Config.new()
+  defp client_id, do: @client_id
+  defp domain, do: Opal.Config.new().copilot_domain
 
   @doc """
   Starts the GitHub device-code OAuth flow.

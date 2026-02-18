@@ -31,54 +31,28 @@ defmodule Opal.Agent.ToolRunnerTest do
     }
   end
 
-  describe "find_tool_module/2" do
+  describe "find_tool/2" do
     test "finds tool by name" do
-      assert ToolRunner.find_tool_module("success", [SuccessTool, CrashTool]) == SuccessTool
+      assert ToolRunner.find_tool("success", [SuccessTool, CrashTool]) == SuccessTool
     end
 
     test "returns nil for unknown tool" do
-      assert ToolRunner.find_tool_module("nonexistent", [SuccessTool]) == nil
+      assert ToolRunner.find_tool("nonexistent", [SuccessTool]) == nil
     end
   end
 
-  describe "execute_single_tool/3" do
+  describe "execute_tool/3" do
     test "returns error when tool module is nil" do
-      assert {:error, "Tool not found"} = ToolRunner.execute_single_tool(nil, %{}, %{})
+      assert {:error, "Tool not found"} = ToolRunner.execute_tool(nil, %{}, %{})
     end
 
     test "executes tool successfully" do
-      assert {:ok, "ok"} = ToolRunner.execute_single_tool(SuccessTool, %{}, %{})
+      assert {:ok, "ok"} = ToolRunner.execute_tool(SuccessTool, %{}, %{})
     end
 
     test "catches exceptions and returns error" do
-      assert {:error, msg} = ToolRunner.execute_single_tool(CrashTool, %{}, %{})
+      assert {:error, msg} = ToolRunner.execute_tool(CrashTool, %{}, %{})
       assert msg =~ "boom"
-    end
-  end
-
-  describe "make_relative/2" do
-    test "converts absolute path within working dir to relative" do
-      assert ToolRunner.make_relative("/home/user/project/src/main.ex", "/home/user/project") ==
-               "src/main.ex"
-    end
-
-    test "returns path unchanged when outside working dir" do
-      assert ToolRunner.make_relative("/other/path/file.ex", "/home/user/project") ==
-               "/other/path/file.ex"
-    end
-
-    test "handles already relative path" do
-      assert ToolRunner.make_relative("src/main.ex", "/home/user/project") == "src/main.ex"
-    end
-  end
-
-  describe "build_tool_context/1" do
-    test "includes working_dir, session_id, config" do
-      state = base_state()
-      ctx = ToolRunner.build_tool_context(state)
-      assert ctx.working_dir == state.working_dir
-      assert ctx.session_id == state.session_id
-      assert ctx.config == state.config
     end
   end
 
@@ -98,15 +72,15 @@ defmodule Opal.Agent.ToolRunnerTest do
     end
   end
 
-  describe "drain_pending_messages/1" do
+  describe "drain_pending/1" do
     test "returns state unchanged when no pending messages" do
       state = base_state()
-      assert ToolRunner.drain_pending_messages(state) == state
+      assert ToolRunner.drain_pending(state) == state
     end
 
-    test "injects pending messages as user messages" do
+    test "injects pending messages as user turns" do
       state = %{base_state() | pending_messages: ["Do something else"]}
-      new_state = ToolRunner.drain_pending_messages(state)
+      new_state = ToolRunner.drain_pending(state)
       assert new_state.pending_messages == []
       [msg | _] = new_state.messages
       assert msg.role == :user
@@ -114,10 +88,10 @@ defmodule Opal.Agent.ToolRunnerTest do
     end
   end
 
-  describe "cancel_all_tasks/1" do
+  describe "cancel_all/1" do
     test "no-op when no pending tasks" do
       state = base_state()
-      assert ToolRunner.cancel_all_tasks(state) == state
+      assert ToolRunner.cancel_all(state) == state
     end
   end
 end

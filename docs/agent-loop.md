@@ -9,7 +9,6 @@ The public API remains stable and routes into the state machine:
 ```elixir
 Opal.Agent.start_link(opts)
 Opal.Agent.prompt(agent, text)
-Opal.Agent.follow_up(agent, text)
 Opal.Agent.abort(agent)
 Opal.Agent.get_state(agent)
 Opal.Agent.get_context(agent)
@@ -24,11 +23,8 @@ The runtime callback model is explicit:
 ```elixir
 @behaviour :gen_statem
 
-callback_mode() :: :state_functions
-idle(event_type, event_content, state)
-running(event_type, event_content, state)
-streaming(event_type, event_content, state)
-executing_tools(event_type, event_content, state)
+callback_mode() :: :handle_event_function
+handle_event(event_type, event_content, state_name, state)
 ```
 
 ## FSM States
@@ -94,14 +90,13 @@ Tool calls are run sequentially but non-blocking using `Task.Supervisor.async_no
 
 ```mermaid
 flowchart LR
-    A[State function callback] --> B[dispatch_state_event]
-    B --> C[handle_cast/call/info]
+    A[handle_event callback] --> C[handle_call/info]
     C --> E[next_state transition]
 
     E --> F[streaming]
     F --> G[Opal.Agent.Stream]
     E --> H[executing_tools]
-    H --> I[Opal.Agent.Tools -> ToolRunner]
+    H --> I[Opal.Agent.ToolRunner]
     E --> J[running]
     J --> K[Opal.Agent.Compaction + Opal.Agent.Retries]
 ```

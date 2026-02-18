@@ -32,7 +32,7 @@ Each session is isolated. A crash in one session's agent cannot affect another s
 
 ### Agent — The Core Loop
 
-`Opal.Agent` is implemented as a `:gen_statem` with `:state_functions` mode (`idle`, `running`, `streaming`, `executing_tools`). It handles the same event families as before, but now through explicit FSM states:
+`Opal.Agent` is implemented as a `:gen_statem` with `:handle_event_function` mode. The status field on `State` tracks which phase the agent is in (`idle`, `running`, `streaming`, `executing_tools`). All events flow through a single `handle_event/4` callback:
 
 **Casts** for fire-and-forget actions from the CLI:
 - `{:prompt, text}` — start a new turn

@@ -83,7 +83,7 @@ defmodule Opal.Agent.SubAgentFailureTest do
       }
 
       # SubAgent.execute calls DynamicSupervisor.start_child(nil, ...) which
-      # raises an EXIT. In the real agent loop, ToolRunner.execute_single_tool
+      # raises an EXIT. In the real agent loop, ToolRunner.execute_tool
       # would rescue this. Here we verify the exit propagates.
       assert catch_exit(SubAgent.execute(%{"prompt" => "test task"}, context)) != nil
     end

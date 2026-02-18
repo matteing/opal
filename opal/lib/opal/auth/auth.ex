@@ -3,7 +3,7 @@ defmodule Opal.Auth do
   Provider-agnostic credential detection.
 
   Probes all available authentication sources — Copilot token file,
-  environment-variable API keys (via ReqLLM), and saved settings —
+  environment-variable API keys, and saved settings —
   and returns a summary the client can use to decide whether a setup
   wizard is needed.
 

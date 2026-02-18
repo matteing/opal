@@ -316,7 +316,6 @@ defmodule Opal.Agent.AbortResilienceTest do
       state = Agent.get_state(pid)
       assert state.status == :idle
       assert state.streaming_resp == nil
-      assert state.streaming_ref == nil
       assert state.stream_watchdog == nil
     end
   end

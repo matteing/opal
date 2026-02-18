@@ -1,177 +1,103 @@
 defmodule Opal.Agent.UsageTracker do
   @moduledoc """
-  Token usage tracking and estimation for the Agent loop.
+  Token usage tracking and context-aware compaction for the agent loop.
 
-  Manages token counting, overflow detection, and hybrid estimation that
-  combines actual usage reports from providers with heuristic estimates
-  for messages added since the last report.
+  Combines actual provider usage reports with heuristic estimates for
+  messages added between turns, letting the agent predict overflow
+  *before* it happens.
   """
-
-  # compact/2 spec includes {:error, _} but Dialyzer infers :ok from current paths
-  @dialyzer {:no_match, [maybe_auto_compact: 1, handle_overflow_compaction: 2]}
 
   require Logger
-  alias Opal.Agent.{Emitter, State}
 
-  # Threshold ratio for auto-compaction when estimated tokens exceed this percentage of context window
-  @auto_compact_threshold 0.80
+  alias Opal.Agent.{Emitter, Overflow, State}
+  alias Opal.Provider.Registry, as: Models
+  alias Opal.Session.Compaction
+  alias Opal.Token
+
+  @type build_messages :: (State.t() -> [Opal.Message.t()])
+
+  @auto_compact_ratio 0.80
+
+  # ── Public API ──────────────────────────────────────────────────────
 
   @doc """
-  Compacts the conversation if estimated context usage exceeds the threshold.
-
-  Uses hybrid token estimation: combines the last actual usage
-  report with heuristic estimates for messages added since. This catches
-  growth *between* turns that the lagging `last_prompt_tokens` would miss.
+  Compacts the conversation when estimated usage crosses `#{@auto_compact_ratio * 100}%`
+  of the context window. No-ops without a live session.
   """
-  @spec maybe_auto_compact(State.t()) :: State.t()
-  def maybe_auto_compact(%State{session: session, model: model} = state)
+  @spec maybe_auto_compact(State.t(), build_messages()) :: State.t()
+  def maybe_auto_compact(%State{session: session} = state, build_messages_fn)
       when is_pid(session) do
-    context_window = model_context_window(model)
+    window = context_window(state)
+    estimated = estimate_tokens(state, build_messages_fn)
 
-    # Build hybrid estimate: actual usage base + heuristic for trailing messages
-    estimated_tokens = estimate_current_tokens(state, context_window)
-    ratio = estimated_tokens / context_window
-
-    if ratio >= @auto_compact_threshold do
-      Logger.info(
-        "Auto-compacting: ~#{estimated_tokens} estimated tokens / #{context_window} context (#{Float.round(ratio * 100, 1)}%)"
-      )
-
-      Emitter.broadcast(state, {:compaction_start, length(state.messages)})
-
-      case Opal.Session.Compaction.compact(session,
-             provider: state.provider,
-             model: state.model,
-             keep_recent_tokens: div(context_window, 4)
-           ) do
-        :ok ->
-          new_path = Opal.Session.get_path(session)
-          Emitter.broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
-
-          %{
-            state
-            | messages: Enum.reverse(new_path),
-              last_prompt_tokens: 0,
-              last_usage_msg_index: 0
-          }
-
-        {:error, reason} ->
-          Logger.warning("Auto-compaction failed: #{inspect(reason)}")
-          state
-      end
+    if estimated / window >= @auto_compact_ratio do
+      Logger.info("Auto-compacting: ~#{estimated}/#{window} tokens (#{pct(estimated, window)}%)")
+      compact(state, keep: div(window, 4))
     else
       state
     end
   end
 
-  def maybe_auto_compact(state), do: state
+  def maybe_auto_compact(state, _build_messages_fn), do: state
 
   @doc """
-  Builds a token estimate using the hybrid approach.
+  Estimates the current context size in tokens.
 
-  - If we have a recent usage report, use it as a calibrated base and add
-    heuristic estimates for messages added since.
-  - If no usage data yet, fall back to full heuristic estimation.
+  When a recent provider usage report exists, uses it as a calibrated base
+  and adds heuristic estimates only for messages appended since. Otherwise
+  falls back to a full heuristic pass.
   """
-  @spec estimate_current_tokens(State.t(), pos_integer()) :: non_neg_integer()
-  def estimate_current_tokens(%State{} = state, _context_window) do
-    if state.last_prompt_tokens > 0 do
-      # Messages added after the last usage report
-      messages_since =
-        Enum.take(state.messages, length(state.messages) - state.last_usage_msg_index)
+  @spec estimate_tokens(State.t(), build_messages()) :: non_neg_integer()
+  def estimate_tokens(%State{last_prompt_tokens: base} = state, _build_messages_fn)
+      when base > 0 do
+    trailing = Enum.take(state.messages, length(state.messages) - state.last_usage_msg_index)
+    Token.hybrid_estimate(base, trailing)
+  end
 
-      Opal.Token.hybrid_estimate(state.last_prompt_tokens, messages_since)
-    else
-      # No usage data yet — estimate the full context heuristically
-      # This calls back to the main Agent module for proper message building
-      all_messages = Opal.Agent.build_messages_for_usage(state)
-      Opal.Token.estimate_context(all_messages)
-    end
+  def estimate_tokens(state, build_messages_fn) do
+    Token.estimate_context(build_messages_fn.(state))
   end
 
   @doc """
-  Handles overflow compaction without a session process.
-
-  Without a session process we can't compact — surface the raw error.
+  Reacts to a context overflow error by aggressively compacting
+  and signalling `{:next_turn, state}` to retry.
   """
-  @spec handle_overflow_compaction(State.t(), term()) :: State.t()
-  def handle_overflow_compaction(%State{session: nil} = state, reason) do
-    Logger.error("Context overflow but no session attached — cannot compact")
+  @spec handle_overflow(State.t(), term()) :: {:next_turn, State.t()} | State.t()
+  def handle_overflow(%State{session: nil} = state, reason) do
+    Logger.error("Context overflow with no session — cannot compact")
     Emitter.broadcast(state, {:error, {:overflow_no_session, reason}})
     %{state | status: :idle}
   end
 
-  def handle_overflow_compaction(%State{session: session, model: model} = state, reason) do
-    context_window = model_context_window(model)
+  def handle_overflow(%State{} = state, reason) do
+    keep = div(context_window(state), 5)
+    Logger.info("Context overflow — compacting to #{keep} tokens")
 
-    # Aggressive keep budget: retain only ~20% of the context window so
-    # the retried turn has plenty of headroom.
-    keep_tokens = div(context_window, 5)
+    case do_compact(state, keep: keep, force: true) do
+      {:ok, state} ->
+        {:next_turn, %{state | overflow_detected: false}}
 
-    Logger.info("Context overflow detected — compacting to #{keep_tokens} tokens")
-    Emitter.broadcast(state, {:compaction_start, :overflow})
-
-    case Opal.Session.Compaction.compact(session,
-           provider: state.provider,
-           model: state.model,
-           keep_recent_tokens: keep_tokens,
-           force: true
-         ) do
-      :ok ->
-        new_path = Opal.Session.get_path(session)
-        Emitter.broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
-
-        state = %{
-          state
-          | messages: Enum.reverse(new_path),
-            last_prompt_tokens: 0,
-            overflow_detected: false,
-            last_usage_msg_index: 0
-        }
-
-        # Auto-retry the turn immediately after compaction
-        Opal.Agent.run_turn(state)
-
-      {:error, compact_error} ->
-        Logger.error("Overflow compaction failed: #{inspect(compact_error)}")
-        Emitter.broadcast(state, {:error, {:overflow_compact_failed, reason, compact_error}})
+      {:error, err} ->
+        Logger.error("Overflow compaction failed: #{inspect(err)}")
+        Emitter.broadcast(state, {:error, {:overflow_compact_failed, reason, err}})
         %{state | status: :idle}
     end
   end
 
   @doc """
-  Updates token usage from a stream event and checks for overflow.
+  Records a provider usage report and flags overflow when input tokens
+  exceed the context window.
 
-  Handles both Chat Completions keys (prompt_tokens) and Responses API keys (input_tokens).
-  Flags usage-based overflow so finalize_response/1 can trigger compaction.
+  Normalizes across both Chat Completions (`prompt_tokens`) and
+  Responses API (`input_tokens`) key conventions.
   """
   @spec update_usage(map(), State.t()) :: State.t()
-  def update_usage(usage, state) do
-    # Handle both Chat Completions keys (prompt_tokens) and Responses API keys (input_tokens)
-    prompt =
-      Map.get(
-        usage,
-        "prompt_tokens",
-        Map.get(
-          usage,
-          :prompt_tokens,
-          Map.get(usage, "input_tokens", Map.get(usage, :input_tokens, 0))
-        )
-      ) || 0
-
-    completion =
-      Map.get(
-        usage,
-        "completion_tokens",
-        Map.get(
-          usage,
-          :completion_tokens,
-          Map.get(usage, "output_tokens", Map.get(usage, :output_tokens, 0))
-        )
-      ) || 0
+  def update_usage(usage, %State{} = state) when is_map(usage) do
+    prompt = extract(usage, ~w(prompt_tokens input_tokens))
+    completion = extract(usage, ~w(completion_tokens output_tokens))
 
     total =
-      Map.get(usage, "total_tokens", Map.get(usage, :total_tokens, prompt + completion)) || 0
+      extract(usage, ~w(total_tokens)) |> then(&if(&1 > 0, do: &1, else: prompt + completion))
 
     token_usage = %{
       state.token_usage
@@ -181,6 +107,8 @@ defmodule Opal.Agent.UsageTracker do
         current_context_tokens: prompt
     }
 
+    window = context_window(state)
+
     state = %{
       state
       | token_usage: token_usage,
@@ -188,24 +116,66 @@ defmodule Opal.Agent.UsageTracker do
         last_usage_msg_index: length(state.messages)
     }
 
-    context_window = model_context_window(state.model)
+    Emitter.broadcast(state, {:usage_update, %{token_usage | context_window: window}})
 
-    Emitter.broadcast(
-      state,
-      {:usage_update, %{state.token_usage | context_window: context_window}}
-    )
-
-    # Flag usage-based overflow so finalize_response/1 can trigger compaction
-    # before the *next* turn pushes past the limit.
-    if Opal.Agent.Overflow.usage_overflow?(prompt, context_window) do
-      Logger.warning("Usage overflow: #{prompt} input tokens > #{context_window} context window")
+    if Overflow.usage_overflow?(prompt, window) do
+      Logger.warning("Usage overflow: #{prompt} input tokens / #{window} context window")
       %{state | overflow_detected: true}
     else
       state
     end
   end
 
-  # Private helper functions
+  # ── Internals ───────────────────────────────────────────────────────
 
-  defp model_context_window(model), do: Opal.Provider.Registry.context_window(model)
+  @spec compact(State.t(), keyword()) :: State.t()
+  defp compact(state, opts) do
+    Emitter.broadcast(state, {:compaction_start, length(state.messages)})
+
+    case do_compact(state, opts) do
+      {:ok, state} ->
+        state
+
+      {:error, reason} ->
+        Logger.warning("Auto-compaction failed: #{inspect(reason)}")
+        state
+    end
+  end
+
+  @spec do_compact(State.t(), keyword()) :: {:ok, State.t()} | {:error, term()}
+  defp do_compact(%State{session: session} = state, opts) do
+    compact_opts =
+      [provider: state.provider, model: state.model] ++
+        Keyword.take(opts, [:keep_recent_tokens, :force]) ++
+        if(tokens = opts[:keep], do: [keep_recent_tokens: tokens], else: [])
+
+    case Compaction.compact(session, compact_opts) do
+      :ok ->
+        new_path = Opal.Session.get_path(session)
+        Emitter.broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
+
+        {:ok,
+         %{
+           state
+           | messages: Enum.reverse(new_path),
+             last_prompt_tokens: 0,
+             last_usage_msg_index: 0
+         }}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  # Extracts a numeric value by trying string keys then atom keys in order.
+  @spec extract(map(), [String.t()]) :: non_neg_integer()
+  defp extract(usage, candidates) do
+    Enum.find_value(candidates, 0, fn key ->
+      Map.get(usage, key) || Map.get(usage, String.to_existing_atom(key))
+    end) || 0
+  end
+
+  defp context_window(%State{model: model}), do: Models.context_window(model)
+
+  defp pct(n, total), do: Float.round(n / total * 100, 1)
 end

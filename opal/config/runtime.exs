@@ -11,5 +11,5 @@ if shell = System.get_env("OPAL_SHELL") do
 end
 
 if copilot_domain = System.get_env("OPAL_COPILOT_DOMAIN") do
-  config :opal, copilot: [domain: copilot_domain]
+  config :opal, copilot_domain: copilot_domain
 end
