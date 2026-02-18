@@ -234,7 +234,7 @@ defmodule Opal.Agent.SystemPrompt do
 
   ## Example
 
-      iex> modules = [Opal.Tool.Read, Opal.Tool.Edit, Opal.Tool.Shell]
+      iex> modules = [Opal.Tool.ReadFile, Opal.Tool.EditFile, Opal.Tool.Shell]
       iex> guidelines = Opal.Agent.SystemPrompt.build_guidelines(modules)
       iex> guidelines =~ "read_file"
       true

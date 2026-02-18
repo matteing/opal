@@ -194,7 +194,7 @@ No other code needs to change.
 
 ### Example Output
 
-Given tools `[Opal.Tool.Read, Opal.Tool.Edit, Opal.Tool.Write, Opal.Tool.Shell]`:
+Given tools `[Opal.Tool.ReadFile, Opal.Tool.EditFile, Opal.Tool.WriteFile, Opal.Tool.Shell]`:
 
 ```xml
 <tool-guidelines>

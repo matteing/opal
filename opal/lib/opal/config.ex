@@ -205,9 +205,9 @@ defmodule Opal.Config do
         data_dir: "~/.opal",
         shell: :zsh,
         default_model: {"copilot", "claude-sonnet-4-5"},
-        default_tools: [Opal.Tool.Read, Opal.Tool.Write, Opal.Tool.Edit, Opal.Tool.Grep,
+        default_tools: [Opal.Tool.ReadFile, Opal.Tool.WriteFile, Opal.Tool.EditFile, Opal.Tool.Grep,
                         Opal.Tool.Shell, Opal.Tool.SubAgent, Opal.Tool.Tasks,
-                        Opal.Tool.UseSkill, Opal.Tool.AskUser, Opal.Tool.Debug],
+                        Opal.Tool.UseSkill, Opal.Tool.AskUser, Opal.Tool.DebugState],
         copilot_domain: "github.com",
         features: %{
           sub_agents: %{enabled: true},
@@ -235,16 +235,16 @@ defmodule Opal.Config do
             shell: nil,
             default_model: {"copilot", "claude-sonnet-4"},
             default_tools: [
-              Opal.Tool.Read,
-              Opal.Tool.Write,
-              Opal.Tool.Edit,
+              Opal.Tool.ReadFile,
+              Opal.Tool.WriteFile,
+              Opal.Tool.EditFile,
               Opal.Tool.Grep,
               Opal.Tool.Shell,
               Opal.Tool.SubAgent,
               Opal.Tool.Tasks,
               Opal.Tool.UseSkill,
               Opal.Tool.AskUser,
-              Opal.Tool.Debug
+              Opal.Tool.DebugState
             ],
             provider: Opal.Provider.Copilot,
             auto_save: true,

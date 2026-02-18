@@ -23,7 +23,7 @@ defmodule Opal.Tool.AskUser do
   end
 
   @impl true
-  def meta(%{"question" => q}), do: String.slice(q, 0, 60)
+  def meta(%{"question" => q}), do: Opal.Util.Text.truncate_preview(q, 60)
   def meta(_), do: "ask_user"
 
   @impl true

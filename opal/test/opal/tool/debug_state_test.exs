@@ -1,8 +1,8 @@
-defmodule Opal.Tool.DebugTest do
+defmodule Opal.Tool.DebugStateTest do
   use ExUnit.Case, async: true
 
   alias Opal.Agent.{Emitter, State}
-  alias Opal.Tool.Debug
+  alias Opal.Tool.DebugState, as: Debug
 
   describe "execute/2" do
     test "returns error without agent_state" do
@@ -18,7 +18,7 @@ defmodule Opal.Tool.DebugTest do
           model: Opal.Provider.Model.coerce({:copilot, "claude-sonnet-4"}),
           working_dir: File.cwd!(),
           config: Opal.Config.new(%{features: %{debug: %{enabled: true}}}),
-          tools: [Opal.Tool.Read, Opal.Tool.Debug],
+          tools: [Opal.Tool.ReadFile, Opal.Tool.DebugState],
           messages: [Opal.Message.user("hello from debug test")]
         }
 
@@ -82,7 +82,7 @@ defmodule Opal.Tool.DebugTest do
           model: Opal.Provider.Model.coerce({:copilot, "claude-sonnet-4"}),
           working_dir: File.cwd!(),
           config: Opal.Config.new(%{features: %{debug: %{enabled: true}}}),
-          tools: [Opal.Tool.Read],
+          tools: [Opal.Tool.ReadFile],
           messages: [Opal.Message.user("hello")]
         }
 

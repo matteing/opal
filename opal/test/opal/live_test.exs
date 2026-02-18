@@ -97,7 +97,7 @@ defmodule Opal.LiveTest do
         Opal.start_session(%{
           model: {:copilot, "claude-sonnet-4"},
           system_prompt: "You have a read tool. Use it when asked to read files.",
-          tools: [Opal.Tool.Read],
+          tools: [Opal.Tool.ReadFile],
           working_dir: System.tmp_dir!()
         })
 

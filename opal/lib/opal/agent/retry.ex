@@ -85,8 +85,8 @@ defmodule Opal.Agent.Retry do
 
     # Permanent errors are never retried, even if they also match a
     # transient pattern (e.g. "500: context_length_exceeded").
-    not matches_any?(text, @permanent_patterns) and
-      matches_any?(text, @transient_patterns)
+    not Opal.Util.Error.matches_any?(text, @permanent_patterns) and
+      Opal.Util.Error.matches_any?(text, @transient_patterns)
   end
 
   @doc """
@@ -114,11 +114,5 @@ defmodule Opal.Agent.Retry do
 
     # 2^(attempt - 1) gives: 1× for attempt 1, 2× for attempt 2, etc.
     min(base * Integer.pow(2, attempt - 1), max)
-  end
-
-  # ── Helpers ─────────────────────────────────────────────────────────────
-
-  defp matches_any?(text, patterns) do
-    Enum.any?(patterns, &String.contains?(text, &1))
   end
 end

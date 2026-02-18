@@ -1,8 +1,8 @@
-defmodule Opal.Tool.EditTest do
+defmodule Opal.Tool.EditFileTest do
   use ExUnit.Case, async: true
 
-  alias Opal.Tool.Edit
-  alias Opal.Tool.Hashline
+  alias Opal.Tool.EditFile, as: Edit
+  alias Opal.Hashline
 
   @working_dir System.tmp_dir!()
 

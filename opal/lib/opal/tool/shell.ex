@@ -2,26 +2,14 @@ defmodule Opal.Tool.Shell do
   @moduledoc """
   Runs shell commands cross-platform with timeout support.
 
-  The shell type is configurable per session via `context.shell`:
-
-    - `:sh`         — POSIX sh (default on Unix)
-    - `:bash`       — GNU Bash
-    - `:zsh`        — Zsh
-    - `:cmd`        — cmd.exe (default on Windows)
-    - `:powershell` — PowerShell (cross-platform)
-
-  The tool name and description exposed to the LLM change to match
-  the configured shell, so the model generates appropriate commands.
+  The tool name and description adapt to the configured shell type
+  (`:sh`, `:bash`, `:zsh`, `:cmd`, `:powershell`) so the LLM generates
+  appropriate commands.
   """
 
   @behaviour Opal.Tool
 
   @default_timeout 30_000
-
-  # -- Truncation limits ------------------------------------------------------
-  # Shell output beyond these thresholds is tail-truncated: the *end* is kept
-  # because errors, test results, and exit messages appear last. Full output
-  # is saved to a temp file so the LLM can reference it if needed.
   @max_lines 2_000
   @max_bytes 50 * 1024
 
@@ -103,10 +91,7 @@ defmodule Opal.Tool.Shell do
 
   @impl true
   def meta(%{"command" => command}) do
-    truncated =
-      if String.length(command) > 60, do: String.slice(command, 0, 57) <> "...", else: command
-
-    "Run `#{truncated}`"
+    "Run `#{Opal.Util.Text.truncate(command, 57, "...")}`"
   end
 
   def meta(_), do: "Run command"
@@ -288,7 +273,7 @@ defmodule Opal.Tool.Shell do
     dir = Path.join(System.tmp_dir!(), "opal-shell")
     File.mkdir_p!(dir)
 
-    id = :crypto.strong_rand_bytes(6) |> Base.encode16(case: :lower)
+    id = Opal.Id.hex(6)
     path = Path.join(dir, "#{id}.log")
     File.write!(path, output)
     path

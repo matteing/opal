@@ -75,23 +75,8 @@ defmodule Opal.Agent.Overflow do
   """
   @spec context_overflow?(term()) :: boolean()
   def context_overflow?(reason) do
-    text = stringify_reason(reason) |> String.downcase()
-    Enum.any?(@overflow_patterns, &String.contains?(text, &1))
-  end
-
-  # Converts an error reason to a string for pattern matching.
-  # Maps (common from JSON API errors) are inspected since they don't
-  # implement String.Chars. Binaries and other String.Chars types are
-  # converted directly.
-  @spec stringify_reason(term()) :: String.t()
-  defp stringify_reason(reason) when is_binary(reason), do: reason
-  defp stringify_reason(reason) when is_map(reason), do: inspect(reason)
-  defp stringify_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
-
-  defp stringify_reason(reason) do
-    String.Chars.to_string(reason)
-  rescue
-    Protocol.UndefinedError -> inspect(reason)
+    text = Opal.Util.Error.stringify_reason(reason) |> String.downcase()
+    Opal.Util.Error.matches_any?(text, @overflow_patterns)
   end
 
   @doc """

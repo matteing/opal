@@ -8,9 +8,9 @@ Opal exposes three file tools to the LLM:
 
 | Tool         | Purpose                                                                      | Module            |
 | ------------ | ---------------------------------------------------------------------------- | ----------------- |
-| `read_file`  | Read file contents with hashline tags, offset/limit slicing, head-truncation | `Opal.Tool.Read`  |
-| `edit_file`  | Edit lines by hash-anchored references from `read_file` output               | `Opal.Tool.Edit`  |
-| `write_file` | Create or overwrite an entire file                                           | `Opal.Tool.Write` |
+| `read_file`  | Read file contents with hashline tags, offset/limit slicing, head-truncation | `Opal.Tool.ReadFile`  |
+| `edit_file`  | Edit lines by hash-anchored references from `read_file` output               | `Opal.Tool.EditFile`  |
+| `write_file` | Create or overwrite an entire file                                           | `Opal.Tool.WriteFile` |
 
 The **edit tool** is the primary way the agent modifies existing code. Instead of reproducing old content (str_replace), the model references lines by their `N:hash` tags from `read_file` output.
 
@@ -123,11 +123,11 @@ The hashline format gives the model a cheap, verifiable anchor. If it can recall
 
 ## Source files
 
-- `lib/opal/tool/hashline.ex` — Hash computation, line tagging, anchor parsing, hash validation
-- `lib/opal/tool/edit.ex` — Hashline edit tool (`edit_file`)
-- `lib/opal/tool/read.ex` — File reading with hashline-tagged output
-- `lib/opal/tool/encoding.ex` — BOM and CRLF handling
-- `lib/opal/tool/file_helper.ex` — Shared path resolution and file I/O helpers
+- `lib/opal/util/hashline.ex` — Hash computation, line tagging, anchor parsing, hash validation
+- `lib/opal/tool/edit_file.ex` — Hashline edit tool (`edit_file`)
+- `lib/opal/tool/read_file.ex` — File reading with hashline-tagged output
+- `lib/opal/util/encoding.ex` — BOM and CRLF handling
+- `lib/opal/util/file_helper.ex` — Shared path resolution and file I/O helpers
 
 ## References
 

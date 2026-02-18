@@ -365,7 +365,9 @@ defmodule Opal.Session.Compaction do
                 calls when is_list(calls) and calls != [] ->
                   tools =
                     Enum.map_join(calls, "; ", fn tc ->
-                      args = tc.arguments |> Jason.encode!() |> String.slice(0, 200)
+                      args =
+                        tc.arguments |> Jason.encode!() |> Opal.Util.Text.truncate_preview(200)
+
                       "#{tc.name}(#{args})"
                     end)
 
@@ -378,7 +380,7 @@ defmodule Opal.Session.Compaction do
             Enum.join(lines ++ tool_lines, "\n")
 
           :tool_result ->
-            output = String.slice(msg.content || "", 0, 500)
+            output = Opal.Util.Text.truncate_preview(msg.content || "", 500)
             "[Tool result (#{msg.name || msg.call_id})]: #{output}"
 
           :system ->

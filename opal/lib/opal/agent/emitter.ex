@@ -28,7 +28,7 @@ defmodule Opal.Agent.Emitter do
   @spec recent(String.t(), pos_integer()) :: [%{timestamp_ms: integer(), event: term()}]
   def recent(session_id, limit \\ 50) when is_binary(session_id) and is_integer(limit) do
     ensure_table()
-    limit = limit |> max(1) |> min(@max_limit)
+    limit = Opal.Util.Number.clamp(limit, 1, @max_limit)
 
     @table
     |> :ets.lookup(session_id)

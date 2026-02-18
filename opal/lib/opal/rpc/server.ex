@@ -498,19 +498,8 @@ defmodule Opal.RPC.Server do
     end
   end
 
-  defp find_agent(sid) do
-    case Registry.lookup(Opal.Registry, {:agent, sid}) do
-      [{pid, _}] -> {:ok, pid}
-      [] -> {:error, "No session with id: #{sid}"}
-    end
-  end
-
-  defp find_session(sid) do
-    case Registry.lookup(Opal.Registry, {:session, sid}) do
-      [{pid, _}] -> {:ok, pid}
-      [] -> {:error, "No session process for id: #{sid}"}
-    end
-  end
+  defp find_agent(sid), do: Opal.Util.Registry.lookup({:agent, sid})
+  defp find_session(sid), do: Opal.Util.Registry.lookup({:session, sid})
 
   # ── Error helper ───────────────────────────────────────────────────
 

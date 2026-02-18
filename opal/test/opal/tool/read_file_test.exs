@@ -1,10 +1,10 @@
-defmodule Opal.Tool.ReadTest do
+defmodule Opal.Tool.ReadFileTest do
   use ExUnit.Case, async: true
 
   @moduletag :tmp_dir
 
   alias Opal.Config
-  alias Opal.Tool.Read
+  alias Opal.Tool.ReadFile, as: Read
 
   # Strips hashline tags from output for content comparison
   defp strip_tags(output) do

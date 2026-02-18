@@ -1,7 +1,7 @@
-defmodule Opal.Tool.HashlineTest do
+defmodule Opal.HashlineTest do
   use ExUnit.Case, async: true
 
-  alias Opal.Tool.Hashline
+  alias Opal.Hashline
 
   describe "line_hash/1" do
     test "returns a 2-character hex string" do
@@ -23,7 +23,6 @@ defmodule Opal.Tool.HashlineTest do
     end
 
     test "different content produces different hashes (usually)" do
-      # Not guaranteed for all inputs, but these should differ
       h1 = Hashline.line_hash("function foo() {")
       h2 = Hashline.line_hash("return 42;")
       assert h1 != h2
@@ -42,7 +41,6 @@ defmodule Opal.Tool.HashlineTest do
         assert String.match?(line, ~r/^\d+:[0-9a-f]{2}\|/)
       end)
 
-      # Line numbers are 1-indexed
       assert String.starts_with?(Enum.at(lines, 0), "1:")
       assert String.starts_with?(Enum.at(lines, 1), "2:")
       assert String.starts_with?(Enum.at(lines, 2), "3:")
@@ -53,7 +51,6 @@ defmodule Opal.Tool.HashlineTest do
       tagged = Hashline.tag_lines(content)
       lines = String.split(tagged, "\n")
 
-      # Content after N:hash| should be the original line
       [_, after_pipe] = String.split(Enum.at(lines, 0), "|", parts: 2)
       assert after_pipe == "  indented"
     end

@@ -632,12 +632,5 @@ defmodule Opal.Agent.Stream do
 
   # Safely decodes a JSON arguments string into a map.
   # Returns `%{}` on invalid / incomplete JSON rather than crashing.
-  defp decode_arguments_json(json) when is_binary(json) do
-    case Jason.decode(json) do
-      {:ok, parsed} -> parsed
-      {:error, _} -> %{}
-    end
-  end
-
-  defp decode_arguments_json(_), do: %{}
+  defp decode_arguments_json(json), do: Opal.Util.Json.safe_decode(json)
 end

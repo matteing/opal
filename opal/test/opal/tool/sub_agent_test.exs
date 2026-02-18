@@ -198,8 +198,8 @@ defmodule Opal.Tool.SubAgentTest do
       long = String.duplicate("x", 100)
       meta = SubAgentTool.meta(%{"prompt" => long})
       assert meta =~ "Sub-agent:"
-      assert meta =~ "..."
-      assert String.length(meta) < 80
+      assert meta =~ "truncated"
+      assert String.length(meta) < 90
     end
 
     test "meta/1 keeps short prompts intact" do

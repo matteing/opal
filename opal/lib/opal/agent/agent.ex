@@ -26,7 +26,7 @@ defmodule Opal.Agent do
       {:ok, pid} = Opal.Agent.start_link(
         session_id: "abc",
         model: %Opal.Provider.Model{provider: :copilot, id: "claude-sonnet-4-5"},
-        tools: [Opal.Tool.Read, Opal.Tool.Write],
+        tools: [Opal.Tool.ReadFile, Opal.Tool.WriteFile],
         working_dir: "/project"
       )
 
@@ -586,9 +586,9 @@ defmodule Opal.Agent do
   defp resolve_session(session_id, opts) do
     case Keyword.get(opts, :session) do
       true ->
-        case Registry.lookup(Opal.Registry, {:session, session_id}) do
-          [{pid, _}] -> pid
-          [] -> nil
+        case Opal.Util.Registry.lookup({:session, session_id}) do
+          {:ok, pid} -> pid
+          {:error, _} -> nil
         end
 
       pid when is_pid(pid) ->

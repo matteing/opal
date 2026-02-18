@@ -1,26 +1,29 @@
-defmodule Opal.Tool.Debug do
+defmodule Opal.Tool.DebugState do
   @moduledoc """
   Returns a debug snapshot of the current agent runtime state.
 
-  This tool is intended for self-diagnosis and troubleshooting. It includes a
-  compact state summary and, when enabled, recent session events captured by
-  `Opal.Agent.Emitter`.
+  Intended for self-diagnosis: compact state summary plus recent session
+  events captured by `Opal.Agent.Emitter`.
   """
 
   @behaviour Opal.Tool
+
+  alias Opal.FileIO
 
   @max_event_limit 500
   @max_message_limit 200
 
   @impl true
+  @spec name() :: String.t()
   def name, do: "debug_state"
 
   @impl true
-  def description do
-    "Inspect current Opal runtime state and recent session events for debugging."
-  end
+  @spec description() :: String.t()
+  def description,
+    do: "Inspect current Opal runtime state and recent session events for debugging."
 
   @impl true
+  @spec parameters() :: map()
   def parameters do
     %{
       "type" => "object",
@@ -50,6 +53,7 @@ defmodule Opal.Tool.Debug do
   def meta(_), do: "Inspect runtime state"
 
   @impl true
+  @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
   def execute(args, %{agent_state: %Opal.Agent.State{} = state}) do
     event_limit = clamp_int(Map.get(args, "event_limit"), 50, @max_event_limit)
     include_messages = Map.get(args, "include_messages", false) == true
@@ -99,7 +103,7 @@ defmodule Opal.Tool.Debug do
       %{
         timestamp_ms: ts,
         type: event_type(event),
-        data: String.slice(inspect(event, limit: 5, printable_limit: 500), 0, 500)
+        data: FileIO.truncate(inspect(event, limit: 5, printable_limit: 500), 500)
       }
     end)
   end
@@ -114,22 +118,21 @@ defmodule Opal.Tool.Debug do
         call_id: msg.call_id,
         name: msg.name,
         is_error: msg.is_error,
-        content: truncate(msg.content, 400)
+        content: truncate_content(msg.content, 400)
       }
     end)
   end
 
-  defp truncate(nil, _limit), do: nil
+  defp truncate_content(nil, _limit), do: nil
 
-  defp truncate(value, limit) when is_binary(value) do
-    if String.length(value) > limit, do: String.slice(value, 0, limit) <> "...", else: value
-  end
+  defp truncate_content(value, limit) when is_binary(value),
+    do: Opal.Util.Text.truncate(value, limit, "...")
 
-  defp truncate(value, limit),
-    do: value |> inspect(limit: 3, printable_limit: limit) |> truncate(limit)
+  defp truncate_content(value, limit),
+    do: value |> inspect(limit: 3, printable_limit: limit) |> truncate_content(limit)
 
   defp clamp_int(value, _default, max_limit) when is_integer(value),
-    do: value |> max(1) |> min(max_limit)
+    do: Opal.Util.Number.clamp(value, 1, max_limit)
 
   defp clamp_int(_value, default, _max_limit), do: default
 

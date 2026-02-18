@@ -160,8 +160,7 @@ defmodule Opal.Message do
     |> maybe_put_tool_calls(msg.tool_calls)
   end
 
-  defp put_if(map, nil, _key), do: map
-  defp put_if(map, val, key), do: Map.put(map, key, val)
+  defp put_if(map, val, key), do: Opal.Util.Map.put_non_nil(map, key, val)
 
   defp maybe_put_tool_calls(map, nil), do: map
   defp maybe_put_tool_calls(map, []), do: map

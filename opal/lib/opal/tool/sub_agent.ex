@@ -21,6 +21,8 @@ defmodule Opal.Tool.SubAgent do
   @behaviour Opal.Tool
   @sub_agent_timeout 120_000
 
+  alias Opal.FileIO
+
   @impl true
   def name, do: "sub_agent"
 
@@ -32,13 +34,7 @@ defmodule Opal.Tool.SubAgent do
   end
 
   @impl true
-  def meta(%{"prompt" => prompt}) do
-    truncated =
-      if String.length(prompt) > 60, do: String.slice(prompt, 0, 57) <> "...", else: prompt
-
-    "Sub-agent: #{truncated}"
-  end
-
+  def meta(%{"prompt" => prompt}), do: "Sub-agent: #{FileIO.truncate(prompt, 54)}"
   def meta(_), do: "Sub-agent"
 
   @impl true
@@ -106,7 +102,7 @@ defmodule Opal.Tool.SubAgent do
 
         # Emit sub_agent_start with metadata for the CLI tab UI
         tool_names = Enum.map(sub_state.tools, & &1.name())
-        label = truncate(args["prompt"] || "", 80)
+        label = FileIO.truncate(args["prompt"] || "", 80)
 
         forward_event(
           parent_session_id,
@@ -332,19 +328,10 @@ defmodule Opal.Tool.SubAgent do
     """
   end
 
-  defp format_tool_result({:ok, output}) do
-    truncate(output, 500)
-  end
+  defp format_tool_result({:ok, output}), do: FileIO.truncate(output, 500)
 
-  defp format_tool_result({:error, reason}) do
-    "ERROR: #{truncate(to_string(reason), 200)}"
-  end
+  defp format_tool_result({:error, reason}),
+    do: "ERROR: #{FileIO.truncate(to_string(reason), 200)}"
 
   defp format_tool_result(nil), do: "(no result)"
-
-  defp truncate(str, max) when byte_size(str) <= max, do: str
-
-  defp truncate(str, max) do
-    String.slice(str, 0, max) <> "… (truncated)"
-  end
 end

@@ -47,7 +47,7 @@ defmodule Opal.Agent.SubAgentFailureTest do
       long = String.duplicate("x", 100)
       meta = SubAgent.meta(%{"prompt" => long})
       assert String.length(meta) < 80
-      assert meta =~ "..."
+      assert meta =~ "truncated"
     end
 
     test "meta with missing prompt returns fallback" do

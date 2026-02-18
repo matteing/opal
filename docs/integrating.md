@@ -55,7 +55,7 @@ config :opal, start_rpc: false
   system_prompt: "You are a helpful coding assistant.",
   working_dir: "/path/to/project",
   model: {:copilot, "claude-sonnet-4"},
-  tools: [Opal.Tool.Read, Opal.Tool.Write, Opal.Tool.Shell]
+  tools: [Opal.Tool.ReadFile, Opal.Tool.WriteFile, Opal.Tool.Shell]
 })
 ```
 
@@ -226,7 +226,7 @@ Pass custom tools at session start:
 
 ```elixir
 {:ok, agent} = Opal.start_session(%{
-  tools: [Opal.Tool.Read, Opal.Tool.Write, Opal.Tool.Shell, MyApp.Tool.SearchDocs],
+  tools: [Opal.Tool.ReadFile, Opal.Tool.WriteFile, Opal.Tool.Shell, MyApp.Tool.SearchDocs],
   working_dir: "/project"
 })
 ```
@@ -256,7 +256,7 @@ defmodule MyApp.AI.Assistant do
       system_prompt: "You are a coding assistant for #{user_id}'s projects.",
       working_dir: MyApp.Users.workspace_path(user_id),
       model: {:copilot, "claude-sonnet-4"},
-      tools: [Opal.Tool.Read, Opal.Tool.Write, MyApp.Tool.SearchDocs]
+      tools: [Opal.Tool.ReadFile, Opal.Tool.WriteFile, MyApp.Tool.SearchDocs]
     })
 
     info = Opal.get_info(agent)
@@ -334,7 +334,7 @@ defmodule Mix.Tasks.Ask do
   defp start_agent do
     {:ok, agent} = Opal.start_session(%{
       working_dir: File.cwd!(),
-      tools: [Opal.Tool.Read, Opal.Tool.Shell]
+      tools: [Opal.Tool.ReadFile, Opal.Tool.Shell]
     })
     agent
   end

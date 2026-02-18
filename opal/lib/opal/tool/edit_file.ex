@@ -1,30 +1,17 @@
-defmodule Opal.Tool.Edit do
+defmodule Opal.Tool.EditFile do
   @moduledoc """
   Edits a file by referencing lines via their hashline tags.
 
-  Instead of reproducing the old content, the model
-  references lines by their `N:hash` tags from `read_file` output. This
-  eliminates recall failures — the model only needs to remember a short hash,
-  not reproduce whitespace-perfect content.
+  The model references lines by `N:hash` tags from `read_file` output,
+  eliminating recall failures — only a short hash, not whitespace-perfect
+  content.
 
-  ## Operations
-
-  - **replace** (default): Replace lines `start` through `through` (inclusive) with `new_string`.
-  - **insert_after**: Insert `new_string` after the `start` line.
-  - **insert_before**: Insert `new_string` before the `start` line.
-
-  ## Hash Validation
-
-  Before applying any edit, the tool verifies that the referenced line hashes
-  match the current file content. If the file changed since the last `read_file`,
-  the hashes won't match and the edit is rejected.
+  Supports `replace` (default), `insert_after`, and `insert_before`.
   """
 
   @behaviour Opal.Tool
 
-  alias Opal.Tool.Encoding
-  alias Opal.Tool.FileHelper
-  alias Opal.Tool.Hashline
+  alias Opal.{FileIO, Hashline}
 
   @impl true
   def name, do: "edit_file"
@@ -80,13 +67,11 @@ defmodule Opal.Tool.Edit do
     new_string = Map.get(args, "new_string", "")
     operation = Map.get(args, "operation", "replace")
 
-    with {:ok, resolved} <- FileHelper.resolve_path(path, working_dir),
-         {:ok, raw_content} <- FileHelper.read_file(resolved),
+    with {:ok, resolved} <- FileIO.resolve_path(path, working_dir),
+         {:ok, raw_content} <- FileIO.read_file(resolved),
          {:ok, {start_line, start_hash}} <- Hashline.parse_anchor(start_anchor),
          {:ok, {end_line, end_hash}} <- Hashline.parse_anchor(end_anchor) do
-      # Strip encoding artifacts before editing
-      {had_bom, content} = Encoding.strip_bom(raw_content)
-      {had_crlf, content} = Encoding.normalize_line_endings(content)
+      {enc, content} = FileIO.normalize_encoding(raw_content)
       new_string = String.replace(new_string, "\r\n", "\n")
 
       lines = String.split(content, "\n")
@@ -97,10 +82,7 @@ defmodule Opal.Tool.Edit do
         replaced = replaced_content(lines, start_line, end_line, operation)
         new_content = apply_operation(lines, start_line, end_line, new_string, operation)
 
-        restored =
-          new_content
-          |> Encoding.restore_line_endings(had_crlf)
-          |> Encoding.restore_bom(had_bom)
+        restored = FileIO.restore_encoding(new_content, enc)
 
         case File.write(resolved, restored) do
           :ok -> {:ok, format_result(resolved, replaced)}

@@ -83,6 +83,9 @@ defmodule Opal.Tool.TasksTest do
     session_a = "test-session-a-#{System.unique_integer([:positive])}"
     session_b = "test-session-b-#{System.unique_integer([:positive])}"
 
+    :ok = Tasks.clear("session:" <> session_a)
+    :ok = Tasks.clear("session:" <> session_b)
+
     ctx_a = %{working_dir: tmp_dir, session_id: session_a}
 
     assert {:ok, _} = Tasks.execute(%{"action" => "insert", "label" => "Scoped task"}, ctx_a)

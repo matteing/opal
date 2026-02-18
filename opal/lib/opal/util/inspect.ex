@@ -214,7 +214,7 @@ defmodule Opal.Inspect do
   ## Examples
 
       iex> Opal.Inspect.tools()
-      [{"read_file", Opal.Tool.Read}, {"shell", Opal.Tool.Shell}, ...]
+      [{"read_file", Opal.Tool.ReadFile}, {"shell", Opal.Tool.Shell}, ...]
   """
   @spec tools() :: [{String.t(), module()}]
   def tools, do: Enum.map(state().tools, fn mod -> {mod.name(), mod} end)

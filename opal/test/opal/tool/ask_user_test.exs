@@ -13,11 +13,35 @@ defmodule Opal.Tool.AskUserTest do
       assert function_exported?(AskUser, :meta, 1)
     end
 
-    test "delegates spec to Opal.Tool.Ask" do
-      assert AskUser.name() == Opal.Tool.Ask.name()
-      assert AskUser.description() == Opal.Tool.Ask.description()
-      assert AskUser.parameters() == Opal.Tool.Ask.parameters()
-      assert AskUser.meta(%{"question" => "hi"}) == Opal.Tool.Ask.meta(%{"question" => "hi"})
+    test "name/0 returns ask_user" do
+      assert AskUser.name() == "ask_user"
+    end
+
+    test "description/0 returns a non-empty string" do
+      desc = AskUser.description()
+      assert is_binary(desc)
+      assert String.length(desc) > 0
+    end
+
+    test "parameters/0 returns valid JSON Schema" do
+      params = AskUser.parameters()
+      assert params["type"] == "object"
+      assert is_map(params["properties"]["question"])
+      assert is_map(params["properties"]["choices"])
+      assert params["required"] == ["question"]
+    end
+
+    test "meta/1 truncates question to 60 chars" do
+      long_q = String.duplicate("a", 100)
+      assert String.length(AskUser.meta(%{"question" => long_q})) == 60
+    end
+
+    test "meta/1 returns full question when short" do
+      assert AskUser.meta(%{"question" => "hello?"}) == "hello?"
+    end
+
+    test "meta/1 returns fallback for missing question" do
+      assert AskUser.meta(%{}) == "ask_user"
     end
   end
 

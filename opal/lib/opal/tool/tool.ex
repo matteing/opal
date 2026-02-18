@@ -148,7 +148,6 @@ defmodule Opal.Tool do
 
       @opal_tool_name Keyword.get(opts, :name)
       @opal_tool_description Keyword.get(opts, :description)
-      @opal_tool_group Keyword.get(opts, :group)
 
       @before_compile Opal.Tool
 

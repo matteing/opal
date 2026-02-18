@@ -19,16 +19,16 @@ The agent converts tool modules to JSON Schema for the LLM. When the LLM request
 
 | Tool          | Module               | Purpose                                                                |
 | ------------- | -------------------- | ---------------------------------------------------------------------- |
-| `read_file`   | `Opal.Tool.Read`     | Read files with hashline-tagged output                                 |
-| `edit_file`   | `Opal.Tool.Edit`     | Edit by hash-anchored line references                                  |
-| `write_file`  | `Opal.Tool.Write`    | Create or overwrite files                                              |
+| `read_file`   | `Opal.Tool.ReadFile`  | Read files with hashline-tagged output                                 |
+| `edit_file`   | `Opal.Tool.EditFile`  | Edit by hash-anchored line references                                  |
+| `write_file`  | `Opal.Tool.WriteFile` | Create or overwrite files                                              |
 | `grep`        | `Opal.Tool.Grep`     | Cross-platform regex search with hashline-tagged output                |
 | `shell`       | `Opal.Tool.Shell`    | Execute shell commands with streaming output                           |
 | `sub_agent`   | `Opal.Tool.SubAgent` | Spawn parallel child agents                                            |
 | `tasks`       | `Opal.Tool.Tasks`    | DETS-backed task tracker                                               |
 | `use_skill`   | `Opal.Tool.UseSkill` | Load agent skills dynamically                                          |
 | `ask_user`    | `Opal.Tool.AskUser`  | Ask the user a question (top-level agents)                             |
-| `debug_state` | `Opal.Tool.Debug`    | Introspect agent runtime state and recent events (disabled by default) |
+| `debug_state` | `Opal.Tool.DebugState` | Introspect agent runtime state and recent events (disabled by default) |
 
 Each tool has a detailed doc in `docs/tools/`:
 
@@ -49,17 +49,17 @@ External tools from MCP servers are discovered at session start and wrapped as r
 
 ## Encoding Layer
 
-`Opal.Tool.Encoding` handles two invisible artifacts that cause tool failures:
+`Opal.Util.Encoding` handles two invisible artifacts that cause tool failures:
 
 - **UTF-8 BOM** — stripped before matching/output, restored after edits
 - **CRLF line endings** — normalized to LF for processing, restored after edits
 
-This shared module is used by `Read`, `Edit`, and `Write` to prevent encoding corruption.
+This shared module is used by `ReadFile`, `EditFile`, and `WriteFile` to prevent encoding corruption.
 
 ## Source
 
 - `lib/opal/tool.ex` — Behaviour definition
 - `lib/opal/tool/` — All tool implementations
-- `lib/opal/tool/hashline.ex` — Hash computation and line tagging
-- `lib/opal/tool/encoding.ex` — BOM and CRLF handling
-- `lib/opal/tool/file_helper.ex` — Shared path resolution and file I/O helpers
+- `lib/opal/util/hashline.ex` — Hash computation and line tagging
+- `lib/opal/util/encoding.ex` — BOM and CRLF handling
+- `lib/opal/util/file_helper.ex` — Shared path resolution and file I/O helpers

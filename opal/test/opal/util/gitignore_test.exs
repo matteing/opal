@@ -1,8 +1,8 @@
-defmodule Opal.Tool.GitignoreTest do
+defmodule Opal.GitignoreTest do
   use ExUnit.Case, async: true
   @moduletag :tmp_dir
 
-  alias Opal.Tool.Gitignore
+  alias Opal.Gitignore
 
   describe "load/1" do
     test "returns empty struct when .gitignore doesn't exist", %{tmp_dir: tmp_dir} do
@@ -139,12 +139,10 @@ defmodule Opal.Tool.GitignoreTest do
           "/root"
         )
 
-      # Directories should be ignored
       assert Gitignore.ignored?(gitignore, "build", true)
       assert Gitignore.ignored?(gitignore, "src/build", true)
       assert Gitignore.ignored?(gitignore, "tmp", true)
 
-      # Files with same name should not be ignored
       refute Gitignore.ignored?(gitignore, "build", false)
       refute Gitignore.ignored?(gitignore, "src/build", false)
       refute Gitignore.ignored?(gitignore, "tmp", false)
@@ -224,7 +222,6 @@ defmodule Opal.Tool.GitignoreTest do
           "/root"
         )
 
-      # The last *.log rule should override the negation
       assert Gitignore.ignored?(gitignore, "important.log")
     end
 
@@ -305,7 +302,6 @@ defmodule Opal.Tool.GitignoreTest do
       assert Gitignore.ignored?(gitignore, "error.log")
       assert Gitignore.ignored?(gitignore, "test_helper.ex")
       assert Gitignore.ignored?(gitignore, "file_backup")
-      # basename patterns (no /) match at any depth
       assert Gitignore.ignored?(gitignore, "src/test_helper.ex")
     end
 
@@ -460,9 +456,6 @@ defmodule Opal.Tool.GitignoreTest do
       refute Gitignore.ignored?(gitignore, "generated", true)
       refute Gitignore.ignored?(gitignore, "other/src/generated", true)
 
-      # Dir-only patterns don't match files directly — in practice, the
-      # directory walker skips the entire directory so its children are
-      # never visited.
       refute Gitignore.ignored?(gitignore, "src/generated", false)
       refute Gitignore.ignored?(gitignore, "src/generated/code.ex", false)
     end
@@ -515,21 +508,8 @@ defmodule Opal.Tool.GitignoreTest do
     end
 
     test "child rules override parent rules (last wins)" do
-      parent =
-        Gitignore.parse(
-          """
-          *.log
-          """,
-          "/root"
-        )
-
-      child =
-        Gitignore.parse(
-          """
-          !important.log
-          """,
-          "/root/src"
-        )
+      parent = Gitignore.parse("*.log", "/root")
+      child = Gitignore.parse("!important.log", "/root/src")
 
       merged = Gitignore.merge(parent, child)
 
@@ -542,14 +522,12 @@ defmodule Opal.Tool.GitignoreTest do
       child = Gitignore.parse("*.log", "/root/src")
 
       merged = Gitignore.merge(parent, child)
-
       assert Gitignore.ignored?(merged, "error.log")
 
       parent = Gitignore.parse("*.log", "/root")
       child = Gitignore.parse("", "/root/src")
 
       merged = Gitignore.merge(parent, child)
-
       assert Gitignore.ignored?(merged, "error.log")
     end
 
@@ -558,52 +536,27 @@ defmodule Opal.Tool.GitignoreTest do
       child = Gitignore.parse("*.tmp", "/root/src")
 
       merged = Gitignore.merge(parent, child)
-
       assert merged.root == "/root"
     end
   end
 
   describe "edge cases" do
     test "lines starting with # are comments" do
-      gitignore =
-        Gitignore.parse(
-          """
-          # this is a comment
-          *.log
-          """,
-          "/root"
-        )
-
-      # Only *.log should be a rule, not the comment
+      gitignore = Gitignore.parse("# this is a comment\n*.log\n", "/root")
       assert length(gitignore.rules) == 1
       assert Gitignore.ignored?(gitignore, "error.log")
     end
 
     test "handles trailing spaces in patterns" do
-      gitignore =
-        Gitignore.parse(
-          """
-          *.log   
-          file.txt  
-          """,
-          "/root"
-        )
+      gitignore = Gitignore.parse("*.log   \nfile.txt  \n", "/root")
 
-      # Standard gitignore ignores trailing spaces unless escaped
       assert Gitignore.ignored?(gitignore, "error.log")
       assert Gitignore.ignored?(gitignore, "file.txt")
       refute Gitignore.ignored?(gitignore, "file.txt  ")
     end
 
     test "handles patterns with multiple asterisks" do
-      gitignore =
-        Gitignore.parse(
-          """
-          **/**/foo
-          **/bar/**
-          """,
-          "/root"
-        )
+      gitignore = Gitignore.parse("**/**/foo\n**/bar/**\n", "/root")
 
       assert Gitignore.ignored?(gitignore, "foo")
       assert Gitignore.ignored?(gitignore, "nested/foo")
@@ -612,65 +565,30 @@ defmodule Opal.Tool.GitignoreTest do
     end
 
     test "handles empty pattern (just whitespace)" do
-      gitignore =
-        Gitignore.parse(
-          """
-
-             
-          \t
-          *.log
-          """,
-          "/root"
-        )
+      gitignore = Gitignore.parse("\n   \n\t\n*.log\n", "/root")
 
       assert Gitignore.ignored?(gitignore, "error.log")
       refute Gitignore.ignored?(gitignore, "file.txt")
     end
 
     test "handles very long paths" do
-      gitignore =
-        Gitignore.parse(
-          """
-          *.log
-          a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/
-          """,
-          "/root"
-        )
-
+      gitignore = Gitignore.parse("*.log\na/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/\n", "/root")
       long_path = "a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p"
+
       assert Gitignore.ignored?(gitignore, long_path, true)
-      # Dir-only pattern — walker would skip the dir, never checking children
       refute Gitignore.ignored?(gitignore, "#{long_path}/file.txt", false)
     end
 
     test "handles patterns with only special characters" do
-      gitignore =
-        Gitignore.parse(
-          """
-          *
-          ?
-          **
-          """,
-          "/root"
-        )
+      gitignore = Gitignore.parse("*\n?\n**\n", "/root")
 
-      # * should match anything in current directory
-      # ? should match single character files
-      # ** should match everything at any depth
       assert Gitignore.ignored?(gitignore, "file.txt")
       assert Gitignore.ignored?(gitignore, "a")
       assert Gitignore.ignored?(gitignore, "nested/file.txt")
     end
 
     test "handles Unicode filenames" do
-      gitignore =
-        Gitignore.parse(
-          """
-          *.日本語
-          файл.txt
-          """,
-          "/root"
-        )
+      gitignore = Gitignore.parse("*.日本語\nфайл.txt\n", "/root")
 
       assert Gitignore.ignored?(gitignore, "test.日本語")
       assert Gitignore.ignored?(gitignore, "файл.txt")
@@ -678,39 +596,17 @@ defmodule Opal.Tool.GitignoreTest do
     end
 
     test "handles patterns with dots" do
-      gitignore =
-        Gitignore.parse(
-          """
-          .
-          ..
-          .git
-          .env.local
-          """,
-          "/root"
-        )
+      gitignore = Gitignore.parse(".\n..\n.git\n.env.local\n", "/root")
 
-      # . and .. have special meaning, may not be matchable
       assert Gitignore.ignored?(gitignore, ".git")
       assert Gitignore.ignored?(gitignore, ".env.local")
     end
 
     test "handles case sensitivity" do
-      gitignore =
-        Gitignore.parse(
-          """
-          *.LOG
-          BUILD/
-          """,
-          "/root"
-        )
+      gitignore = Gitignore.parse("*.LOG\nBUILD/\n", "/root")
 
-      # Gitignore is typically case-sensitive on Unix, case-insensitive on Windows
-      # Testing exact case match behavior
       assert Gitignore.ignored?(gitignore, "error.LOG")
       assert Gitignore.ignored?(gitignore, "BUILD", true)
-      # These depend on platform/implementation
-      # refute Gitignore.ignored?(gitignore, "error.log")
-      # refute Gitignore.ignored?(gitignore, "build", true)
     end
   end
 
@@ -820,8 +716,6 @@ defmodule Opal.Tool.GitignoreTest do
       refute Gitignore.ignored?(gitignore, ".env.example")
 
       assert Gitignore.ignored?(gitignore, "build", true)
-      # Dir-only pattern: the walker skips the directory entirely,
-      # so checking a file path inside it directly won't match.
       refute Gitignore.ignored?(gitignore, "build/output.js")
 
       assert Gitignore.ignored?(gitignore, "error.log")

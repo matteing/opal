@@ -1,10 +1,10 @@
-defmodule Opal.Tool.WriteTest do
+defmodule Opal.Tool.WriteFileTest do
   use ExUnit.Case, async: true
 
   @moduletag :tmp_dir
 
   alias Opal.Config
-  alias Opal.Tool.Write
+  alias Opal.Tool.WriteFile, as: Write
 
   describe "behaviour" do
     test "implements Opal.Tool behaviour" do

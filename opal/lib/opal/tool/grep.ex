@@ -40,10 +40,7 @@ defmodule Opal.Tool.Grep do
 
   @dialyzer {:no_opaque, [do_walk_dir: 6, walk_dir: 6]}
 
-  alias Opal.Tool.Encoding
-  alias Opal.Tool.FileHelper
-  alias Opal.Tool.Gitignore
-  alias Opal.Tool.Hashline
+  alias Opal.{FileIO, Gitignore, Hashline}
 
   # Directories that almost never contain interesting source code.
   @skip_dirs MapSet.new(~w(
@@ -126,13 +123,18 @@ defmodule Opal.Tool.Grep do
       {:ok, regex} ->
         search_path = Map.get(args, "path", ".")
         include = Map.get(args, "include")
-        ctx_lines = Map.get(args, "context_lines", @max_context_default) |> max(0) |> min(10)
-        max_results = Map.get(args, "max_results", @max_results_default) |> max(1) |> min(500)
+
+        ctx_lines =
+          args |> Map.get("context_lines", @max_context_default) |> Opal.Util.Number.clamp(0, 10)
+
+        max_results =
+          args |> Map.get("max_results", @max_results_default) |> Opal.Util.Number.clamp(1, 500)
+
         no_ignore = Map.get(args, "no_ignore", false)
 
-        allow_bases = FileHelper.allowed_bases(context)
+        allow_bases = FileIO.allowed_bases(context)
 
-        case FileHelper.resolve_path(search_path, working_dir, allow_bases: allow_bases) do
+        case FileIO.resolve_path(search_path, working_dir, allow_bases: allow_bases) do
           {:ok, resolved} ->
             do_search(resolved, regex, include, ctx_lines, max_results, working_dir, no_ignore)
 
@@ -359,8 +361,7 @@ defmodule Opal.Tool.Grep do
     with {:ok, raw} <- File.read(file),
          true <- String.valid?(raw),
          false <- Opal.Platform.binary_content?(raw) do
-      {_bom, content} = Encoding.strip_bom(raw)
-      {_crlf, content} = Encoding.normalize_line_endings(content)
+      {_enc, content} = FileIO.normalize_encoding(raw)
 
       lines = String.split(content, "\n")
       match_indices = find_matching_lines(lines, regex)
@@ -449,7 +450,7 @@ defmodule Opal.Tool.Grep do
   end
 
   defp maybe_truncate(output) when byte_size(output) > @max_output_bytes do
-    truncated = Encoding.truncate_at_line_boundary(output, @max_output_bytes)
+    truncated = FileIO.truncate_at_line(output, @max_output_bytes)
 
     truncated <>
       "\n\n[Output truncated at #{div(@max_output_bytes, 1024)}KB. Narrow pattern or path.]"

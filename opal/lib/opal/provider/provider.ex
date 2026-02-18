@@ -264,9 +264,9 @@ defmodule Opal.Provider do
 
   # ── Shared Helpers ─────────────────────────────────────────────────
 
-  @doc "Strips nil and empty string values from a map."
+  @doc "Strips nil and empty string values from a map. Delegates to `Opal.Util.Map.compact/1`."
   @spec compact_map(map()) :: map()
-  def compact_map(map), do: Map.reject(map, fn {_, v} -> v == nil or v == "" end)
+  defdelegate compact_map(map), to: Opal.Util.Map, as: :compact
 
   @doc "Safely decodes JSON tool arguments. Returns `{:ok, map}` or `{:error, raw}`."
   @spec decode_json_args(term()) :: {:ok, map()} | {:error, String.t()}

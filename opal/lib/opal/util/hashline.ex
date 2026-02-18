@@ -1,6 +1,6 @@
-defmodule Opal.Tool.Hashline do
+defmodule Opal.Hashline do
   @moduledoc """
-  Hashline utilities for content-addressed line references.
+  Content-addressed line references using short hash tags.
 
   Every line is tagged with a short content hash so the LLM can reference
   specific lines without reproducing their full content. The format is:
@@ -11,19 +11,11 @@ defmodule Opal.Tool.Hashline do
   digest of the trimmed line content. The hash acts as a checksum — if the
   file changes, stale hashes won't match and the edit is rejected.
 
-  ## Hash computation
-
   Uses `:erlang.phash2/2` of the trimmed line content, modulo 256, formatted
-  as zero-padded lowercase hex. Empty lines always hash to the same value
-  but are distinguished by line number.
+  as zero-padded lowercase hex.
   """
 
-  @doc """
-  Computes a 2-character hex hash for a single line's content.
-
-      iex> Opal.Tool.Hashline.line_hash("  return 42;")
-      "8a"  # example — actual value depends on phash2
-  """
+  @doc "Computes a 2-character hex hash for a single line's content."
   @spec line_hash(String.t()) :: String.t()
   def line_hash(line) do
     line
@@ -34,12 +26,7 @@ defmodule Opal.Tool.Hashline do
     |> String.pad_leading(2, "0")
   end
 
-  @doc """
-  Tags lines with `N:hash|` prefixes.
-
-  Accepts raw file content and an optional starting line number (default 1).
-  Returns the tagged string.
-  """
+  @doc "Tags all lines with `N:hash|` prefixes starting at `start_line`."
   @spec tag_lines(String.t(), pos_integer()) :: String.t()
   def tag_lines(content, start_line \\ 1) do
     content
@@ -49,25 +36,17 @@ defmodule Opal.Tool.Hashline do
     |> Enum.map_join("\n", fn {line, num} -> tag_line(line, num) end)
   end
 
-  @doc """
-  Tags a single line with its `N:hash|` prefix.
-
-  Useful when callers already have split lines and need to tag them
-  individually (e.g. grep results with context, sliced reads).
-
-      iex> Opal.Tool.Hashline.tag_line("  return 42;", 7)
-      "7:8a|  return 42;"  # hash depends on phash2
-  """
+  @doc "Tags a single line with its `N:hash|` prefix."
   @spec tag_line(String.t(), pos_integer()) :: String.t()
   def tag_line(line, line_num) do
-    hash = line_hash(line)
-    "#{line_num}:#{hash}|#{line}"
+    "#{line_num}:#{line_hash(line)}|#{line}"
   end
 
-  @doc """
+  @doc ~S"""
   Parses a `"N:hash"` anchor string into `{line_number, hash}`.
 
-  Returns `{:ok, {line, hash}}` or `{:error, reason}`.
+      iex> Opal.Hashline.parse_anchor("5:a3")
+      {:ok, {5, "a3"}}
   """
   @spec parse_anchor(String.t()) :: {:ok, {pos_integer(), String.t()}} | {:error, String.t()}
   def parse_anchor(anchor) when is_binary(anchor) do
@@ -83,11 +62,7 @@ defmodule Opal.Tool.Hashline do
     end
   end
 
-  @doc """
-  Validates that line `line_num` in `lines` (0-indexed list) has the expected hash.
-
-  Returns `:ok` or `{:error, reason}`.
-  """
+  @doc "Validates that `line_num` in `lines` (0-indexed list) has the expected hash."
   @spec validate_hash([String.t()], pos_integer(), String.t()) :: :ok | {:error, String.t()}
   def validate_hash(lines, line_num, expected_hash) do
     idx = line_num - 1
@@ -99,12 +74,11 @@ defmodule Opal.Tool.Hashline do
       true ->
         actual = line_hash(Enum.at(lines, idx))
 
-        if actual == expected_hash do
-          :ok
-        else
-          {:error,
-           "Hash mismatch on line #{line_num}: expected #{expected_hash}, got #{actual}. File may have changed since last read."}
-        end
+        if actual == expected_hash,
+          do: :ok,
+          else:
+            {:error,
+             "Hash mismatch on line #{line_num}: expected #{expected_hash}, got #{actual}. File may have changed since last read."}
     end
   end
 end

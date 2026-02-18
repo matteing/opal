@@ -116,7 +116,7 @@ Opal.Agent.set_model(Opal.Inspect.agent(), Opal.Provider.Model.new(:copilot, "gp
 ```elixir
 # List active tools
 Opal.Inspect.tools()
-# => [{"read_file", Opal.Tool.Read}, {"shell", Opal.Tool.Shell}, ...]
+# => [{"read_file", Opal.Tool.ReadFile}, {"shell", Opal.Tool.Shell}, ...]
 
 # Check disabled tools
 Opal.Inspect.state().disabled_tools

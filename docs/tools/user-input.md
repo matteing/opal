@@ -8,21 +8,21 @@ Only top-level agents have access to this tool. Sub-agents cannot ask questions 
 
 ```
 lib/opal/tool/
-├── ask.ex          # Shared spec (name, description, parameters, meta) + RPC helper
-└── ask_user.ex     # Top-level agent tool — delegates to Ask, calls RPC directly
+└── ask_user.ex     # Self-contained tool: spec, RPC call, execution
 ```
 
-- **`Opal.Tool.Ask`** (`lib/opal/tool/ask.ex`) — Not a tool itself. Holds the shared `name/0`, `description/0`, `parameters/0`, `meta/1`, and `ask_via_rpc/2` so the tool stays DRY.
-- **`Opal.Tool.AskUser`** (`lib/opal/tool/ask_user.ex`) — Registered in the default tool list for top-level agents. Delegates its spec callbacks to `Ask` and calls `Ask.ask_via_rpc/2` in `execute/2`.
+**`Opal.Tool.AskUser`** (`lib/opal/tool/ask_user.ex`) — A single module implementing the full `Opal.Tool` behaviour. Defines the tool name, description, parameters, and execution logic. Sends a `client/ask_user` RPC request and blocks until the user responds.
 
 ## Interface
 
 ### Tool Schema
 
-The schema lives in `Opal.Tool.Ask`:
+The schema is defined directly in `Opal.Tool.AskUser`:
 
 ```elixir
-defmodule Opal.Tool.Ask do
+defmodule Opal.Tool.AskUser do
+  @behaviour Opal.Tool
+
   def name, do: "ask_user"
 
   def description do
@@ -51,7 +51,7 @@ defmodule Opal.Tool.Ask do
   def meta(%{"question" => q}), do: String.slice(q, 0, 60)
   def meta(_), do: "ask_user"
 
-  def ask_via_rpc(args, context) do
+  def execute(%{"question" => _} = args, context) do
     params = %{
       session_id: context.session_id,
       question: args["question"],
@@ -64,22 +64,8 @@ defmodule Opal.Tool.Ask do
       {:error, reason} -> {:error, "User input request failed: #{inspect(reason)}"}
     end
   end
-end
-```
 
-`AskUser` delegates everything:
-
-```elixir
-defmodule Opal.Tool.AskUser do
-  @behaviour Opal.Tool
-
-  defdelegate name, to: Opal.Tool.Ask
-  defdelegate description, to: Opal.Tool.Ask
-  defdelegate parameters, to: Opal.Tool.Ask
-  defdelegate meta(args), to: Opal.Tool.Ask
-
-  def execute(%{"question" => _} = args, context),
-    do: Opal.Tool.Ask.ask_via_rpc(args, context)
+  def execute(_args, _context), do: {:error, "Missing required parameter: question"}
 end
 ```
 
@@ -119,21 +105,18 @@ Server→client request method in `Opal.RPC.Protocol` (`lib/opal/rpc/protocol.ex
 sequenceDiagram
     participant Agent as Agent Loop
     participant Tool as AskUser Tool
-    participant Ask as Ask (shared)
     participant RPC as RPC/Stdio
     participant CLI as CLI (Ink)
     participant User
 
     Agent->>Tool: execute(%{"question" => ...}, ctx)
-    Tool->>Ask: ask_via_rpc(args, ctx)
-    Note over Ask: Task blocks
-    Ask->>RPC: request_client("client/ask_user", params, :infinity)
+    Note over Tool: Task blocks
+    Tool->>RPC: request_client("client/ask_user", params, :infinity)
     RPC->>CLI: JSON-RPC request {question, choices}
     CLI->>CLI: Render AskUserDialog
     User->>CLI: Selects choice or types answer
     CLI->>RPC: JSON-RPC response {answer: "..."}
-    RPC->>Ask: {:ok, %{"answer" => "..."}}
-    Ask->>Tool: {:ok, answer}
+    RPC->>Tool: {:ok, %{"answer" => "..."}}
     Tool->>Agent: {:ok, answer}
 ```
 
@@ -157,7 +140,7 @@ tools = Enum.reject(parent_tools, &(&1 == Opal.Tool.AskUser))
 
 ## Edge Cases
 
-- **Timeout**: `ask_via_rpc` passes `timeout: :infinity` since user input has no upper bound.
+- **Timeout**: `execute/2` passes `timeout: :infinity` since user input has no upper bound.
 - **Abort during input**: If the user presses Ctrl+C while `ask_user` is pending, the agent shuts down and the pending `request_client` call fails.
 - **Sub-agents**: `AskUser` is excluded from sub-agent tool lists. Sub-agents cannot ask the user questions.
 - **SDK (non-interactive)**: SDK users who don't set `onAskUser` get an error (same as `onInput` today).

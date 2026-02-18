@@ -83,7 +83,7 @@ defmodule Opal.Agent.ToolRunner do
     gates = [
       {not config.features.sub_agents.enabled, &(&1 == Opal.Tool.SubAgent)},
       {not config.features.mcp.enabled, &mcp_module?/1},
-      {not config.features.debug.enabled, &(&1 == Opal.Tool.Debug)},
+      {not config.features.debug.enabled, &(&1 == Opal.Tool.DebugState)},
       {not (config.features.skills.enabled and skills != []), &(&1 == Opal.Tool.UseSkill)}
     ]
 
@@ -217,11 +217,5 @@ defmodule Opal.Agent.ToolRunner do
 
   @spec to_text(term()) :: String.t()
   defp to_text(output) when is_binary(output), do: output
-
-  defp to_text(output) do
-    case Jason.encode(output) do
-      {:ok, json} -> json
-      {:error, _} -> inspect(output)
-    end
-  end
+  defp to_text(output), do: Opal.Util.Json.encode_or_inspect(output)
 end

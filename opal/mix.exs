@@ -97,9 +97,9 @@ defmodule Opal.MixProject do
         ],
         Tools: [
           Opal.Tool,
-          Opal.Tool.Read,
-          Opal.Tool.Write,
-          Opal.Tool.Edit,
+          Opal.Tool.ReadFile,
+          Opal.Tool.WriteFile,
+          Opal.Tool.EditFile,
           Opal.Tool.Shell,
           Opal.Tool.SubAgent,
           Opal.Skill
