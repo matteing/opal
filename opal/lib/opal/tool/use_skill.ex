@@ -9,6 +9,12 @@ defmodule Opal.Tool.UseSkill do
 
   @behaviour Opal.Tool
 
+  alias Opal.Tool.Args, as: ToolArgs
+
+  @args_schema [
+    skill_name: [type: :string, required: true]
+  ]
+
   @impl true
   def name, do: "use_skill"
 
@@ -40,8 +46,13 @@ defmodule Opal.Tool.UseSkill do
   end
 
   @impl true
-  def execute(%{"skill_name" => skill_name}, _context) do
-    {:effect, {:load_skill, skill_name}}
+  def execute(args, _context) when is_map(args) do
+    with {:ok, opts} <-
+           ToolArgs.validate(args, @args_schema,
+             required_message: "Missing required parameter: skill_name"
+           ) do
+      {:effect, {:load_skill, opts[:skill_name]}}
+    end
   end
 
   def execute(_, _), do: {:error, "Missing required parameter: skill_name"}

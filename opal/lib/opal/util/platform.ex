@@ -65,34 +65,28 @@ defmodule Opal.Platform do
   @doc """
   Compiles a filename glob pattern into a `Regex`.
 
-  Handles `*` wildcards and `{a,b}` brace expansion. On platforms with
-  case-insensitive filesystems, the regex is compiled with `:caseless`.
+  Uses `GlobEx` to compile patterns with standard glob semantics.
+  On case-insensitive filesystems, patterns are normalized to lowercase.
 
   Returns `nil` for `nil` input (matches everything).
 
   ## Examples
 
-      iex> Opal.Platform.compile_glob("*.ex")
-      ~r/^.*\\.ex$/
+      iex> match = Opal.Platform.compile_glob("*.ex")
+      iex> Opal.Platform.matches_glob?("file.ex", match)
+      true
 
-      iex> Opal.Platform.compile_glob("*.{ex,exs}")
-      ~r/^.*\\.(ex|exs)$/
+      iex> match = Opal.Platform.compile_glob("*.{ex,exs}")
+      iex> Opal.Platform.matches_glob?("file.exs", match)
+      true
   """
-  @spec compile_glob(String.t() | nil) :: Regex.t() | nil
+  @spec compile_glob(String.t() | nil) :: GlobEx.t() | nil
   def compile_glob(nil), do: nil
 
   def compile_glob(pattern) when is_binary(pattern) do
-    regex_str =
-      pattern
-      |> String.replace(".", "\\.")
-      |> String.replace("*", ".*")
-      |> String.replace("{", "(")
-      |> String.replace("}", ")")
-      |> String.replace(",", "|")
-      |> then(&("^" <> &1 <> "$"))
-
-    opts = if case_insensitive_fs?(), do: [:caseless], else: []
-    Regex.compile!(regex_str, opts)
+    pattern
+    |> normalize_case()
+    |> GlobEx.compile!(match_dot: true)
   end
 
   @doc """
@@ -100,7 +94,16 @@ defmodule Opal.Platform do
 
   Returns `true` for a `nil` glob (matches everything).
   """
-  @spec matches_glob?(String.t(), Regex.t() | nil) :: boolean()
+  @spec matches_glob?(String.t(), GlobEx.t() | nil) :: boolean()
   def matches_glob?(_name, nil), do: true
-  def matches_glob?(name, regex), do: Regex.match?(regex, name)
+
+  def matches_glob?(name, %GlobEx{} = glob) do
+    name
+    |> normalize_case()
+    |> then(&GlobEx.match?(glob, &1))
+  end
+
+  defp normalize_case(str) when is_binary(str) do
+    if case_insensitive_fs?(), do: String.downcase(str), else: str
+  end
 end

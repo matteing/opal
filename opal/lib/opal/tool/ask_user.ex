@@ -11,6 +11,13 @@ defmodule Opal.Tool.AskUser do
 
   @behaviour Opal.Tool
 
+  alias Opal.Tool.Args, as: ToolArgs
+
+  @args_schema [
+    question: [type: :string, required: true],
+    choices: [type: {:list, :string}, default: []]
+  ]
+
   @impl true
   @spec name() :: String.t()
   def name, do: "ask_user"
@@ -48,17 +55,22 @@ defmodule Opal.Tool.AskUser do
 
   @impl true
   @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
-  def execute(%{"question" => _} = args, context) do
-    params = %{
-      session_id: context.session_id,
-      question: args["question"],
-      choices: Map.get(args, "choices", [])
-    }
+  def execute(args, context) when is_map(args) do
+    with {:ok, opts} <-
+           ToolArgs.validate(args, @args_schema,
+             required_message: "Missing required parameter: question"
+           ) do
+      params = %{
+        session_id: context.session_id,
+        question: opts[:question],
+        choices: opts[:choices]
+      }
 
-    case Opal.RPC.Server.request_client("client/ask_user", params, :infinity) do
-      {:ok, %{"answer" => answer}} -> {:ok, answer}
-      {:ok, result} -> {:ok, inspect(result)}
-      {:error, reason} -> {:error, "User input request failed: #{inspect(reason)}"}
+      case Opal.RPC.Server.request_client("client/ask_user", params, :infinity) do
+        {:ok, %{"answer" => answer}} -> {:ok, answer}
+        {:ok, result} -> {:ok, inspect(result)}
+        {:error, reason} -> {:error, "User input request failed: #{inspect(reason)}"}
+      end
     end
   end
 

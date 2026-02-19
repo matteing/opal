@@ -150,6 +150,8 @@ defmodule Opal.MixProject do
       {:req, "~> 0.5"},
       {:llm_db, "~> 2026.1"},
       {:jason, "~> 1.4"},
+      {:nimble_options, "~> 1.1"},
+      {:glob_ex, "~> 0.1"},
       {:yaml_elixir, "~> 2.11"},
       {:anubis_mcp, "~> 0.17"},
       {:ex_doc, "~> 0.35", only: :dev, runtime: false},

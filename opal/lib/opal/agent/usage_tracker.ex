@@ -69,19 +69,12 @@ defmodule Opal.Agent.UsageTracker do
     %{state | status: :idle}
   end
 
-  def handle_overflow(%State{} = state, reason) do
+  def handle_overflow(%State{} = state, _reason) do
     keep = div(context_window(state), 5)
     Logger.info("Context overflow — compacting to #{keep} tokens")
 
-    case do_compact(state, keep: keep, force: true) do
-      {:ok, state} ->
-        {:next_turn, %{state | overflow_detected: false}}
-
-      {:error, err} ->
-        Logger.error("Overflow compaction failed: #{inspect(err)}")
-        Emitter.broadcast(state, {:error, {:overflow_compact_failed, reason, err}})
-        %{state | status: :idle}
-    end
+    {:ok, compacted} = do_compact(state, keep: keep, force: true)
+    {:next_turn, %{compacted | overflow_detected: false}}
   end
 
   @doc """
@@ -132,39 +125,28 @@ defmodule Opal.Agent.UsageTracker do
   defp compact(state, opts) do
     Emitter.broadcast(state, {:compaction_start, length(state.messages)})
 
-    case do_compact(state, opts) do
-      {:ok, state} ->
-        state
-
-      {:error, reason} ->
-        Logger.warning("Auto-compaction failed: #{inspect(reason)}")
-        state
-    end
+    {:ok, compacted} = do_compact(state, opts)
+    compacted
   end
 
-  @spec do_compact(State.t(), keyword()) :: {:ok, State.t()} | {:error, term()}
+  @spec do_compact(State.t(), keyword()) :: {:ok, State.t()}
   defp do_compact(%State{session: session} = state, opts) do
     compact_opts =
       [provider: state.provider, model: state.model] ++
         Keyword.take(opts, [:keep_recent_tokens, :force]) ++
         if(tokens = opts[:keep], do: [keep_recent_tokens: tokens], else: [])
 
-    case Compaction.compact(session, compact_opts) do
-      :ok ->
-        new_path = Opal.Session.get_path(session)
-        Emitter.broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
+    :ok = Compaction.compact(session, compact_opts)
+    new_path = Opal.Session.get_path(session)
+    Emitter.broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
 
-        {:ok,
-         %{
-           state
-           | messages: Enum.reverse(new_path),
-             last_prompt_tokens: 0,
-             last_usage_msg_index: 0
-         }}
-
-      {:error, _} = err ->
-        err
-    end
+    {:ok,
+     %{
+       state
+       | messages: Enum.reverse(new_path),
+         last_prompt_tokens: 0,
+         last_usage_msg_index: 0
+     }}
   end
 
   # Extracts a numeric value by trying string keys then atom keys in order.

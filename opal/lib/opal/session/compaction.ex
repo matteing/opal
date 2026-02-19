@@ -114,7 +114,7 @@ defmodule Opal.Session.Compaction do
     * `:keep_recent_tokens` — tokens to keep uncompacted (default: #{@keep_recent_tokens})
     * `:instructions` — optional focus instructions for the summary
   """
-  @spec compact(GenServer.server(), keyword()) :: :ok | {:error, term()}
+  @spec compact(GenServer.server(), keyword()) :: :ok
   def compact(session, opts \\ []) do
     {provider, model} = resolve_provider(opts)
     has_provider = provider != nil

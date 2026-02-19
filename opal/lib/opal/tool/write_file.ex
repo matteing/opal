@@ -9,6 +9,12 @@ defmodule Opal.Tool.WriteFile do
   @behaviour Opal.Tool
 
   alias Opal.FileIO
+  alias Opal.Tool.Args, as: ToolArgs
+
+  @args_schema [
+    path: [type: :string, required: true],
+    content: [type: :string, required: true]
+  ]
 
   @impl true
   @spec name() :: String.t()
@@ -38,12 +44,17 @@ defmodule Opal.Tool.WriteFile do
 
   @impl true
   @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
-  def execute(%{"path" => path, "content" => content}, %{working_dir: working_dir} = context) do
-    allow_bases = FileIO.allowed_bases(context)
-
-    with {:ok, resolved} <- FileIO.resolve_path(path, working_dir, allow_bases: allow_bases) do
+  def execute(args, %{working_dir: working_dir} = context) when is_map(args) do
+    with {:ok, opts} <-
+           ToolArgs.validate(args, @args_schema,
+             required_message: "Missing required parameters: path and content"
+           ),
+         {:ok, resolved} <-
+           FileIO.resolve_path(opts[:path], working_dir,
+             allow_bases: FileIO.allowed_bases(context)
+           ) do
       resolved |> Path.dirname() |> File.mkdir_p!()
-      content = match_existing_encoding(resolved, content)
+      content = match_existing_encoding(resolved, opts[:content])
 
       case File.write(resolved, content) do
         :ok -> {:ok, "File written: #{resolved}"}

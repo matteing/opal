@@ -9,9 +9,16 @@ defmodule Opal.Tool.ReadFile do
   @behaviour Opal.Tool
 
   alias Opal.{FileIO, Hashline}
+  alias Opal.Tool.Args, as: ToolArgs
 
   @max_lines 2_000
   @max_bytes 50 * 1024
+
+  @args_schema [
+    path: [type: :string, required: true],
+    offset: [type: :integer],
+    limit: [type: :integer]
+  ]
 
   @impl true
   @spec name() :: String.t()
@@ -47,19 +54,21 @@ defmodule Opal.Tool.ReadFile do
 
   @impl true
   @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
-  def execute(%{"path" => path} = args, %{working_dir: working_dir} = context) do
-    allow_bases = FileIO.allowed_bases(context)
-
-    with {:ok, resolved} <- FileIO.resolve_path(path, working_dir, allow_bases: allow_bases),
+  def execute(args, %{working_dir: working_dir} = context) when is_map(args) do
+    with {:ok, opts} <-
+           ToolArgs.validate(args, @args_schema,
+             required_message: "Missing required parameter: path"
+           ),
+         {:ok, resolved} <-
+           FileIO.resolve_path(opts[:path], working_dir,
+             allow_bases: FileIO.allowed_bases(context)
+           ),
          {:ok, raw} <- FileIO.read_file(resolved) do
       {_enc, content} = FileIO.normalize_encoding(raw)
+      offset = Keyword.get(opts, :offset)
+      limit = Keyword.get(opts, :limit)
 
-      offset = Map.get(args, "offset")
-      limit = Map.get(args, "limit")
-
-      content
-      |> maybe_slice(offset, limit)
-      |> truncate_output(offset)
+      content |> maybe_slice(offset, limit) |> truncate_output(offset)
     end
   end
 

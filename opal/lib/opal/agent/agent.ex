@@ -389,8 +389,6 @@ defmodule Opal.Agent do
       |> State.append_message(assistant)
       |> Map.merge(%{
         streaming_resp: nil,
-        streaming_ref: nil,
-        streaming_cancel: nil,
         status: :running,
         retry_count: 0
       })

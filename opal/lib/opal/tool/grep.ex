@@ -41,6 +41,7 @@ defmodule Opal.Tool.Grep do
   @dialyzer {:no_opaque, [do_walk_dir: 6, walk_dir: 6]}
 
   alias Opal.{FileIO, Gitignore, Hashline}
+  alias Opal.Tool.Args, as: ToolArgs
 
   # Directories that almost never contain interesting source code.
   @skip_dirs MapSet.new(~w(
@@ -61,6 +62,15 @@ defmodule Opal.Tool.Grep do
   # Parallelism: only fan out when there are enough files to justify it.
   @parallel_threshold 4
   @max_concurrency System.schedulers_online()
+
+  @args_schema [
+    pattern: [type: :string, required: true],
+    path: [type: :string, default: "."],
+    include: [type: :string],
+    context_lines: [type: :integer, default: @max_context_default],
+    max_results: [type: :integer, default: @max_results_default],
+    no_ignore: [type: :boolean, default: false]
+  ]
 
   @impl true
   @spec name() :: String.t()
@@ -118,37 +128,44 @@ defmodule Opal.Tool.Grep do
 
   @impl true
   @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
-  def execute(%{"pattern" => pattern} = args, %{working_dir: working_dir} = context) do
-    case Regex.compile(pattern) do
-      {:ok, regex} ->
-        search_path = Map.get(args, "path", ".")
-        include = Map.get(args, "include")
+  def execute(args, %{working_dir: working_dir} = context) when is_map(args) do
+    with {:ok, opts} <-
+           ToolArgs.validate(args, @args_schema,
+             required_message: "Missing required parameter: pattern"
+           ),
+         {:ok, regex} <- compile_regex(opts[:pattern]) do
+      ctx_lines = opts[:context_lines] |> Opal.Util.Number.clamp(0, 10)
+      max_results = opts[:max_results] |> Opal.Util.Number.clamp(1, 500)
 
-        ctx_lines =
-          args |> Map.get("context_lines", @max_context_default) |> Opal.Util.Number.clamp(0, 10)
+      case FileIO.resolve_path(opts[:path], working_dir,
+             allow_bases: FileIO.allowed_bases(context)
+           ) do
+        {:ok, resolved} ->
+          do_search(
+            resolved,
+            regex,
+            Keyword.get(opts, :include),
+            ctx_lines,
+            max_results,
+            working_dir,
+            opts[:no_ignore]
+          )
 
-        max_results =
-          args |> Map.get("max_results", @max_results_default) |> Opal.Util.Number.clamp(1, 500)
-
-        no_ignore = Map.get(args, "no_ignore", false)
-
-        allow_bases = FileIO.allowed_bases(context)
-
-        case FileIO.resolve_path(search_path, working_dir, allow_bases: allow_bases) do
-          {:ok, resolved} ->
-            do_search(resolved, regex, include, ctx_lines, max_results, working_dir, no_ignore)
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      {:error, {reason, _pos}} ->
-        {:error, "Invalid regex pattern: #{reason}"}
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 
   def execute(%{"pattern" => _}, _context), do: {:error, "Missing working_dir in context"}
   def execute(_args, _context), do: {:error, "Missing required parameter: pattern"}
+
+  defp compile_regex(pattern) do
+    case Regex.compile(pattern) do
+      {:ok, regex} -> {:ok, regex}
+      {:error, {reason, _pos}} -> {:error, "Invalid regex pattern: #{reason}"}
+    end
+  end
 
   # -- Search implementation --------------------------------------------------
 

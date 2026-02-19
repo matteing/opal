@@ -4,16 +4,16 @@ pre-commit:
     format-elixir:
       root: "opal/"
       glob: "**/*.{ex,exs}"
-      run: mix format {staged_files}
+      run: mise exec -- mix format {staged_files}
       stage_fixed: true
 
     dialyzer:
       root: "opal/"
       glob: "**/*.{ex,exs}"
-      run: mix dialyzer
+      run: mise exec -- mix dialyzer
 
     format-cli:
       root: "cli/"
       glob: "src/**/*.{ts,tsx}"
-      run: npx prettier --write {staged_files} && npx eslint --fix {staged_files}
+      run: mise exec -- npx prettier --write {staged_files} && mise exec -- npx eslint --fix {staged_files}
       stage_fixed: true

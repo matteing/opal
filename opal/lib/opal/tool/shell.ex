@@ -9,11 +9,18 @@ defmodule Opal.Tool.Shell do
 
   @behaviour Opal.Tool
 
+  alias Opal.Tool.Args, as: ToolArgs
+
   @default_timeout 30_000
   @max_lines 2_000
   @max_bytes 50 * 1024
 
   @type shell :: :sh | :bash | :zsh | :cmd | :powershell
+
+  @args_schema [
+    command: [type: :string, required: true],
+    timeout: [type: :integer, default: @default_timeout]
+  ]
 
   @shell_meta %{
     sh: %{
@@ -114,20 +121,27 @@ defmodule Opal.Tool.Shell do
 
   @impl true
   @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
-  def execute(%{"command" => command} = args, %{working_dir: working_dir} = context) do
-    timeout = Map.get(args, "timeout", @default_timeout)
+  def execute(args, %{working_dir: working_dir} = context) when is_map(args) do
+    with {:ok, opts} <-
+           ToolArgs.validate(args, @args_schema,
+             required_message: "Missing required parameter: command"
+           ) do
+      shell_type =
+        case context do
+          %{config: %{shell: shell}} when shell != nil -> shell
+          _ -> default_shell()
+        end
 
-    shell_type =
-      case context do
-        %{config: %{shell: shell}} when shell != nil -> shell
-        _ -> default_shell()
-      end
+      {executable, shell_args} = shell_cmd(shell_type, opts[:command])
 
-    {executable, shell_args} = shell_cmd(shell_type, command)
-
-    opts = [stderr_to_stdout: true, cd: working_dir]
-    emit = Map.get(context, :emit)
-    run_command(executable, shell_args, opts, timeout, emit)
+      run_command(
+        executable,
+        shell_args,
+        [stderr_to_stdout: true, cd: working_dir],
+        opts[:timeout],
+        Map.get(context, :emit)
+      )
+    end
   end
 
   def execute(%{"command" => _}, _context), do: {:error, "Missing working_dir in context"}
