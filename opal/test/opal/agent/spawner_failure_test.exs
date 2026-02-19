@@ -1,4 +1,4 @@
-defmodule Opal.Agent.SubAgentFailureTest do
+defmodule Opal.Agent.SpawnerFailureTest do
   @moduledoc """
   Tests sub-agent lifecycle failures: spawn failure, process crash,
   disabled feature, missing context.

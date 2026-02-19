@@ -1,4 +1,4 @@
-defmodule Opal.SubAgent do
+defmodule Opal.Agent.Spawner do
   @moduledoc """
   Spawns and manages child agents that run in parallel.
 
@@ -8,12 +8,12 @@ defmodule Opal.SubAgent do
 
   ## Example
 
-      {:ok, sub} = Opal.SubAgent.spawn(parent_pid, %{
+      {:ok, sub} = Opal.Agent.Spawner.spawn(parent_pid, %{
         system_prompt: "You are a test-writing specialist.",
         model: {:copilot, "claude-haiku-3-5"}
       })
 
-      {:ok, response} = Opal.SubAgent.run(sub, "Write tests for lib/opal/agent.ex")
+      {:ok, response} = Opal.Agent.Spawner.run(sub, "Write tests for lib/opal/agent.ex")
   """
 
   require Logger

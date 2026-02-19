@@ -3,7 +3,7 @@ defmodule Opal.SubAgentTest do
 
   alias Opal.Agent
   alias Opal.Provider.Model
-  alias Opal.SubAgent
+  alias Opal.Agent.Spawner
 
   # Reuse the TestProvider from AgentTest
   defmodule TestProvider do
@@ -126,14 +126,14 @@ defmodule Opal.SubAgentTest do
     test "spawns a sub-agent from a parent agent" do
       %{pid: parent} = start_parent()
 
-      {:ok, sub} = SubAgent.spawn(parent)
+      {:ok, sub} = Spawner.spawn(parent)
       assert Process.alive?(sub)
     end
 
     test "sub-agent inherits parent's config by default" do
       %{pid: parent} = start_parent(system_prompt: "Inherited prompt")
 
-      {:ok, sub} = SubAgent.spawn(parent)
+      {:ok, sub} = Spawner.spawn(parent)
       sub_state = Agent.get_state(sub)
 
       assert sub_state.system_prompt == "Inherited prompt"
@@ -145,7 +145,7 @@ defmodule Opal.SubAgentTest do
     test "sub-agent overrides system_prompt" do
       %{pid: parent} = start_parent()
 
-      {:ok, sub} = SubAgent.spawn(parent, %{system_prompt: "Custom sub prompt"})
+      {:ok, sub} = Spawner.spawn(parent, %{system_prompt: "Custom sub prompt"})
       sub_state = Agent.get_state(sub)
 
       assert sub_state.system_prompt == "Custom sub prompt"
@@ -154,7 +154,7 @@ defmodule Opal.SubAgentTest do
     test "sub-agent overrides model" do
       %{pid: parent} = start_parent()
 
-      {:ok, sub} = SubAgent.spawn(parent, %{model: {:test, "different-model"}})
+      {:ok, sub} = Spawner.spawn(parent, %{model: {:test, "different-model"}})
       sub_state = Agent.get_state(sub)
 
       assert sub_state.model.id == "different-model"
@@ -163,7 +163,7 @@ defmodule Opal.SubAgentTest do
     test "model override inherits parent provider" do
       %{pid: parent} = start_parent()
 
-      {:ok, sub} = SubAgent.spawn(parent, %{model: {:copilot, "gpt-5"}})
+      {:ok, sub} = Spawner.spawn(parent, %{model: {:copilot, "gpt-5"}})
       sub_state = Agent.get_state(sub)
 
       assert sub_state.provider == TestProvider
@@ -173,7 +173,7 @@ defmodule Opal.SubAgentTest do
       %{pid: parent} = start_parent()
 
       {:ok, sub} =
-        SubAgent.spawn(parent, %{model: {:copilot, "gpt-5"}, provider: TestProvider})
+        Spawner.spawn(parent, %{model: {:copilot, "gpt-5"}, provider: TestProvider})
 
       sub_state = Agent.get_state(sub)
       assert sub_state.provider == TestProvider
@@ -182,7 +182,7 @@ defmodule Opal.SubAgentTest do
     test "sub-agent overrides working_dir" do
       %{pid: parent} = start_parent()
 
-      {:ok, sub} = SubAgent.spawn(parent, %{working_dir: "/tmp/sub"})
+      {:ok, sub} = Spawner.spawn(parent, %{working_dir: "/tmp/sub"})
       sub_state = Agent.get_state(sub)
 
       assert sub_state.working_dir == "/tmp/sub"
@@ -191,7 +191,7 @@ defmodule Opal.SubAgentTest do
     test "sub-agent has unique session_id starting with sub-" do
       %{pid: parent} = start_parent()
 
-      {:ok, sub} = SubAgent.spawn(parent)
+      {:ok, sub} = Spawner.spawn(parent)
       sub_state = Agent.get_state(sub)
 
       assert String.starts_with?(sub_state.session_id, "sub-")
@@ -200,9 +200,9 @@ defmodule Opal.SubAgentTest do
     test "multiple sub-agents can be spawned from same parent" do
       %{pid: parent} = start_parent()
 
-      {:ok, sub1} = SubAgent.spawn(parent)
-      {:ok, sub2} = SubAgent.spawn(parent)
-      {:ok, sub3} = SubAgent.spawn(parent)
+      {:ok, sub1} = Spawner.spawn(parent)
+      {:ok, sub2} = Spawner.spawn(parent)
+      {:ok, sub3} = Spawner.spawn(parent)
 
       assert Process.alive?(sub1)
       assert Process.alive?(sub2)
@@ -220,7 +220,7 @@ defmodule Opal.SubAgentTest do
       config = Opal.Config.new(%{features: %{sub_agents: false}})
       %{pid: parent} = start_parent(config: config)
 
-      assert {:error, :sub_agents_disabled} = SubAgent.spawn(parent)
+      assert {:error, :sub_agents_disabled} = Spawner.spawn(parent)
     end
   end
 
@@ -232,8 +232,8 @@ defmodule Opal.SubAgentTest do
     test "sends prompt and collects response synchronously" do
       %{pid: parent} = start_parent()
 
-      {:ok, sub} = SubAgent.spawn(parent)
-      {:ok, response} = SubAgent.run(sub, "Do something")
+      {:ok, sub} = Spawner.spawn(parent)
+      {:ok, response} = Spawner.run(sub, "Do something")
 
       assert response == "Sub-agent response!"
     end
@@ -241,8 +241,8 @@ defmodule Opal.SubAgentTest do
     test "sub-agent is idle after run completes" do
       %{pid: parent} = start_parent()
 
-      {:ok, sub} = SubAgent.spawn(parent)
-      {:ok, _response} = SubAgent.run(sub, "Do something")
+      {:ok, sub} = Spawner.spawn(parent)
+      {:ok, _response} = Spawner.run(sub, "Do something")
 
       state = Agent.get_state(sub)
       assert state.status == :idle
@@ -251,15 +251,15 @@ defmodule Opal.SubAgentTest do
     test "multiple sub-agents can run in parallel" do
       %{pid: parent} = start_parent()
 
-      {:ok, sub1} = SubAgent.spawn(parent)
-      {:ok, sub2} = SubAgent.spawn(parent)
-      {:ok, sub3} = SubAgent.spawn(parent)
+      {:ok, sub1} = Spawner.spawn(parent)
+      {:ok, sub2} = Spawner.spawn(parent)
+      {:ok, sub3} = Spawner.spawn(parent)
 
       # Run all three in parallel using Task
       tasks = [
-        Task.async(fn -> SubAgent.run(sub1, "Task 1") end),
-        Task.async(fn -> SubAgent.run(sub2, "Task 2") end),
-        Task.async(fn -> SubAgent.run(sub3, "Task 3") end)
+        Task.async(fn -> Spawner.run(sub1, "Task 1") end),
+        Task.async(fn -> Spawner.run(sub2, "Task 2") end),
+        Task.async(fn -> Spawner.run(sub3, "Task 3") end)
       ]
 
       results = Task.await_many(tasks, 5000)
@@ -281,18 +281,18 @@ defmodule Opal.SubAgentTest do
     test "stops a sub-agent" do
       %{pid: parent} = start_parent()
 
-      {:ok, sub} = SubAgent.spawn(parent)
+      {:ok, sub} = Spawner.spawn(parent)
       assert Process.alive?(sub)
 
-      :ok = SubAgent.stop(sub)
+      :ok = Spawner.stop(sub)
       refute Process.alive?(sub)
     end
 
     test "stopping a sub-agent does not affect parent" do
       %{pid: parent} = start_parent()
 
-      {:ok, sub} = SubAgent.spawn(parent)
-      :ok = SubAgent.stop(sub)
+      {:ok, sub} = Spawner.spawn(parent)
+      :ok = Spawner.stop(sub)
 
       assert Process.alive?(parent)
     end
@@ -300,10 +300,10 @@ defmodule Opal.SubAgentTest do
     test "stopping a sub-agent does not affect siblings" do
       %{pid: parent} = start_parent()
 
-      {:ok, sub1} = SubAgent.spawn(parent)
-      {:ok, sub2} = SubAgent.spawn(parent)
+      {:ok, sub1} = Spawner.spawn(parent)
+      {:ok, sub2} = Spawner.spawn(parent)
 
-      :ok = SubAgent.stop(sub1)
+      :ok = Spawner.stop(sub1)
 
       refute Process.alive?(sub1)
       assert Process.alive?(sub2)

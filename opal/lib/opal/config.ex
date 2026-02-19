@@ -7,7 +7,7 @@ defmodule Opal.Config.Features do
 
   ## Subsystems
 
-    * `:sub_agents` — child agent spawning via `Opal.SubAgent`
+    * `:sub_agents` — child agent spawning via `Opal.Agent.Spawner`
     * `:context` — walk-up context file discovery (AGENTS.md, OPAL.md, etc.)
     * `:skills` — skill directory discovery and progressive disclosure
     * `:mcp` — MCP (Model Context Protocol) client integration

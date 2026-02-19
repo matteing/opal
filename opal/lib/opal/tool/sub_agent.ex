@@ -91,7 +91,7 @@ defmodule Opal.Tool.SubAgent do
 
     overrides = build_overrides(args, parent_state)
 
-    case Opal.SubAgent.spawn_from_state(parent_state, overrides) do
+    case Opal.Agent.Spawner.spawn_from_state(parent_state, overrides) do
       {:ok, sub_pid} ->
         sub_state = Opal.Agent.get_state(sub_pid)
         sub_session_id = sub_state.session_id
@@ -127,7 +127,7 @@ defmodule Opal.Tool.SubAgent do
 
         # Clean up
         Opal.Events.unsubscribe(sub_session_id)
-        Opal.SubAgent.stop(sub_pid)
+        Opal.Agent.Spawner.stop(sub_pid)
 
         case result do
           {:ok, response, tool_log} ->

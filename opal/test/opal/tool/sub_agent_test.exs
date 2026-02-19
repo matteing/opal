@@ -249,7 +249,7 @@ defmodule Opal.Tool.SubAgentTest do
       %{pid: parent} = start_parent(tools: [EchoTool, SubAgentTool])
 
       {:ok, sub} =
-        Opal.SubAgent.spawn(parent, %{
+        Opal.Agent.Spawner.spawn(parent, %{
           tools: parent |> Agent.get_state() |> Map.get(:tools) |> Kernel.--([SubAgentTool])
         })
 
