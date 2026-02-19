@@ -27,7 +27,7 @@ The agent converts tool modules to JSON Schema for the LLM. When the LLM request
 | `grep`        | `Opal.Tool.Grep`     | Cross-platform regex search with hashline-tagged output                |
 | `shell`       | `Opal.Tool.Shell`    | Execute shell commands with streaming output                           |
 | `sub_agent`   | `Opal.Tool.SubAgent` | Spawn parallel child agents                                            |
-| `tasks`       | `Opal.Tool.Tasks`    | DETS-backed task tracker                                               |
+| `tasks`       | `Opal.Tool.Tasks`    | DAG-aware task tracker with auto-unblock                               |
 | `use_skill`   | `Opal.Tool.UseSkill` | Load agent skills dynamically                                          |
 | `ask_user`    | `Opal.Tool.AskUser`  | Ask the user a question (top-level agents)                             |
 | `debug_state` | `Opal.Tool.DebugState` | Introspect agent runtime state and recent events (disabled by default) |
@@ -40,7 +40,7 @@ Each tool has a detailed doc in `docs/tools/`:
 - [**grep**](tools/grep.md) — Cross-platform regex search with context and glob filtering
 - [**shell**](tools/shell.md) — Streaming shell execution with tail-truncation
 - [**sub_agent**](tools/sub-agent.md) — Spawn child agents with depth enforcement
-- [**tasks**](tools/tasks.md) — DETS-backed persistent task tracker
+- [**tasks**](tools/tasks.md) — DAG-aware task tracker with dependency validation and auto-unblock
 - [**use_skill**](tools/use-skill.md) — Progressive skill loading
 - [**ask_user**](tools/user-input.md) — User input with question escalation for sub-agents
 - [**debug_state**](tools/debug.md) — Runtime self-introspection snapshot for troubleshooting
