@@ -31,6 +31,8 @@ Right now, Opal can:
 
 **Adjust expectations; it's a hobby project.** There's no permission or approval system yet — the agent can run any shell command and write to any file in your working directory. **No guardrails, no sandbox.** Use it on things you can afford to break. See [disclaimer](#disclaimer).
 
+**The CLI code is a giant flying spaghetti monster.** While I've paid great attention to ensuring the Elixir is well-written, lightweight and idiomatic, I've not cared much about the CLI code. I'm manually rewriting all of it at the moment, which isn't too hard considering it's feature complete.
+
 In library usage, the harness can be cleanly integrated into Elixir (or other language) systems. When integrating with Elixir, you get no serialization boundary (just Erlang message passing).
 
 You could theoretically also network these nodes together and have agents talking to agents!?
