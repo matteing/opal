@@ -8,13 +8,13 @@ older messages. This document is the reference spec for the full subsystem.
 ```mermaid
 graph TD
     Agent["Agent<br/><small>maybe_auto_compact</small>"]
-    Agent --> Estimate["estimate_current_tokens<br/><small>hybrid: actual + heuristic</small>"]
+    Agent --> Estimate["estimate_tokens<br/><small>hybrid: actual + heuristic</small>"]
     Agent --> Compact["Opal.Session.Compaction.compact/2"]
     Compact --> Cut["find_cut_point<br/><small>walk backwards, cut at turn boundary</small>"]
     Compact --> Split["detect_split_turn<br/><small>clean or mid-turn cut</small>"]
     Compact --> Summary["build_summary<br/><small>LLM summarize or truncate fallback</small>"]
     Compact --> Replace["Session.replace_path_segment<br/><small>swap old messages for summary</small>"]
-    Agent --> Broadcast["broadcast usage_update<br/><small>new currentContextTokens</small>"]
+    Agent --> Broadcast["broadcast compaction_start/end<br/><small>before/after message counts</small>"]
 
     Overflow["Overflow recovery<br/><small>separate path</small>"]
     Overflow --> Reject["Provider rejects request"]
@@ -26,7 +26,7 @@ graph TD
 - `lib/opal/session/compaction.ex` — cut point, summarization, file-op tracking
 - `lib/opal/agent/usage_tracker.ex` — auto-compact trigger, hybrid estimation
 - `lib/opal/agent/overflow.ex` — overflow pattern matching and emergency compaction
-- `lib/opal/token.ex` — token estimation heuristics
+- `lib/opal/agent/token.ex` — token estimation heuristics
 
 ## Token Metrics
 
@@ -56,7 +56,7 @@ The CLI compaction bar uses `currentContextTokens / contextWindow`.
 
 **Trigger:** start of each turn, when estimated context ≥ 80% of context window.
 
-**Estimation** (`estimate_current_tokens`): hybrid approach —
+**Estimation** (`estimate_tokens`): hybrid approach —
 1. If `last_prompt_tokens > 0`: use as calibrated base, add heuristic (~4
    chars/token) for messages added since that usage report.
 2. If no usage data yet (first turn): full heuristic via `Token.estimate_context`.
@@ -65,8 +65,7 @@ The CLI compaction bar uses `currentContextTokens / contextWindow`.
 1. Broadcast `compaction_start`.
 2. Call `Compaction.compact/2` with `keep_recent_tokens = contextWindow / 4`.
 3. Broadcast `compaction_end` with before/after message counts.
-4. Broadcast `usage_update` with estimated post-compaction `currentContextTokens`.
-5. Reset `last_prompt_tokens` to 0.
+4. Reset `last_prompt_tokens` and `last_usage_msg_index` to 0.
 
 ## Compaction Algorithm
 
@@ -74,8 +73,8 @@ The CLI compaction bar uses `currentContextTokens / contextWindow`.
 
 Walk backwards from the newest message, accumulating estimated characters
 (4 chars ≈ 1 token). When the accumulated total exceeds `keep_recent_tokens`,
-find the nearest **user message boundary** at or after that point. Never cut
-mid-turn.
+find the nearest **user message boundary** at or after that point. If a clean
+boundary is unavailable, split-turn handling (below) preserves continuity.
 
 Default `keep_recent_tokens`: 20,000. Auto-compaction passes `contextWindow / 4`.
 
@@ -142,7 +141,7 @@ cycles. Each cycle:
 
 When the provider rejects a request due to context overflow:
 
-1. `Overflow.context_overflow?/1` pattern-matches against 14 known error
+1. `Overflow.context_overflow?/1` pattern-matches against 17 known error
    strings from OpenAI, Anthropic, Google, and generic proxies.
 2. If matched, emergency compaction fires with `keep_recent_tokens =
    contextWindow / 5` and `force: true`.
@@ -156,7 +155,7 @@ If no session process exists, overflow is surfaced as an error (can't compact).
 
 ## Context Window Sizes
 
-Looked up from LLMDB at agent initialization via `Opal.Models.context_window/1`. Falls back to 128k if the model isn't found. For Copilot models, queries the `github_copilot` LLMDB provider; for direct providers, queries the upstream provider (e.g., `:anthropic`).
+Looked up from LLMDB at agent initialization via `Opal.Provider.Registry.context_window/1`. Falls back to 128k if the model isn't found. For Copilot models, queries the `github_copilot` LLMDB provider; for direct providers, queries the upstream provider (e.g., `:anthropic`).
 
 The `context_window` value is included in every `usage_update` and `agent_end` event, and is available via `agent/state` RPC from the moment the session starts.
 

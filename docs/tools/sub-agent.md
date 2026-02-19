@@ -13,7 +13,7 @@ Spawns a child agent for delegated tasks. The sub-agent runs in parallel under t
 
 ## Behavior
 
-1. Spawns a new `Opal.Agent` via `Opal.SubAgent.spawn_from_state/2`
+1. Spawns a new `Opal.Agent` via `Opal.Agent.Spawner.spawn_from_state/2`
 2. Sub-agent inherits the parent's config, provider, and working directory
 3. Sends the prompt and blocks until the sub-agent finishes (120s timeout)
 4. Collects the sub-agent's final response text and a log of tool executions
@@ -35,4 +35,4 @@ If `tools` is specified, only those named tools are made available. This lets th
 
 ## Source
 
-`lib/opal/tool/sub_agent.ex`, `lib/opal/sub_agent.ex`
+`lib/opal/tool/sub_agent.ex`, `lib/opal/agent/spawner.ex`

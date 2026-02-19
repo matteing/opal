@@ -49,7 +49,7 @@ Three operations are supported:
 | `insert_after`      | Insert `new_string` after the `start` line                        |
 | `insert_before`     | Insert `new_string` before the `start` line                       |
 
-Omitting `through` defaults to a single-line edit. Omitting `new_string` deletes the line range.
+Omitting `through` defaults to a single-line edit. For `replace`, omitting `new_string` deletes the line range.
 
 > **Note:** The parameter was previously named `end`. Using `through` avoids a
 > naming collision with Elixir/Ruby/Lua's `end` keyword, which caused models to
@@ -126,8 +126,8 @@ The hashline format gives the model a cheap, verifiable anchor. If it can recall
 - `lib/opal/util/hashline.ex` — Hash computation, line tagging, anchor parsing, hash validation
 - `lib/opal/tool/edit_file.ex` — Hashline edit tool (`edit_file`)
 - `lib/opal/tool/read_file.ex` — File reading with hashline-tagged output
-- `lib/opal/util/encoding.ex` — BOM and CRLF handling
-- `lib/opal/util/file_helper.ex` — Shared path resolution and file I/O helpers
+- `lib/opal/util/file_io.ex` — BOM/CRLF normalization and restoration, path resolution, and file I/O helpers
+- `lib/opal/util/path.ex` — Safe-relative path checks used by path resolution
 
 ## References
 

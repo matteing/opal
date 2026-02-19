@@ -68,8 +68,9 @@ Opal.Inspect.state().system_prompt |> IO.puts()
 Opal.Inspect.state().context_files
 # => ["AGENTS.md", "docs/AGENTS.md"]
 
-# See the raw context string injected into the prompt
-Opal.Inspect.state().context |> IO.puts()
+# See raw discovered context entries injected into the prompt
+Opal.Inspect.state().context_entries
+# => [%{path: "AGENTS.md", content: "..."}]
 ```
 
 ## Messages
@@ -132,8 +133,8 @@ Opal.Inspect.state().available_skills
 # Currently loaded skills
 Opal.Inspect.state().active_skills
 
-# Load a skill manually
-Opal.Agent.load_skill(Opal.Inspect.agent(), "git")
+# Ask the agent to load a skill via the use_skill tool
+Opal.Agent.prompt(Opal.Inspect.agent(), "Use the git skill for this task.")
 ```
 
 ## Token Usage

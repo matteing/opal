@@ -28,22 +28,29 @@ The CLI spawns the Elixir server as a child process and communicates over stdin/
 
 The SDK finds the opal-server binary in three ways, tried in order:
 
-1. **PATH** — `opal-server` installed globally
-2. **Bundled binary** — `releases/opal_server_<platform>_<arch>` inside the npm package
-3. **Dev mode** — Monorepo: runs `elixir -S mix run --no-halt` in `../opal/`
+1. **Dev mode** — Monorepo: runs `mise exec -- elixir -S mix run --no-halt` in `opal/`
+2. **PATH** — `opal-server` installed globally
+3. **Bundled binary** — `releases/opal_server_<platform>_<arch>` inside the npm package
 
-Platform mapping: `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`.
+Platform mapping: `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `win32-x64`.
 
 ## CLI Arguments
 
 ```
-opal [options]
+opal [prompt] [options]
+opal auth <login|status>
+opal session <list|show|delete> [id]
+opal doctor
 
---model <provider/id> Model to use (e.g. anthropic/claude-sonnet-4-20250514)
---working-dir, -C     Working directory (default: cwd)
---auto-confirm        Auto-allow all tool executions
+--model <provider/id> Model to use (e.g. copilot/claude-sonnet-4)
+--working-dir, -C     Working directory
+--session, -s         Resume a previous session by ID
+--auto-confirm        Auto-confirm all tool executions
 --debug               Enable debug feature/tools for this session
+--expose              Expose instance for remote debugging (name or name#cookie)
+--no-tui              Headless mode: print response to stdout and exit
 --verbose, -v         Pipe server stderr to terminal
+--version             Print version information and exit
 --help, -h            Show usage
 ```
 
@@ -55,7 +62,7 @@ The CLI clears the screen on startup and fills the viewport initially; once the 
 
 ```
 ┌─────────────────────────────────────────────┐
-│ Header        workingDir · nodeName         │
+│ Welcome       version · workingDir          │
 ├─────────────────────────────────────────────┤
 │ MessageList                                 │
 │   ● Loaded AGENTS.md                        │
@@ -91,8 +98,9 @@ The CLI clears the screen on startup and fills the viewport initially; once the 
 | `model-picker.tsx` | Interactive model/thinking-level selector |
 | `device-auth.tsx` | `SetupWizard` — device-code OAuth and API key auth flow |
 | `shimmer-text.tsx` | Animated iridescent text (used for loading state) |
-| `token-bar.tsx` | Context window utilization bar |
-| `tool-status.tsx` | Running/done/error icons for tool entries |
+| `help-menu.tsx` | Overlay listing keyboard shortcuts and slash commands |
+| `opal-menu.tsx` | Runtime feature/tool toggles for `/opal` |
+| `rpc-panel.tsx` | JSON-RPC debug panel toggled by `/debug` |
 | `welcome.tsx` | Animated iridescent opal gem on startup |
 
 ## State Management
@@ -150,7 +158,8 @@ State uses a nested `AgentView` shape. The `main` field holds the primary agent'
 | `/compact` | Trigger conversation compaction |
 | `/agents` | List active sub-agents |
 | `/agents <n\|main>` | Switch view to a sub-agent or back to main |
-| `/opal` | Open runtime configuration menu (toggle `sub_agents`, `skills`, `mcp`, `debug`, and tools) |
+| `/opal` | Open runtime configuration menu (toggle Sub-agents, Skills, MCP, Debug introspection, and tools) |
+| `/debug` | Toggle JSON-RPC debug panel |
 
 ## Keyboard Shortcuts
 
@@ -160,6 +169,7 @@ State uses a nested `AgentView` shape. The `main` field holds the primary agent'
 | `ctrl+c` | Idle | Exit CLI |
 | `ctrl+o` | Any | Toggle tool output visibility |
 | `ctrl+y` | Any | Open plan in external editor |
+| `ctrl+j` | Input | Insert newline |
 | `↑` `↓` | Picker | Navigate options |
 | `y` / `n` | Confirm | Quick allow/deny |
 
@@ -171,9 +181,9 @@ Streaming events from the server drive all UI updates:
 graph LR
     Server["Elixir Agent"] -- "SSE stream" --> Provider
     Provider -- "parsed events" --> Agent["Agent state machine"]
-    Agent -- "broadcast" --> Events["Events.Registry"]
-    Events -- "JSON-RPC notification" --> Stdio["RPC.Stdio"]
-    Stdio -- "stdout" --> Client["OpalClient"]
+    Agent -- "broadcast" --> Events["Opal.Events"]
+    Events -- "JSON-RPC notification" --> Rpc["Opal.RPC.Server"]
+    Rpc -- "stdout" --> Client["OpalClient"]
     Client -- "applyEvent()" --> Reducer["State Reducer"]
     Reducer -- "setState" --> React["UI Components"]
 ```
@@ -198,12 +208,15 @@ The TypeScript SDK (`src/sdk/`) can be used independently of the CLI for program
 ```typescript
 import { Session } from "@unfinite/opal";
 
-const session = await Session.start({ model: "claude-sonnet-4" });
+const session = await Session.start({
+  model: { provider: "copilot", id: "claude-sonnet-4" },
+});
 
-session.on("messageDelta", (delta) => process.stdout.write(delta));
-session.on("agentEnd", () => console.log("\nDone"));
+for await (const event of session.prompt("Fix the failing test in app_test.exs")) {
+  if (event.type === "messageDelta") process.stdout.write(event.delta);
+}
 
-await session.prompt("Fix the failing test in app_test.exs");
+console.log("\nDone");
 ```
 
 See [sdk.md](sdk.md) for the full SDK documentation.

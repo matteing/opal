@@ -68,12 +68,12 @@ opal --debug                                # enable debug feature/tools for thi
 
 ## Providers
 
-GitHub Copilot is the default — the model string prefix controls which provider is used:
+GitHub Copilot is the built-in provider — pass `provider/model` with `--model`:
 
 ```sh
-opal --model claude-sonnet-4           # Copilot (default when no prefix)
-opal --model anthropic:claude-sonnet-4 # Direct Anthropic API
-opal --model openai:gpt-4o            # Direct OpenAI API
+opal --model copilot/claude-sonnet-4   # Copilot
+opal --model anthropic/claude-sonnet-4 # Anthropic model IDs via Copilot
+opal --model openai/gpt-4o             # OpenAI model IDs via Copilot
 ```
 
 See the [provider docs](docs/providers.md) for API keys, model discovery, and custom providers.

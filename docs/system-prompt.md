@@ -26,12 +26,14 @@ sections = [
   format_context_entries(state.context_entries),
   format_skills(state.available_skills, state.config),
   format_environment(state.working_dir),
-  build_guidelines(active_tools),
+  build_guidelines(Opal.Agent.ToolRunner.active_tools(state), state),
   format_planning(state)
 ]
 
-Enum.reject(sections, &(&1 == "" or is_nil(&1)))
-|> Enum.join("\n\n")
+case Enum.reject(sections, &(&1 == "" or is_nil(&1))) do
+  [] -> nil
+  parts -> Enum.join(parts, "\n\n")
+end
 ```
 
 Each component is independently optional — if it produces an empty string, it is excluded from the final prompt.
@@ -79,7 +81,7 @@ Discovered automatically by `Opal.Context` by walking up the directory tree from
 
 ```mermaid
 graph TD
-    WD["/home/user/project/src"] --> P1["Check: AGENTS.md, OPAL.md,<br/>.agents/AGENTS.md, .opal/OPAL.md"]
+    WD["/home/user/project/src"] --> P1["Check: AGENTS.md, OPAL.md,<br/>.agents/{AGENTS,OPAL}.md,<br/>.opal/{AGENTS,OPAL}.md"]
     P1 --> UP1["/home/user/project"]
     UP1 --> P2["Check same files"]
     P2 --> UP2["/home/user"]
@@ -140,8 +142,10 @@ Opal's skill implementation closely follows the [Agent Skills](https://agentskil
 | ----------------------------------------- | --------------------------------- |
 | `<working_dir>/.agents/skills/*/SKILL.md` | Project-local                     |
 | `<working_dir>/.github/skills/*/SKILL.md` | Project-local (GitHub convention) |
+| `<working_dir>/.claude/skills/*/SKILL.md` | Project-local                     |
 | `~/.agents/skills/*/SKILL.md`             | User-global                       |
 | `~/.opal/skills/*/SKILL.md`               | User-global                       |
+| `~/.claude/skills/*/SKILL.md`             | User-global                       |
 | Additional dirs from config               | Custom                            |
 
 Each `SKILL.md` must have YAML frontmatter with at least `name` and `description`. Skills that fail to parse or validate are silently skipped.
@@ -152,7 +156,23 @@ Each `SKILL.md` must have YAML frontmatter with at least `name` and `description
 
 ---
 
-## Component 4: Tool Usage Guidelines
+## Component 4: Environment
+
+`Opal.Agent.SystemPrompt.format_environment/1` adds runtime context when `working_dir` is present:
+
+```xml
+<environment>
+Working directory: /home/user/project
+</environment>
+```
+
+If `working_dir` is missing or empty, this section is omitted.
+
+**Source:** `Opal.Agent.SystemPrompt.format_environment/1`.
+
+---
+
+## Component 5: Tool Usage Guidelines
 
 `Opal.Agent.SystemPrompt` dynamically generates guardrail instructions based on which tools are active in the current session. This prevents common LLM mistakes like using `cat` via shell when `read_file` is available.
 
@@ -161,25 +181,28 @@ Each `SKILL.md` must have YAML frontmatter with at least `name` and `description
 ```mermaid
 flowchart LR
     Tools["Active tool modules"] --> Names["Tool name set<br/>(MapSet)"]
-    Names --> Rules["Rule functions<br/>(pipeline)"]
+    Names --> Rules["Rule table<br/>({condition, text})"]
     Rules --> Guidelines["Markdown bullet list"]
 ```
 
 1. The active tool modules are collected and their names extracted into a `MapSet`
-2. A pipeline of rule functions is evaluated against the name set
-3. Each rule returns `nil` (not applicable), a string, or a list of strings
-4. All non-nil results are collected into a `## Tool Usage Guidelines` section
+2. `guidelines/2` evaluates a flat rule table of `{condition, text | [text]}` tuples
+3. Matching rules contribute one or more guideline strings
+4. Strings are rendered as bullets inside a `<tool-guidelines>` section
 
-### Rule Pipeline
+### Rule Table
 
-| Rule Function           | Triggers When                        | Guideline Produced                                                                                          |
-| ----------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `read_vs_shell`         | `read_file` + any shell tool         | "Use `read_file` to read files. Do NOT use `cat`, `head`, `tail`, or `less` via shell." + offset/limit hint |
-| `edit_vs_shell`         | `edit_file` + any shell tool         | "Use `edit_file` for all file modifications. Do NOT use `sed`, `awk`, `perl -i`, or shell redirects."       |
-| `write_guidelines`      | `write_file` present                 | "Use `write_file` to create new files. Do NOT use shell redirects or `tee`."                                |
-| `shell_display_warning` | Any shell tool present               | "When summarizing, output plain text directly. Do NOT use `cat` or `echo` to display files."                |
-| `search_guidelines`     | Shell present but `read_file` absent | "Use shell commands like `cat`, `grep`, `find`, and `ls` for file exploration."                             |
-| `status_tags`           | Any known tool present               | Emit `<status>...</status>` tags during multi-step tasks.                                                   |
+| Condition in `guidelines/2`                     | Guideline produced (summary)                                                           |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `read_file` + any shell tool                     | Prefer `read_file` over `cat/head/tail/less`; include offset/limit guidance            |
+| `edit_file` + any shell tool                     | Prefer `edit_file` over `sed/awk/perl -i` and redirects                                |
+| `write_file` present                             | Prefer `write_file` over redirects/`tee`                                                |
+| Any shell tool present                           | Output summary text directly; avoid shell display commands                              |
+| Shell present but `read_file` absent             | Encourage shell exploration commands (`cat`, `grep`, `find`, `ls`)                     |
+| `MapSet.size(names) >= 3`                        | Parameter-completeness and parallel-tool-call guidance                                  |
+| `sub_agent` present                              | Delegation guidance and available model hints                                           |
+| Any tool present                                 | Emit short `<status>...</status>` tags for multi-step tasks                             |
+| `needs_title?(state)`                            | Emit a `<title>...</title>` tag on new conversations when auto-title is enabled        |
 
 **Shell detection** recognizes any of: `shell`, `bash`, `zsh`, `cmd`, `powershell`.
 
@@ -187,8 +210,8 @@ flowchart LR
 
 Adding a new rule requires only:
 
-1. Define a new `defp my_rule(names)` function that returns `nil`, a string, or a list of strings
-2. Add `&my_rule/1` to the pipeline list in `collect_rules/1`
+1. Add a new `{condition, text}` (or `{condition, [text, ...]}`) tuple in `guidelines/2`
+2. Keep tuple order aligned with the desired guideline output order
 
 No other code needs to change.
 
@@ -203,15 +226,17 @@ Given tools `[Opal.Tool.ReadFile, Opal.Tool.EditFile, Opal.Tool.WriteFile, Opal.
 - Use the `edit_file` tool for all file modifications. Do NOT use `sed`, `awk`, `perl -i`, or shell redirects (`>`, `>>`).
 - Use the `write_file` tool to create new files. Do NOT use shell redirects or `tee`.
 - When summarizing your actions, output plain text directly in your response. Do NOT use `cat`, `echo`, or shell to display files you just wrote.
+- Check that all required tool parameters are present (or clearly inferable) before calling tools; ask only for missing required values and use user-provided values exactly.
+- If multiple tool calls are independent, make them in the same response; only wait when a later call depends on earlier results.
 - Before starting each major step in a multi-step task, emit a short status tag: `<status>Analyzing test failures</status>`. Keep it under 6 words.
 </tool-guidelines>
 ```
 
-**Source:** `Opal.Agent.SystemPrompt.build_guidelines/1`.
+**Source:** `Opal.Agent.SystemPrompt.build_guidelines/2`.
 
 ---
 
-## Component 5: Planning Instructions
+## Component 6: Planning Instructions
 
 When a `Session` process is attached (i.e., this is a top-level agent, not a sub-agent), planning instructions are appended telling the agent where to write plan documents:
 
@@ -255,7 +280,7 @@ sequenceDiagram
     SP->>SP: format_context_entries(state.context_entries)
     SP->>SP: format_skills(state.available_skills, config)
     SP->>SP: format_environment(state.working_dir)
-    SP->>SP: build_guidelines(active_tools)
+    SP->>SP: build_guidelines(active_tools, state)
     SP->>SP: format_planning(state)
     SP-->>BM: assembled system prompt
     BM-->>LLM: [system_msg | conversation_messages]
@@ -269,7 +294,7 @@ sequenceDiagram
 
 3. **XML boundary tags.** Each section is wrapped in XML-style tags (`<identity>`, `<project-context>`, `<skills>`, `<environment>`, `<tool-guidelines>`, `<planning>`) so the model can clearly distinguish section boundaries — a pattern proven effective in production agent systems.
 
-4. **Tool guidelines are computed per-turn.** Since the active tool set can change (e.g., MCP tools coming online, config-gated tools), `build_guidelines/1` runs on every call to `build/1`.
+4. **Tool guidelines are computed per-turn.** Since the active tool set can change (e.g., MCP tools coming online, config-gated tools), `build_guidelines/2` runs on every call to `build/1`.
 
 5. **Skills use progressive disclosure.** Only names and descriptions go into the system prompt. Full instructions are injected as user messages when activated — this keeps the system prompt small and lets skill instructions age out during compaction.
 
@@ -283,8 +308,8 @@ Sub-agents (spawned via `Opal.Tool.SubAgent`) receive a stripped-down system pro
 
 | Component             | Top-level Agent         | Sub-Agent                         |
 | --------------------- | ----------------------- | --------------------------------- |
-| Base prompt           | ✓ (from session config) | ✓ (custom task prompt)            |
-| Project context       | ✓                       | ✓ (inherited from parent state)   |
+| Base prompt           | ✓ (from session config) | ✓ (inherits parent prompt unless overridden) |
+| Project context       | ✓                       | ✓ (re-discovered from sub-agent `working_dir`) |
 | Skill menu            | ✓                       | ✓ (if skills discovered)          |
 | Tool guidelines       | ✓                       | ✓ (based on sub-agent's tool set) |
 | Planning instructions | ✓                       | ✗ (no session attached)           |

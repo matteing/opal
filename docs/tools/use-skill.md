@@ -10,9 +10,9 @@ Loads agent skill instructions into the active context on demand.
 
 ## Behavior
 
-Skills are discovered during context discovery (AGENTS.md, SKILL.md files in `.claude/skills/`, `.opal/skills/`, etc.) but only their name and description are visible initially. This keeps the system prompt small.
+Skills are discovered at startup from `SKILL.md` files in `.agents/skills/`, `.github/skills/`, `.claude/skills/`, user-global skill dirs (`~/.agents/skills/`, `~/.opal/skills/`, `~/.claude/skills/`), and configured `extra_dirs`, but only their name and description are visible initially. This keeps the system prompt small.
 
-When the LLM decides a skill is relevant, it calls `use_skill` to load the full instructions into the agent's context. The skill's content is injected as additional system context for all subsequent turns.
+When the LLM decides a skill is relevant, it calls `use_skill` to load the full instructions into the agent's context. The skill instructions are appended as a synthetic user message prefixed with `[System]` so subsequent turns can use them.
 
 ## Responses
 
@@ -20,7 +20,7 @@ When the LLM decides a skill is relevant, it calls `use_skill` to load the full 
 | ------------------------------------------------------------------ | ---------------------------- |
 | `"Skill 'docs' loaded. Its instructions are now in your context."` | Instructions now active      |
 | `"Skill 'docs' is already loaded."`                                | Idempotent — no error        |
-| `"Skill 'docs' not found"`                                         | No matching skill discovered |
+| `"Skill 'docs' not found. Available: git, docs"`                   | No matching skill discovered |
 
 ## Progressive Disclosure
 
@@ -32,4 +32,4 @@ Opal's skill system closely follows the [Agent Skills](https://agentskills.io) s
 
 ## Source
 
-`lib/opal/tool/use_skill.ex`, `lib/opal/skill.ex`
+`lib/opal/tool/use_skill.ex`, `lib/opal/agent/tool_runner.ex`, `lib/opal/context/context.ex`, `lib/opal/context/skill.ex`

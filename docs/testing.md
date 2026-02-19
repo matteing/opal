@@ -50,18 +50,18 @@ A test provider controls the agent's LLM responses by injecting pre-built `Req.R
 defmodule TestProvider do
   @behaviour Opal.Provider
 
-  def stream(_messages, _tools, _config, _opts) do
+  def stream(_model, _messages, _tools, _opts \\ []) do
     # Build a fake streaming response from a fixture
-    FixtureHelper.build_fixture_response("responses_api_text")
+    FixtureHelper.build_fixture_response("responses_api_text.json")
   end
 
   def parse_stream_event(event), do: Opal.Provider.Copilot.parse_stream_event(event)
-  def convert_messages(msgs, _s, _c), do: msgs
+  def convert_messages(_model, messages), do: messages
   def convert_tools(tools), do: tools
 end
 ```
 
-The fixture helper spawns a task that sends SSE events as process messages, exactly mimicking how `Req` delivers real HTTP streaming:
+The fixture helper spawns a process that sends SSE events as process messages, exactly mimicking how `Req` delivers real HTTP streaming:
 
 ```elixir
 # What build_fixture_response does internally:
@@ -79,18 +79,18 @@ For tests that need multiple different responses (e.g. first turn returns tool c
 
 ```elixir
 # In the test
-:persistent_term.put({__MODULE__, :scenario}, :tool_then_text)
+:persistent_term.put({TestProvider, :scenario}, :tool_then_text)
 
 # In the provider
-def stream(_messages, _tools, _config, _opts) do
-  case :persistent_term.get({TestProvider, :scenario}) do
-    :tool_then_text -> build_fixture_response("responses_api_tool_call")
-    :text_only -> build_fixture_response("responses_api_text")
+def stream(_model, _messages, _tools, _opts \\ []) do
+  case :persistent_term.get({TestProvider, :scenario}, :text_only) do
+    :tool_then_text -> build_fixture_response("responses_api_tool_call.json")
+    :text_only -> build_fixture_response("responses_api_text.json")
   end
 end
 ```
 
-This gives each test full control over multi-turn agent behaviour without any shared mutable state.
+This gives each test full control over multi-turn agent behaviour without introducing a mocking framework.
 
 ## Fixtures
 
@@ -126,7 +126,7 @@ Fixtures can be re-recorded from live API calls with `mix test --include live --
 
 ## File I/O Tests
 
-Tool tests (`read`, `write`, `edit`, `edit_lines`, `shell`) use ExUnit's built-in `:tmp_dir` tag for automatic temporary directory management:
+Tool tests (`read_file`, `write_file`, `edit_file`, `shell`, `grep`, `tasks`) use ExUnit's built-in `:tmp_dir` tag for automatic temporary directory management:
 
 ```elixir
 @moduletag :tmp_dir
@@ -146,17 +146,17 @@ Integration tests subscribe to agent events and assert on the sequence:
 
 ```elixir
 setup do
-  {:ok, agent} = start_agent(TestProvider)
-  Opal.Events.subscribe(agent.session_id)
-  {:ok, agent: agent}
+  %{pid: agent, session_id: session_id} = start_agent(TestProvider)
+  Opal.Events.subscribe(session_id)
+  {:ok, agent: agent, session_id: session_id}
 end
 
-test "agent broadcasts events during a turn", %{agent: agent} do
+test "agent broadcasts events during a turn", %{agent: agent, session_id: session_id} do
   Opal.prompt(agent, "hello")
 
-  assert_receive {:opal_event, _, {:message_start, _}}, 5000
-  assert_receive {:opal_event, _, {:message_delta, %{delta: text}}}, 5000
-  assert_receive {:opal_event, _, {:agent_end, _}}, 5000
+  assert_receive {:opal_event, ^session_id, {:message_start}}, 5000
+  assert_receive {:opal_event, ^session_id, {:message_delta, %{delta: text}}}, 5000
+  assert_receive {:opal_event, ^session_id, {:agent_end, _messages, _usage}}, 5000
 end
 ```
 
@@ -179,7 +179,7 @@ Thinking fixtures can be re-recorded from live API calls. The live test module (
 mix test --include live --include save_fixtures test/opal/live_thinking_test.exs
 ```
 
-This records 6 scenarios: Chat Completions thinking (text, tool call), Responses API thinking (text, tool call), no-thinking baseline, and per-level (low/medium/high) effort responses.
+This records 8 scenarios: Chat Completions thinking (text, tool call), Responses API thinking (text, tool call), a no-thinking baseline, and per-level (low/medium/high) effort responses.
 
 The integration tests (`thinking_integration_test.exs`) replay these fixtures with **structural assertions** — they verify event shapes, ordering, and field presence rather than exact content strings. This means the same tests work with both hand-crafted and real API recordings.
 

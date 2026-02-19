@@ -9,7 +9,7 @@ Newline-delimited JSON. Each message is one JSON object per line:
 ```
 → {"jsonrpc":"2.0","method":"session/start","params":{...},"id":1}
 ← {"jsonrpc":"2.0","result":{...},"id":1}
-← {"jsonrpc":"2.0","method":"agent/event","params":{"type":"message_delta","delta":"Hello"}}
+← {"jsonrpc":"2.0","method":"agent/event","params":{"session_id":"abc123","type":"message_delta","delta":"Hello"}}
 ```
 
 Requests have an `id` and get a response. Notifications (events) have no `id`.
@@ -27,6 +27,8 @@ Client → Server requests:
 | `session/list` | List saved sessions |
 | `session/branch` | Branch conversation at a message |
 | `session/compact` | Manually trigger compaction |
+| `session/history` | Get message history for a session |
+| `session/delete` | Delete a saved session |
 | `models/list` | List available models |
 | `model/set` | Switch the active model |
 | `thinking/set` | Change reasoning effort level |
@@ -39,6 +41,8 @@ Client → Server requests:
 | `settings/save` | Save user settings (merged) |
 | `opal/config/get` | Get runtime feature/tool configuration for a session |
 | `opal/config/set` | Update runtime feature/tool configuration for a session |
+| `opal/ping` | Liveness check |
+| `opal/version` | Get server/protocol version information |
 
 `session/start` also accepts optional boot-time controls:
 
@@ -62,6 +66,8 @@ The server streams agent events as notifications on `agent/event`. The CLI subsc
 | `agent_start` | Agent begins processing |
 | `message_start` | New assistant message begins |
 | `message_delta` | Streaming text token |
+| `message_queued` | Prompt queued while agent is busy |
+| `message_applied` | Previously queued prompt was applied |
 | `thinking_start` | Reasoning/thinking begins |
 | `thinking_delta` | Streaming thinking token |
 | `tool_execution_start` | Tool begins running |
@@ -71,6 +77,7 @@ The server streams agent events as notifications on `agent/event`. The CLI subsc
 | `status_update` | Brief human-readable status of current work |
 | `agent_end` | Agent done, returning to idle |
 | `agent_abort` | Agent was cancelled |
+| `agent_recovered` | Agent crashed and was restarted |
 | `error` | Something went wrong |
 | `context_discovered` | Project context files found |
 | `skill_loaded` | Agent skill activated |
@@ -92,11 +99,11 @@ All methods, events, and their schemas are defined declaratively in `Opal.RPC.Pr
 ]
 ```
 
-This module is the single source of truth. The TypeScript SDK types are auto-generated from it via `scripts/codegen_ts.exs`.
+This module is the single source of truth. The codegen pipeline exports JSON Schema via `mix opal.gen.json_schema` and then generates TypeScript SDK types via `scripts/codegen_ts.exs`.
 
 ## Architecture
 
-`Opal.RPC.Stdio` is started by default as part of the core supervision tree. To
+`Opal.RPC.Server` is started by default as part of the core supervision tree. To
 use the core library as an embedded SDK without the stdio transport, disable it:
 
 ```elixir
@@ -108,19 +115,20 @@ default and does not need any extra configuration.
 
 ```mermaid
 graph LR
-    stdin --> Stdio["Opal.RPC.Stdio<br/><small>parse JSON-RPC</small>"]
-    Stdio -- "requests" --> Handler["Opal.RPC.Handler<br/><small>pure dispatch</small>"]
-    Handler --> API["Opal API"]
-    Agent["Agent"] -- "broadcasts" --> Events["Events.Registry"]
-    Events -- "serialize events" --> Stdio
-    Stdio -- "notifications" --> stdout
+    stdin --> Server["Opal.RPC.Server<br/><small>stdio transport + dispatch</small>"]
+    Server --> API["Opal API"]
+    Server --> Codec["Opal.RPC<br/><small>JSON-RPC encode/decode</small>"]
+    Agent["Agent"] -- "broadcasts" --> Events["Opal.Events.Registry"]
+    Events -- "serialize events" --> Server
+    Server -- "notifications" --> stdout
 ```
 
-`Stdio` handles transport (reading/writing lines, framing). `Handler` is a pure function that maps method names to Opal API calls — it has no transport awareness. This separation makes it easy to add WebSocket or HTTP transports later.
+`Opal.RPC.Server` handles stdio transport, request dispatch, and event serialization. `Opal.RPC` provides transport-agnostic JSON-RPC encoding/decoding helpers used by the server.
 
 ## Source
 
-- `lib/opal/rpc/protocol.ex` — Method/event definitions, codegen source of truth
-- `lib/opal/rpc/stdio.ex` — Stdio transport, event serialization
-- `lib/opal/rpc/handler.ex` — Method dispatch
+- `opal/lib/opal/rpc/protocol.ex` — Method/event definitions, codegen source of truth
+- `opal/lib/opal/rpc/server.ex` — Stdio server, dispatch, event serialization
+- `opal/lib/opal/rpc/rpc.ex` — JSON-RPC encode/decode helpers
+- `opal/lib/mix/tasks/opal.gen.json_schema.ex` — JSON Schema generation
 - `scripts/codegen_ts.exs` — TypeScript type generation

@@ -8,14 +8,14 @@ The public API remains stable and routes into the state machine:
 
 ```elixir
 Opal.Agent.start_link(opts)
-Opal.Agent.prompt(agent, text)
+Opal.Agent.prompt(agent, text) #=> %{queued: boolean()}
 Opal.Agent.abort(agent)
 Opal.Agent.get_state(agent)
 Opal.Agent.get_context(agent)
 Opal.Agent.set_model(agent, model)
 Opal.Agent.set_provider(agent, provider_module)
 Opal.Agent.sync_messages(agent, messages)
-Opal.Agent.load_skill(agent, skill_name)
+Opal.Agent.configure(agent, %{features: ..., enabled_tools: ...})
 ```
 
 The runtime callback model is explicit:
@@ -23,25 +23,28 @@ The runtime callback model is explicit:
 ```elixir
 @behaviour :gen_statem
 
-callback_mode() :: :handle_event_function
-handle_event(event_type, event_content, state_name, state)
+callback_mode() :: :state_functions
+idle(event_type, event_content, state)
+running(event_type, event_content, state)
+streaming(event_type, event_content, state)
+executing_tools(event_type, event_content, state)
 ```
 
 ## FSM States
 
 | State              | Meaning                                       | External commands                 |
 | ------------------ | --------------------------------------------- | --------------------------------- |
-| `:idle`            | Waiting for prompt/steer input                | prompt, steer, calls              |
-| `:running`         | Building context and starting provider stream | steer/prompt queued, abort, calls |
-| `:streaming`       | Processing provider SSE events                | steer/prompt queued, abort, calls |
-| `:executing_tools` | Running tool calls through supervised tasks   | steer/prompt queued, abort, calls |
+| `:idle`            | Waiting for prompt input                      | prompt, abort, calls              |
+| `:running`         | Building context and starting provider stream | prompt queued, abort, calls       |
+| `:streaming`       | Processing provider SSE events                | prompt queued, abort, calls       |
+| `:executing_tools` | Running tool calls through supervised tasks   | prompt queued, abort, calls       |
 
 ```mermaid
 stateDiagram-v2
     direction LR
     [*] --> idle
 
-    idle --> running: prompt or steer
+    idle --> running: prompt
     running --> streaming: start provider stream
 
     streaming --> running: finalize response
@@ -56,8 +59,8 @@ stateDiagram-v2
     executing_tools --> idle: abort
 
     note right of running
-      Busy prompts and steers are queued
-      in pending_steers until safe handoff.
+      Busy prompts are queued
+      in pending_messages until safe handoff.
     end note
 ```
 
@@ -65,11 +68,11 @@ stateDiagram-v2
 
 ### 1. Prompt intake and gating
 
-`prompt/2` and `steer/2` use `:gen_statem.cast`. In `:idle`, input is appended as a user message and the state transitions to `:running`. In non-idle states, prompts/steers are queued in `pending_steers` so there is no overlapping turn.
+`prompt/2` uses `:gen_statem.call`. In `:idle`, input is appended as a user message, the state transitions to `:running`, and the caller receives `%{queued: false}`. In non-idle states, prompts are queued in `pending_messages` and the caller receives `%{queued: true}`.
 
 ### 2. Turn start in `:running`
 
-`run_turn_internal/1` builds the message list, applies compaction checks, resolves active tools, and starts streaming through the configured provider. The machine then transitions to `:streaming`.
+`run_turn/1` builds the message list, applies compaction checks, resolves active tools, and starts streaming through the configured provider. The machine then transitions to `:streaming`.
 
 ### 3. Streaming in `:streaming`
 
@@ -83,7 +86,7 @@ On stream completion, the assistant message is appended and the machine re-enter
 
 ### 5. Tool execution in `:executing_tools`
 
-Tool calls are run sequentially but non-blocking using `Task.Supervisor.async_nolink`. Results are received through state-machine `:info` messages, converted to `:tool_result` messages, and the machine returns to `:running` for the next provider turn.
+Tool calls are started concurrently using `Task.Supervisor.async_nolink`. Results are received through state-machine `:info` messages, converted to `:tool_result` messages, and the machine returns to `:running` for the next provider turn.
 
 ```mermaid
 flowchart LR
@@ -95,13 +98,13 @@ flowchart LR
     E --> H[executing_tools]
     H --> I[Opal.Agent.ToolRunner]
     E --> J[running]
-    J --> K[Opal.Agent.Compaction + Opal.Agent.Retries]
+    J --> K[Opal.Agent.UsageTracker + Opal.Agent.Retry]
 ```
 
 ### 6. Resilience paths
 
-- `Opal.Agent.Retries` classifies transient provider errors and schedules exponential backoff.
-- `Opal.Agent.Compaction` handles auto-compaction and overflow recovery before retrying turns.
+- `Opal.Agent.Retry` classifies transient provider errors and schedules exponential backoff.
+- `Opal.Agent.UsageTracker` and `Opal.Agent.Overflow` handle auto-compaction and overflow recovery before retrying turns.
 - `abort/1` cancels in-flight stream/tool work and forces `:idle`.
 
 ## Agent module layout
@@ -111,10 +114,11 @@ The agent runtime now follows a responsibility-first layout under `lib/opal/agen
 - `agent.ex` — `:gen_statem` loop and state transitions
 - `state.ex` — runtime state struct/types
 - `stream.ex` — provider event parsing and stream-state updates
-- `tools.ex` + `tool_runner.ex` — tool lifecycle orchestration
-- `retries.ex` + `retry.ex` — retry policy facade and implementation
-- `compaction.ex` + `usage_tracker.ex` — context/usage compaction logic
-- `reducer.ex` + `effects.ex` — state name resolution and transition conversion
+- `tool_runner.ex` — concurrent tool lifecycle orchestration
+- `retry.ex` — retry policy and backoff classification
+- `usage_tracker.ex` + `overflow.ex` — usage tracking, compaction, and overflow handling
+- `repair.ex` + `system_prompt.ex` + `emitter.ex` — message repair, prompt assembly, and event broadcasting
+- `spawner.ex` + `collector.ex` — sub-agent orchestration and response collection
 
 ## References
 

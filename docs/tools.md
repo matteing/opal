@@ -4,16 +4,18 @@ Opal's built-in tools implement the `Opal.Tool` behaviour and are executed as su
 
 ## Tool Behaviour
 
-Every tool is a module with four callbacks:
+Every tool implements four required callbacks, plus optional context-aware callbacks:
 
 ```elixir
 @callback name() :: String.t()
 @callback description() :: String.t()
 @callback parameters() :: map()           # JSON Schema
-@callback execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
+@callback execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()} | {:effect, term()}
+@callback description(Opal.Tool.tool_context()) :: String.t()  # optional
+@callback meta(map()) :: String.t()                            # optional
 ```
 
-The agent converts tool modules to JSON Schema for the LLM. When the LLM requests a tool call, the agent looks up the module by name and calls `execute/2` inside a supervised task. Tools receive a context map with `working_dir`, `session_id`, `config`, and a frozen `agent_state` snapshot.
+The agent converts tool modules to JSON Schema for the LLM. When the LLM requests a tool call, the agent looks up the module by name and calls `execute/2` inside a supervised task. Tools receive a context map with `working_dir`, `session_id`, `config`, `agent_pid`, and an `agent_state` snapshot; each call also includes `emit` and `call_id` for streamed output.
 
 ## Default Tools
 
@@ -49,17 +51,16 @@ External tools from MCP servers are discovered at session start and wrapped as r
 
 ## Encoding Layer
 
-`Opal.Util.Encoding` handles two invisible artifacts that cause tool failures:
+`Opal.FileIO` handles two invisible artifacts that cause tool failures:
 
 - **UTF-8 BOM** — stripped before matching/output, restored after edits
 - **CRLF line endings** — normalized to LF for processing, restored after edits
 
-This shared module is used by `ReadFile`, `EditFile`, and `WriteFile` to prevent encoding corruption.
+This shared logic is used by `ReadFile`, `EditFile`, `WriteFile`, and `Grep` to prevent encoding corruption.
 
 ## Source
 
-- `lib/opal/tool.ex` — Behaviour definition
+- `lib/opal/tool/tool.ex` — Behaviour definition
 - `lib/opal/tool/` — All tool implementations
 - `lib/opal/util/hashline.ex` — Hash computation and line tagging
-- `lib/opal/util/encoding.ex` — BOM and CRLF handling
-- `lib/opal/util/file_helper.ex` — Shared path resolution and file I/O helpers
+- `lib/opal/util/file_io.ex` — BOM/CRLF handling and shared path/file I/O helpers

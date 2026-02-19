@@ -166,8 +166,8 @@ Both APIs stream Server-Sent Events, but with different JSON structures:
 
 1. `start_device_flow()` — POST to `/login/device/code`, get a user code + verification URL
 2. User visits the URL and enters the code
-3. `poll_for_token()` — Poll until GitHub returns an access token
-4. `exchange_copilot_token()` — Exchange the GitHub token for a Copilot API token
+3. `poll_for_token(domain, device_code, interval_ms)` — Poll until GitHub returns an access token
+4. `exchange_copilot_token(github_token)` — Exchange the GitHub token for a Copilot API token
 
 Tokens are persisted to `~/.opal/auth.json`. `get_token/0` auto-refreshes expired tokens (5-minute buffer before expiry).
 
@@ -178,7 +178,7 @@ The parent module `Opal.Auth` provides `probe/0`, which checks credential source
 Model preferences are saved to `~/.opal/settings.json` via `Opal.Settings`. When a user switches models in the CLI (via `/model` or `/models`), the choice is persisted as `default_model`. On next session start, this saved preference is loaded automatically (unless overridden by `--model` or explicit config).
 
 ```json
-{"default_model": "claude-sonnet-4"}
+{"default_model": "copilot:claude-sonnet-4"}
 ```
 
 RPC methods: `settings/get`, `settings/save`. See [directories.md](directories.md) for the full storage layout.
@@ -199,9 +199,9 @@ For OpenAI-compatible APIs, reuse the shared helpers in `Opal.Provider`: `parse_
 
 ## Source
 
-- `lib/opal/provider/provider.ex` — Behaviour definition, shared helpers, and `collect_text/3`
-- `lib/opal/provider/copilot.ex` — GitHub Copilot implementation (Chat Completions + Responses API)
-- `lib/opal/provider/model.ex` — Model struct with `parse/2` and `coerce/2` for string/tuple specs
-- `lib/opal/provider/registry.ex` — LLMDB-backed model discovery and metadata
-- `lib/opal/auth/auth.ex` — Provider-agnostic credential probe (`Opal.Auth.probe/0`)
-- `lib/opal/auth/copilot.ex` — Device-code OAuth and token management
+- `opal/lib/opal/provider/provider.ex` — Behaviour definition, shared helpers, and `collect_text/3`
+- `opal/lib/opal/provider/copilot.ex` — GitHub Copilot implementation (Chat Completions + Responses API)
+- `opal/lib/opal/provider/model.ex` — Model struct with `parse/2` and `coerce/2` for string/tuple specs
+- `opal/lib/opal/provider/registry.ex` — LLMDB-backed model discovery and metadata
+- `opal/lib/opal/auth/auth.ex` — Provider-agnostic credential probe (`Opal.Auth.probe/0`)
+- `opal/lib/opal/auth/copilot.ex` — Device-code OAuth and token management

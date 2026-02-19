@@ -13,13 +13,13 @@ Executes shell commands in the session's working directory with streaming output
 
 The tool detects the shell from the session config (sh, bash, zsh, cmd, powershell) and falls back to platform defaults. The command runs as a child process with stdout and stderr combined.
 
-Output is streamed back in real-time via an `emit` callback, so the CLI shows progress as commands run. When the command completes, the full output is returned as the tool result.
+Output is streamed back in real-time via an `emit` callback, so the CLI shows progress as commands run. When the command completes, output is returned as the tool result (tail-truncated if it exceeds limits).
 
 ## Truncation
 
 Output is **tail-truncated** (opposite of `read_file`) — the last 2,000 lines or 50 KB are kept. Error output and final status are at the end, so tail-truncation preserves the most useful information.
 
-When truncated, full output is saved to a temp file (`<System.tmp_dir!()>/opal-shell-*.log`) and the path is included in the result.
+When truncated, full output is saved to a temp file (`<System.tmp_dir!()>/opal-shell/<id>.log`) and the path is included in the result.
 
 ## Exit Codes
 

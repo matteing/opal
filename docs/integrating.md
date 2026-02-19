@@ -59,7 +59,7 @@ config :opal, start_rpc: false
 })
 ```
 
-All keys are optional — defaults come from `config :opal` via `Opal.Config`. The full set of session options:
+All keys are optional — defaults come from `config :opal` via `Opal.Config`. Common session options:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -67,10 +67,10 @@ All keys are optional — defaults come from `config :opal` via `Opal.Config`. T
 | `working_dir` | `String.t()` | `File.cwd!()` | Root directory for file tools and shell |
 | `model` | tuple / string / struct | `{:copilot, "claude-sonnet-4"}` | LLM to use (see Model Formats below) |
 | `tools` | `[module()]` | All built-in tools | Tool modules to enable |
-| `provider` | `module()` | Auto-selected | Provider module (`Opal.Provider.Copilot`, etc.) |
-| `session` | `boolean()` | `true` | Whether to persist session to disk |
+| `provider` | `module()` | `Opal.Provider.Copilot` | Provider module (`Opal.Provider.Copilot`, etc.) |
+| `session` | `boolean()` | `false` | Whether to persist session to disk |
 | `session_id` | `String.t()` | Auto-generated | Resume an existing session |
-| `thinking_level` | `atom()` | `:off` | Reasoning effort: `:off`, `:low`, `:medium`, `:high` |
+| `thinking_level` | `atom()` | `:off` | Reasoning effort: `:off`, `:low`, `:medium`, `:high`, `:max` |
 
 ### Model Formats
 
@@ -86,14 +86,14 @@ The model can be specified in three ways:
 "claude-sonnet-4"
 
 # Struct — full control
-%Opal.Model{provider: :copilot, id: "claude-sonnet-4", thinking_level: :high}
+%Opal.Provider.Model{provider: :copilot, id: "claude-sonnet-4", thinking_level: :high}
 ```
 
 ### Prompting
 
 ```elixir
-# Async — returns :ok immediately, stream results via Events
-:ok = Opal.prompt(agent, "Refactor the auth module")
+# Async — returns queue state immediately, stream results via Events
+%{queued: _queued} = Opal.prompt(agent, "Refactor the auth module")
 
 # Sync — blocks until the agent finishes, returns accumulated text
 {:ok, response} = Opal.prompt_sync(agent, "What does this function do?")
@@ -219,6 +219,7 @@ The `context` map passed to `execute/2` contains:
 | `session_id` | `String.t()` | Current session ID |
 | `config` | `Opal.Config.t()` | Full runtime configuration |
 | `agent_pid` | `pid()` | The agent process |
+| `agent_state` | `Opal.Agent.State.t()` | Current in-memory agent state |
 | `call_id` | `String.t()` | Unique ID for this tool invocation |
 | `emit` | `(String.t() -> :ok)` | Emit streaming output chunks |
 
@@ -402,7 +403,7 @@ end
 ```elixir
 # Inspect agent state
 info = Opal.get_info(agent)
-# => %{session_id: "abc123", status: :idle, model: %Opal.Model{...}, ...}
+# => %{session_id: "abc123", status: :idle, model: %Opal.Provider.Model{...}, ...}
 
 # Switch models mid-session (conversation history preserved)
 Opal.set_model(agent, {:copilot, "gpt-5"}, thinking_level: :high)
@@ -430,10 +431,10 @@ The `opal-server` binary is available as a pre-built release for each platform:
 | Linux ARM | `opal_server_linux_arm64` |
 | Windows x64 | `opal_server_win32_x64.exe` |
 
-During development, you can also run from source:
+During development, you can also run from source (from the `opal/` directory):
 
 ```bash
-elixir --erl "-noinput" -S mix run --no-halt
+mise exec -- elixir -S mix run --no-halt
 ```
 
 ### Wire Protocol
@@ -787,7 +788,7 @@ const session = await Session.start({
   // Interaction handlers
   autoConfirm: true,
   onConfirm: async (req) => {
-    return req.tool === "shell" ? "deny" : "allow";
+    return req.actions.includes("allow") ? "allow" : "deny";
   },
   onAskUser: async ({ question, choices }) => {
     return choices?.[0] ?? "yes";
@@ -822,7 +823,7 @@ session.on("error", (reason) => {
 
 ```typescript
 // Send another prompt while busy (queued and applied between tool calls)
-await session.prompt("Focus on performance instead");
+await session.sendPrompt("Focus on performance instead");
 
 // Abort
 await session.abort();
@@ -875,9 +876,9 @@ await client.request("agent/prompt", {
 
 The SDK automatically locates `opal-server` using this fallback chain:
 
-1. `opal-server` in `PATH` (user-installed binary)
-2. Bundled platform binary in `releases/` (npm package distribution)
-3. Monorepo dev mode (`elixir -S mix run --no-halt` at repo root)
+1. Monorepo dev mode (`mise exec -- elixir -S mix run --no-halt` in `opal/`)
+2. `opal-server` in `PATH` (user-installed binary)
+3. Bundled platform binary in `releases/` (npm package distribution)
 
 Override with an explicit path:
 
@@ -889,12 +890,12 @@ const client = new OpalClient({
 
 ## Source Files
 
-- `lib/opal.ex` — Elixir public API
-- `lib/opal/tool.ex` — Tool behaviour definition
-- `lib/opal/events.ex` — Registry-based pub/sub
-- `lib/opal/config.ex` — Configuration struct and defaults
-- `lib/opal/model.ex` — Model spec parsing and coercion
-- `lib/opal/rpc/stdio.ex` — JSON-RPC stdio transport
-- `lib/opal/rpc/protocol.ex` — Method and event schema definitions
-- `lib/opal/rpc/handler.ex` — RPC request dispatch
-- `src/sdk/` — TypeScript SDK (client, session, protocol types, transforms)
+- `opal/lib/opal.ex` — Elixir public API
+- `opal/lib/opal/tool/tool.ex` — Tool behaviour definition
+- `opal/lib/opal/events.ex` — Registry-based pub/sub
+- `opal/lib/opal/config.ex` — Configuration struct and defaults
+- `opal/lib/opal/provider/model.ex` — Model spec parsing and coercion
+- `opal/lib/opal/rpc/server.ex` — JSON-RPC stdio transport
+- `opal/lib/opal/rpc/protocol.ex` — Method and event schema definitions
+- `opal/lib/opal/rpc/rpc.ex` — JSON-RPC encode/decode helpers
+- `cli/src/sdk/` — TypeScript SDK (client, session, protocol types, transforms)

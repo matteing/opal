@@ -11,7 +11,7 @@ npm i -g @unfinite/opal
 opal
 ```
 
-On first launch, if no other provider API key is set, Opal will prompt you to authenticate with GitHub Copilot (see [Authentication](#authentication) below). Once authenticated, you're ready to go.
+On first launch, if no provider credentials are configured, Opal shows a setup wizard where you can authenticate with GitHub Copilot or enter an API key (see [Authentication](#authentication) below). Once configured, you're ready to go.
 
 ## Elixir library
 
@@ -53,12 +53,12 @@ OPAL_COPILOT_DOMAIN=github.mycompany.com opal
 Or in your Elixir config:
 
 ```elixir
-config :opal, copilot: [domain: "github.mycompany.com"]
+config :opal, copilot_domain: "github.mycompany.com"
 ```
 
 ### Other Providers
 
-Additional LLM providers (Anthropic, OpenAI, Google, etc.) are planned but not yet built in. See [Providers](providers.md) for the behaviour spec and how to add a custom provider.
+Opal can also detect and store API keys for Anthropic, OpenAI, and Google during setup. See [Providers](providers.md) for the current provider behaviour and how to add a custom provider.
 
 ## Configuration
 
@@ -68,7 +68,7 @@ Opal stores its data in `~/.opal/` (or `%APPDATA%/opal` on Windows). This includ
 |------|---------|
 | `~/.opal/auth.json` | Copilot OAuth tokens |
 | `~/.opal/settings.json` | Persistent user preferences (e.g. default model) |
-| `~/.opal/sessions/` | Saved conversation sessions (JSONL) |
+| `~/.opal/sessions/` | Saved conversation sessions (`.dets` files) |
 | `~/.opal/logs/` | Log files |
 
 ### Environment variables
@@ -89,7 +89,7 @@ When using Opal as a library, you can configure it via application config:
 config :opal,
   data_dir: "/custom/path",
   shell: :zsh,
-  copilot: [domain: "github.mycompany.com"]
+  copilot_domain: "github.mycompany.com"
 ```
 
 ## References

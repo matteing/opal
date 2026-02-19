@@ -23,6 +23,13 @@ The schema is defined directly in `Opal.Tool.AskUser`:
 defmodule Opal.Tool.AskUser do
   @behaviour Opal.Tool
 
+  alias Opal.Tool.Args, as: ToolArgs
+
+  @args_schema [
+    question: [type: :string, required: true],
+    choices: [type: {:list, :string}, default: []]
+  ]
+
   def name, do: "ask_user"
 
   def description do
@@ -48,20 +55,25 @@ defmodule Opal.Tool.AskUser do
     }
   end
 
-  def meta(%{"question" => q}), do: String.slice(q, 0, 60)
+  def meta(%{"question" => q}), do: Opal.Util.Text.truncate_preview(q, 60)
   def meta(_), do: "ask_user"
 
-  def execute(%{"question" => _} = args, context) do
-    params = %{
-      session_id: context.session_id,
-      question: args["question"],
-      choices: Map.get(args, "choices", [])
-    }
+  def execute(args, context) when is_map(args) do
+    with {:ok, opts} <-
+           ToolArgs.validate(args, @args_schema,
+             required_message: "Missing required parameter: question"
+           ) do
+      params = %{
+        session_id: context.session_id,
+        question: opts[:question],
+        choices: opts[:choices]
+      }
 
-    case Opal.RPC.Stdio.request_client("client/ask_user", params, :infinity) do
-      {:ok, %{"answer" => answer}} -> {:ok, answer}
-      {:ok, result} -> {:ok, inspect(result)}
-      {:error, reason} -> {:error, "User input request failed: #{inspect(reason)}"}
+      case Opal.RPC.Server.request_client("client/ask_user", params, :infinity) do
+        {:ok, %{"answer" => answer}} -> {:ok, answer}
+        {:ok, result} -> {:ok, inspect(result)}
+        {:error, reason} -> {:error, "User input request failed: #{inspect(reason)}"}
+      end
     end
   end
 
@@ -122,25 +134,27 @@ sequenceDiagram
 
 ### Tool Registration
 
-`AskUser` is in the default tool list (`lib/opal/config.ex`). When spawning sub-agents, `Opal.SubAgent.do_spawn` removes `AskUser` from the sub-agent's tool list:
+`AskUser` is in the default tool list (`lib/opal/config.ex`). During sub-agent spawning, `Opal.Agent.Spawner.resolve_tools/2` filters it out from the child tool list:
 
 ```elixir
-tools = Enum.reject(parent_tools, &(&1 == Opal.Tool.AskUser))
+overrides
+|> Map.get(:tools, parent.tools)
+|> Enum.reject(&(&1 == Opal.Tool.AskUser))
 ```
 
 ### CLI Integration
 
-**Session SDK** (`src/sdk/session.ts`) — handles `client/ask_user` in `onServerRequest`, exposes `onAskUser` callback in `SessionOptions`.
+**Session SDK** (`cli/src/sdk/session.ts`) — handles `client/ask_user` in `onServerRequest`, exposes `onAskUser` callback in `SessionOptions`.
 
-**State** (`src/hooks/use-opal.ts`) — `askUser` state field + `resolveAskUser` action, wired with a promise-based resolver ref.
+**State** (`cli/src/hooks/use-opal.ts`) — `askUser` state field + `resolveAskUser` action, wired with a promise-based resolver ref.
 
-**Component** (`src/components/ask-user-dialog.tsx`) — Ink component with arrow-key choice navigation, freeform text input, and combined mode.
+**Component** (`cli/src/components/ask-user-dialog.tsx`) — Ink component with arrow-key choice navigation, freeform text input, and combined mode.
 
-**App** (`src/app.tsx`) — conditionally renders `<AskUserDialog>` when `state.askUser` is non-null.
+**App** (`cli/src/app.tsx`) — conditionally renders `<AskUserDialog>` when `state.askUser` is non-null.
 
 ## Edge Cases
 
-- **Timeout**: `execute/2` passes `timeout: :infinity` since user input has no upper bound.
+- **Timeout**: `execute/2` calls `request_client(..., :infinity)` since user input has no upper bound.
 - **Abort during input**: If the user presses Ctrl+C while `ask_user` is pending, the agent shuts down and the pending `request_client` call fails.
 - **Sub-agents**: `AskUser` is excluded from sub-agent tool lists. Sub-agents cannot ask the user questions.
 - **SDK (non-interactive)**: SDK users who don't set `onAskUser` get an error (same as `onInput` today).

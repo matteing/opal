@@ -1,6 +1,6 @@
 # References
 
-Compiled from `## References` sections across the docs.
+Compiled from `## References` sections across docs, plus README and ongoing research backlog entries.
 
 ## Projects & Inspiration
 
@@ -26,7 +26,7 @@ Compiled from `## References` sections across the docs.
 
 ## LLM Providers & Models
 
-- [LLMDB](https://hexdocs.pm/llm_db/readme.html) — Fast, persistent_term-backed LLM model metadata catalog with O(1) lookups. Powers auto-discovery of models, context windows, and capabilities. ([providers](../providers.md))
+- [LLMDB](https://hexdocs.pm/llmdb) — Model database powering auto-discovery of models, context windows, and capabilities. ([providers](../providers.md))
 
 ## Reasoning & Thinking
 

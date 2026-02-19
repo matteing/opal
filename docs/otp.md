@@ -14,13 +14,13 @@ This makes Opal a natural foundation for building something like an open-source 
 
 ## Process Model
 
-Every active session is a cluster of processes:
+A running Opal node is composed of global transport processes plus per-session clusters:
 
 | Process | OTP Behaviour | Purpose |
 |---------|--------------|---------|
 | `Opal.Agent` | `:gen_statem` | Agent loop — LLM streaming, tool dispatch, explicit FSM |
 | `Opal.Session` | GenServer | Conversation tree — message storage, branching, compaction |
-| `Opal.RPC.Stdio` | GenServer | JSON-RPC transport over stdin/stdout |
+| `Opal.RPC.Server` | GenServer | JSON-RPC transport over stdin/stdout (global) |
 | `Opal.SessionServer` | Supervisor | Per-session supervisor (`:rest_for_one`) |
 | `Opal.MCP.Supervisor` | Supervisor | Per-session MCP client group (`:one_for_one`) |
 | Tool tasks | Task (under Task.Supervisor) | Supervised non-blocking tool execution |
@@ -32,25 +32,24 @@ Each session is isolated. A crash in one session's agent cannot affect another s
 
 ### Agent — The Core Loop
 
-`Opal.Agent` is implemented as a `:gen_statem` with `:handle_event_function` mode. The status field on `State` tracks which phase the agent is in (`idle`, `running`, `streaming`, `executing_tools`). All events flow through a single `handle_event/4` callback:
+`Opal.Agent` is implemented as a `:gen_statem` with `:state_functions` mode. The status field on `State` tracks which phase the agent is in (`idle`, `running`, `streaming`, `executing_tools`), and events are handled by the state callbacks (`idle/3`, `running/3`, `streaming/3`, `executing_tools/3`).
 
-**Casts** for fire-and-forget actions from the CLI:
-- `{:prompt, text}` — start a new turn
-- `{:steer, text}` — inject guidance mid-turn (queued if busy)
-- `:abort` — cancel the current streaming response
+**Calls** for synchronous coordination:
+- `{:prompt, text}` — start a new turn (or queue when busy)
+- `:get_state` / `:get_context` — snapshots for introspection and sub-agent spawning
+- `{:set_model, model}` / `{:set_provider, module}` — runtime model/provider swap
+- `{:sync_messages, messages}` / `{:configure, attrs}` — session sync and runtime config changes
 
-**Calls** for synchronous queries:
-- `:get_state` — snapshot for sub-agent spawning
-- `{:set_model, id}` — runtime model swap
-- `{:load_skill, name}` — activate a skill
+**Casts** for fire-and-forget control:
+- `:abort` — cancel the current streaming response and in-flight tools
 
-**Info messages** for system events:
+**Info/state timeout messages** for system events:
 - Stream chunks from `Req` HTTP responses (SSE parsing)
-- `:stream_watchdog` — periodic timeout check during streaming
+- Tool task completion and `:DOWN` messages
 - `:retry_turn` — exponential backoff after transient failures
-- Tool task completion messages
+- `:stall_check` (`:state_timeout` in `:streaming`) — streaming stall detection
 
-The key insight is unchanged: async commands for user intent, calls for coordination, and mailbox-driven I/O for streaming/tool completion. The explicit FSM makes legal transitions first-class and easier to reason about.
+The key insight is unchanged: calls for user intent/coordination plus mailbox-driven I/O for streaming and tool completion. The explicit FSM makes legal transitions first-class and easier to reason about.
 
 ### Session — Tree in a Process
 
@@ -58,15 +57,15 @@ The key insight is unchanged: async commands for user intent, calls for coordina
 
 Operations like `:get_path` (walk parent pointers from leaf to root) and `{:replace_path_segment, ...}` (compaction) are pure data transforms on the ETS table, serialized through the GenServer mailbox.
 
-### Stdio — Async I/O with Request Tracking
+### RPC Server — Async I/O with Request Tracking
 
-`Opal.RPC.Stdio` manages the stdin/stdout Port. It does three things:
+`Opal.RPC.Server` manages stdio transport. It does three things:
 
-1. **Receives** newline-delimited JSON from stdin via Port messages (`handle_info`)
-2. **Sends** JSON-RPC notifications to stdout (event broadcasts, also `handle_info`)
-3. **Tracks** pending server→client requests with auto-incrementing IDs (`handle_call`)
+1. **Receives** newline-delimited JSON from stdin in a reader task (`stdin_loop/1`), then forwards lines to the GenServer (`handle_info`)
+2. **Sends** JSON-RPC responses/notifications to stdout through a write Port
+3. **Tracks** pending server→client requests with incrementing IDs (`handle_call`)
 
-The Port is opened with `{:fd, 0, 1}` — raw file descriptors, no shell wrapper.
+It uses raw file descriptors (`{:fd, 0, 0}` for stdin, `{:fd, 1, 1}` for stdout), with no shell wrapper.
 
 ## Registry — Process Discovery Without Atoms
 
@@ -106,7 +105,7 @@ Registry.dispatch(Opal.Events.Registry, session_id, fn entries ->
 end)
 ```
 
-The `:all` key is a wildcard — subscribers receive events from every session. `Opal.RPC.Stdio` subscribes to specific session IDs after `session/start`.
+The `:all` key is a wildcard — subscribers receive events from every session. `Opal.RPC.Server` subscribes to specific session IDs after `session/start`.
 
 ## ETS and DETS
 
@@ -115,7 +114,7 @@ The `:all` key is a wildcard — subscribers receive events from every session. 
 `Opal.Session` creates a private ETS table per session:
 
 ```elixir
-:ets.new(:session, [:set, :private])
+:ets.new(:opal_session, [:set, :private])
 ```
 
 Messages are keyed by UUID. The table is private (only the owning process can access it), which is fine because all access goes through the GenServer. ETS was chosen over a map in GenServer state because conversation trees can grow large and ETS avoids copying data on every state update.
@@ -124,7 +123,7 @@ The table is deleted in `terminate/2` — when the session supervisor shuts down
 
 ### DETS — Task Persistence
 
-`Opal.Tool.Tasks` uses DETS (disk-backed ETS) at `.opal/tasks.dets` for the task tracker. Unlike ETS, DETS survives process restarts. This is intentional — tasks represent cross-session work plans.
+`Opal.Tool.Tasks` uses DETS (disk-backed ETS) in hashed files under `~/.opal/tasks/` (for example `~/.opal/tasks/<hash>.dets`) for the task tracker. Unlike ETS, DETS survives process restarts. This is intentional — tasks represent cross-session work plans.
 
 DETS is opened/closed per tool invocation rather than held open in a process. This is simpler than wrapping it in a GenServer and acceptable for the low-frequency access pattern of task management.
 
@@ -138,7 +137,7 @@ Task.Supervisor.async_nolink(tool_supervisor, fn ->
 end)
 ```
 
-Tool calls are dispatched sequentially per turn, but each tool runs in a supervised async task so the agent loop stays responsive. Results are delivered back through mailbox messages, and if the session supervisor crashes, the Task.Supervisor's children are automatically terminated.
+Tool calls are dispatched concurrently per turn, and each tool runs in a supervised async task so the agent loop stays responsive. Results are delivered back through mailbox messages, and if the session supervisor crashes, the Task.Supervisor's children are automatically terminated.
 
 This is safer than spawning raw processes: supervised tasks are tracked, limited, and cleaned up on shutdown.
 
@@ -150,7 +149,7 @@ Sub-agents are full `Opal.Agent` processes started under a per-session DynamicSu
 DynamicSupervisor.start_child(sub_agent_supervisor, {Opal.Agent, opts})
 ```
 
-The DynamicSupervisor is chosen over a static Supervisor because sub-agents are created on demand (the agent decides at runtime whether to delegate). Sub-agents inherit the parent's config but run independently — they have their own streaming connections, tool supervisors, and state.
+The DynamicSupervisor is chosen over a static Supervisor because sub-agents are created on demand (the agent decides at runtime whether to delegate). Sub-agents inherit the parent's config but run independently — they have their own streaming connections and state while sharing the per-session tool supervisor.
 
 Depth is limited to one level by excluding `Opal.Tool.SubAgent` from the sub-agent's tool list.
 
@@ -158,24 +157,23 @@ Depth is limited to one level by excluding `Opal.Tool.SubAgent` from the sub-age
 
 | Supervisor | Strategy | Rationale |
 |-----------|----------|-----------|
-| Application | `:one_for_one` | Registry and SessionSupervisor are independent |
+| Application | `:rest_for_one` | Core infrastructure starts first; later children restart if an earlier dependency fails |
 | SessionSupervisor | `:one_for_one` (Dynamic) | Sessions are independent of each other |
 | SessionServer | `:rest_for_one` | If infrastructure (Task.Supervisor, DynamicSupervisor) crashes, restart the Agent that depends on it |
 | MCP.Supervisor | `:one_for_one` | MCP server connections are independent |
 
-The `:rest_for_one` strategy in SessionServer is the key design choice. Children are ordered: Task.Supervisor → DynamicSupervisor → [MCP.Supervisor] → [Session] → Agent. If the Task.Supervisor crashes, the Agent restarts (it can't function without tool execution). But if the Agent crashes, the Task.Supervisor stays up — tasks in flight are collected when the Agent restarts.
+The `:rest_for_one` strategy in SessionServer is the key design choice. Children are ordered: Task.Supervisor → DynamicSupervisor → [MCP.Supervisor] → [Session] → Agent. If the Task.Supervisor crashes, the Agent restarts (it can't function without tool execution). If the Agent crashes, infrastructure children stay up and the Agent restarts cleanly.
 
 ## Port — External I/O
 
-`Opal.RPC.Stdio` opens a Port for stdin/stdout:
+`Opal.RPC.Server` uses separate Ports for stdout writing and stdin reading:
 
 ```elixir
-Port.open({:fd, 0, 1}, [:binary, :stream, {:line, @max_line}])
+stdout = :erlang.open_port({:fd, 1, 1}, [:binary, :out])
+stdin = :erlang.open_port({:fd, 0, 0}, [:binary, :stream, :eof])
 ```
 
-Port messages arrive as `{port, {:data, {:eol, line}}}` in `handle_info`. This integrates stdin into OTP's message-passing model — the GenServer processes JSON-RPC requests from stdin the same way it processes internal Erlang messages.
-
-The `:line` mode handles buffering: partial reads become `{:noeol, chunk}` messages that are accumulated until a full line arrives.
+Stdin data arrives as `{port, {:data, chunk}}` in the reader loop and is manually split on newlines before forwarding `{:stdin_line, line}` to the GenServer. This integrates stdin into OTP's message-passing model while keeping JSON-RPC dispatch in one process.
 
 ## Message Passing Patterns
 
@@ -187,7 +185,7 @@ The agent broadcasts events during a turn:
 Agent (state machine transition)
   → Opal.Events.broadcast(session_id, {:message_delta, %{delta: "hello"}})
     → Registry.dispatch sends {:opal_event, ...} to all subscribers
-      → Stdio.handle_info serializes to JSON, writes to stdout
+      → RPC.Server.handle_info serializes to JSON, writes to stdout
         → CLI receives and renders
 ```
 
@@ -215,10 +213,10 @@ Process.send_after(self(), :retry_turn, delay_ms)
 |------|----------|
 | `lib/opal/application.ex` | Application startup, root supervisor children |
 | `lib/opal/agent/agent.ex` | Agent `:gen_statem` loop |
-| `lib/opal/session.ex` | Session GenServer with ETS |
-| `lib/opal/session_server.ex` | Per-session Supervisor |
+| `lib/opal/session/session.ex` | Session GenServer with ETS |
+| `lib/opal/session/server.ex` | Per-session Supervisor |
 | `lib/opal/events.ex` | Pub/sub helpers (subscribe, broadcast) |
-| `lib/opal/rpc/stdio.ex` | JSON-RPC transport GenServer |
-| `lib/opal/sub_agent.ex` | Sub-agent spawning helpers |
+| `lib/opal/rpc/server.ex` | JSON-RPC transport GenServer |
+| `lib/opal/agent/spawner.ex` | Sub-agent spawning helpers |
 | `lib/opal/mcp/supervisor.ex` | MCP client supervision |
 | `lib/opal/mcp/client.ex` | MCP client (Anubis-based) |

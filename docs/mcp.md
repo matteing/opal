@@ -35,11 +35,11 @@ Clients register in the process registry under `{:mcp_client, server_name}` for 
 Discovers tools from all connected servers and wraps each as a runtime module implementing `Opal.Tool`:
 
 ```elixir
-# Dynamically creates:
-defmodule :"mcp_tool_github_create_issue" do
+# Dynamically creates modules like:
+defmodule Opal.MCP.Tool.GithubCreateIssue do
   @behaviour Opal.Tool
   def name, do: "create_issue"
-  def execute(args, _ctx), do: Client.server_call_tool(client, "create_issue", args)
+  def execute(args, _ctx), do: Opal.MCP.Client.server_call_tool("github", "create_issue", args)
 end
 ```
 
@@ -58,13 +58,19 @@ Provides access to MCP resources (non-tool data like documentation or configurat
 
 ## Configuration
 
-MCP servers are configured in `Opal.Config`:
+MCP servers can be configured explicitly under `Opal.Config.Features` (`features.mcp.servers`) and are also discovered from `mcp.json` files via `Opal.MCP.Config`.
 
 ```elixir
-mcp_servers: [
-  %{name: "github", transport: {:stdio, command: "gh", args: ["copilot", "mcp"]}},
-  %{name: "fs", transport: {:streamable_http, url: "http://localhost:3000/mcp"}}
-]
+features: %{
+  mcp: %{
+    enabled: true,
+    servers: [
+      %{name: "github", transport: {:stdio, command: "gh", args: ["copilot", "mcp"]}},
+      %{name: "fs", transport: {:streamable_http, url: "http://localhost:3000/mcp"}}
+    ],
+    config_files: []
+  }
+}
 ```
 
 ## Source
@@ -73,3 +79,4 @@ mcp_servers: [
 - `lib/opal/mcp/bridge.ex` — Tool discovery and runtime module creation
 - `lib/opal/mcp/supervisor.ex` — Process supervision
 - `lib/opal/mcp/resources.ex` — Resource access
+- `lib/opal/mcp/config.ex` — `mcp.json` discovery and parsing

@@ -26,7 +26,7 @@ A node is a running BEAM instance with a name. Opal uses **short names** (hostna
 opal_12345@MacBook-Pro
 ```
 
-The name is composed of a prefix (`opal_`) plus the OS process ID, making it unique per machine. Short names only allow connections between nodes on the same host (or same subnet with hostname resolution).
+When distribution is started via `Opal.Application.start_distribution/0`, the default name is `opal_<pid>@<host>`. When started via CLI runtime config (`--expose` / `opal/config/set`), the node name comes from the provided `name` value (for example `opal@<host>`). Short names only allow connections between nodes on the same host (or same subnet with hostname resolution).
 
 ### EPMD — The Discovery Service
 
@@ -51,13 +51,13 @@ EPMD starts automatically the first time any node on the machine needs it and st
 
 Erlang distribution uses a **shared secret cookie** for authentication. Two nodes can only connect if they present the same cookie during the TCP handshake. This is the *only* authentication layer — there is no encryption, no authorization, no access control beyond "you know the cookie."
 
-Opal generates a **cryptographically random cookie** each time distribution starts:
+By default, Opal generates a **cryptographically random cookie** when distribution starts:
 
 ```elixir
 :crypto.strong_rand_bytes(18) |> Base.url_encode64(padding: false) |> String.to_atom()
 ```
 
-The cookie is written to `~/.opal/node` (permissions `0600`) so the inspect script can read it. This means each Opal session gets a unique cookie — even if someone knows the code, they can't predict the cookie.
+The cookie is written to `~/.opal/node` (permissions `0600`) so the inspect script can read it. If you provide a cookie explicitly (for example via `--expose name#cookie`), that fixed cookie is written instead.
 
 To use a fixed cookie instead (e.g. for a persistent server), set it in your Elixir config:
 
@@ -81,14 +81,14 @@ This is by design — Erlang distribution is an operations tool, not a public AP
 
 ### Startup Flow
 
-When distribution is requested, `Opal.Application.start_distribution/0` runs:
+In normal CLI usage (`--expose`, including `mise run dev`), distribution is started by `opal/config/set` in `Opal.RPC.Server`. The boot-time path (when `config :opal, start_distribution: true`) uses `Opal.Application.start_distribution/0`:
 
 ```mermaid
 flowchart TD
     A[start_distribution/0] --> B{Node.alive?}
     B -->|yes| C[Write existing node info to ~/.opal/node]
-    B -->|no| D[Node.start opal_PID, :shortnames]
-    D --> E[Generate random cookie]
+    B -->|no| D[Node.start node_name, name_domain: :shortnames]
+    D --> E[Resolve cookie (random or configured)]
     E --> F[Write node name + cookie to ~/.opal/node]
     F --> G[Return {:ok, node_name}]
     C --> G
@@ -108,12 +108,13 @@ The `mise run inspect` command runs `scripts/inspect.sh`, which reads the node n
 ```bash
 NODE_NAME=$(sed -n '1p' ~/.opal/node)
 COOKIE=$(sed -n '2p' ~/.opal/node)
-exec iex --sname "inspector_$$" --cookie "$COOKIE" --remsh "$NODE_NAME" ...
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec iex --sname "inspector_$$" --cookie "$COOKIE" --remsh "$NODE_NAME" --dot-iex "$SCRIPT_DIR/inspect.exs"
 ```
 
 ### Inspector Connection
 
-`--remsh` tells IEx to open a **remote shell** on the target node. The inspector's IEx process runs on the agent's node, so all expressions evaluate in the agent's context. The `-e "Opal.Inspect.watch()"` flag auto-runs the event watcher on connect, which subscribes to the event registry and streams events to the terminal.
+`--remsh` tells IEx to open a **remote shell** on the target node. The inspector's IEx process runs on the agent's node, so all expressions evaluate in the agent's context. The `--dot-iex scripts/inspect.exs` hook auto-runs the event watcher on connect by calling `Opal.Inspect.watch/0`, which subscribes to the event registry and streams events to the terminal.
 
 ## Security
 
@@ -121,7 +122,7 @@ Opal applies these mitigations by default:
 
 | Measure | Detail |
 |---------|--------|
-| **Random cookie** | A cryptographically random 24-char cookie is generated per session. Configurable via `config :opal, distribution_cookie: :my_cookie`. |
+| **Random cookie** | A cryptographically random 24-char cookie is generated when no cookie is provided. Configurable via `config :opal, distribution_cookie: :my_cookie` or runtime `--expose name#cookie`. |
 | **Restrictive file permissions** | `~/.opal/node` is written with `0600` — only the owning user can read it. |
 
 ### Remaining considerations
@@ -151,14 +152,15 @@ Opal.Events.subscribe("session-id")
 flush()
 
 # Check token usage
-:sys.get_state(pid) |> elem(1) |> Map.get(:usage)
+:sys.get_state(pid) |> elem(1) |> Map.get(:token_usage)
 ```
 
 ## Source Files
 
-- `lib/opal/application.ex` — `start_distribution/0`, node file read/write
-- `lib/opal/inspect.ex` — Event watcher for `mise run inspect`
-- `lib/opal/events.ex` — Registry-based pub/sub
+- `opal/lib/opal/application.ex` — `start_distribution/0`, node file read/write
+- `opal/lib/opal/rpc/server.ex` — Runtime distribution handling for `opal/config/set`
+- `opal/lib/opal/util/inspect.ex` — Event watcher for `mise run inspect`
+- `opal/lib/opal/events.ex` — Registry-based pub/sub
 - `scripts/inspect.sh` — Wrapper script that reads `~/.opal/node` and launches IEx
 
 ## References

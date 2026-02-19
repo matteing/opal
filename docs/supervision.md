@@ -16,7 +16,7 @@ graph TD
     AgentRegistry["Opal.Registry<br/><i>:unique — agent/session lookup</i>"]
     Registry["Opal.Events.Registry<br/><i>:duplicate — pubsub backbone</i>"]
     SessionSup["Opal.SessionSupervisor<br/><i>DynamicSupervisor :one_for_one</i>"]
-    Stdio["Opal.RPC.Stdio<br/><i>optional, gated by :start_rpc</i>"]
+    Stdio["Opal.RPC.Server<br/><i>optional, gated by :start_rpc</i>"]
 
     OpalSup --> AgentRegistry
     OpalSup --> Registry
@@ -27,10 +27,12 @@ graph TD
         SSA["SessionServer<br/><i>Supervisor :rest_for_one</i>"]
         TSA["Task.Supervisor<br/><i>tool execution</i>"]
         DSA["DynamicSupervisor<br/><i>sub-agents</i>"]
+        MCPA["Opal.MCP.Supervisor<br/><i>MCP clients (optional)</i>"]
         SesA["Opal.Session<br/><i>persistence (optional)</i>"]
         AgentA["Opal.Agent<br/><i>agent loop</i>"]
         SSA --> TSA
         SSA --> DSA
+        SSA --> MCPA
         SSA --> SesA
         SSA --> AgentA
     end
@@ -90,7 +92,7 @@ A `Registry` with `:duplicate` keys. Any process can subscribe to a session ID
 and receive events. This is the **pubsub backbone** — everything else
 is per-session. The registry never holds state; it simply routes messages.
 
-### `Opal.RPC.Stdio` (optional)
+### `Opal.RPC.Server` (optional)
 
 The stdio JSON-RPC transport. Started by default but can be disabled by setting
 `config :opal, start_rpc: false` — useful when embedding the core library as an
@@ -111,26 +113,28 @@ started in order:
 
 1. **`Task.Supervisor`** — executes tool calls as supervised tasks
 2. **`DynamicSupervisor`** — manages sub-agent processes
-3. **`Opal.Session`** — conversation persistence *(optional, started when `session: true`)*
-4. **`Opal.Agent`** — the agent loop
+3. **`Opal.MCP.Supervisor`** — MCP client connections *(optional, started when MCP servers are configured)*
+4. **`Opal.Session`** — conversation persistence *(optional, started when `session: true`)*
+5. **`Opal.Agent`** — the agent loop
 
 The `:rest_for_one` strategy means if the `Task.Supervisor` or
-`DynamicSupervisor` crashes, the Agent (which depends on them) is restarted
+`DynamicSupervisor` or `Opal.MCP.Supervisor` crashes, the Agent (which depends on them) is restarted
 too. But a crash in the Agent does not affect the supervisors above it.
 
-Each child is registered with a session-scoped atom name for discoverability:
+Each child is registered via `Opal.Registry` for discoverability:
 
-| Process           | Name                                  |
-|-------------------|---------------------------------------|
-| Task.Supervisor   | `:"opal_tool_sup_#{session_id}"`      |
-| DynamicSupervisor | `:"opal_sub_agent_sup_#{session_id}"` |
-| Session           | `:"opal_session_#{session_id}"`       |
+| Process              | Registry key                 |
+|----------------------|------------------------------|
+| Task.Supervisor      | `{:tool_sup, session_id}`    |
+| DynamicSupervisor    | `{:sub_agent_sup, session_id}` |
+| MCP.Supervisor       | `{:mcp_sup, session_id}`     |
+| Session              | `{:session, session_id}`     |
 
 ### `Opal.Agent`
 
 A `:gen_statem` process that implements the core agent loop:
 
-1. Receive a user prompt (`:cast`)
+1. Receive a user prompt (`:call`)
 2. Stream an LLM response via the configured `Provider`
 3. If the LLM returns tool calls → execute them via supervised tasks → loop to step 2
 4. If the LLM returns text only → broadcast `agent_end` → go idle
@@ -142,8 +146,7 @@ The Agent holds references to its session-local `tool_supervisor` and
 
 A `GenServer` backed by an ETS table that stores conversation messages in a
 tree structure (each message has a `parent_id`). Supports branching — rewinding
-to any past message and forking the conversation. Persistence is via ETF
-serialization to disk.
+to any past message and forking the conversation. Persistence is via DETS.
 
 ---
 
@@ -178,7 +181,7 @@ flowchart LR
     Context -- "start tasks" --> Tasks["Tool Tasks<br/><i>read from context</i>"]
 ```
 
-### 2. Asynchronous Casts — Commands
+### 2. Command Calls & Casts
 
 ```mermaid
 sequenceDiagram
@@ -190,7 +193,7 @@ sequenceDiagram
     Note right of Agent: begins turn...
 ```
 
-Used for: `Agent.prompt/2`, `Agent.abort/1`
+Used for: `Agent.prompt/2` (call), `Agent.abort/1` (cast)
 
 Prompts are synchronous calls that return `%{queued: boolean}`. The caller
 observes progress through events (pattern 3). This keeps the UI responsive —
@@ -223,12 +226,12 @@ event as a regular Erlang message:
 | `{:agent_start}`                     | Agent begins processing a prompt     |
 | `{:message_delta, %{delta: text}}`   | Streaming text token from the LLM    |
 | `{:thinking_delta, %{delta: text}}`  | Streaming thinking/reasoning token   |
-| `{:turn_end, message, tool_calls}`   | LLM turn complete, tool calls follow |
-| `{:tool_execution_start, name, args}`| Tool begins executing                |
-| `{:tool_execution_end, name, result}`| Tool finished executing              |
-| `{:agent_end, messages}`             | Agent is done, returning to idle     |
+| `{:turn_end, message, _results}`     | LLM turn complete                    |
+| `{:tool_execution_start, name, call_id, args, meta}` | Tool begins executing |
+| `{:tool_execution_end, name, call_id, result}` | Tool finished executing |
+| `{:agent_end, messages, usage}`      | Agent is done, returning to idle     |
 | `{:error, reason}`                   | Unrecoverable error occurred         |
-| `{:sub_agent_event, sub_id, event}`  | Forwarded event from a sub-agent     |
+| `{:sub_agent_event, parent_call_id, sub_id, event}` | Forwarded event from a sub-agent |
 
 This is built on OTP's `Registry` — no external dependencies, no message
 broker, no serialization overhead. Events are plain Erlang terms sent via
@@ -238,7 +241,7 @@ broker, no serialization overhead. Events are plain Erlang terms sent via
 
 Sub-agents broadcast events to their own session ID. The `SubAgent` tool
 subscribes to those events, collects the response, and **re-broadcasts** each
-event to the parent session tagged with the sub-agent's ID:
+event to the parent session tagged with the parent tool call ID and sub-agent ID:
 
 ```mermaid
 sequenceDiagram
@@ -251,8 +254,8 @@ sequenceDiagram
     SubAgent->>Registry: broadcast(sub_id, event)
     Registry->>ToolTask: {:opal_event, "sub-x1", event}
     Note over ToolTask: re-broadcasts to parent
-    ToolTask->>ParentReg: broadcast {:sub_agent_event, "sub-x1", event}
-    ParentReg->>CLI: {:sub_agent_event, "sub-x1", {:message_delta, ...}}
+    ToolTask->>ParentReg: broadcast {:sub_agent_event, "call-42", "sub-x1", event}
+    ParentReg->>CLI: {:sub_agent_event, "call-42", "sub-x1", {:message_delta, ...}}
 ```
 
 This gives the parent session **real-time observability** into sub-agent
@@ -305,8 +308,8 @@ def handle_info(
       %State{status: :executing_tools, pending_tool_tasks: tasks} = state
     ) when is_map_key(tasks, ref) do
   {_task, tc} = Map.fetch!(tasks, ref)
-  error_msg = "Tool execution crashed: #{inspect(reason)}"
-  Opal.Agent.ToolRunner.handle_tool_result(ref, tc, {:error, error_msg}, state)
+  Opal.Agent.ToolRunner.collect_result(ref, tc, {:error, "Tool crashed: #{inspect(reason)}"}, state)
+  |> next()
 end
 ```
 
@@ -404,11 +407,12 @@ started *after* it are restarted. The child order is:
 ```mermaid
 flowchart TD
     A["1. Task.Supervisor"] -->|"if this crashes..."| B["2. DynamicSupervisor"]
-    B -->|"...this restarts..."| C["3. Session (optional)"]
-    C -->|"...this restarts..."| D["4. Agent"]
+    B -->|"...this restarts..."| C["3. MCP.Supervisor (optional)"]
+    C -->|"...this restarts..."| D["4. Session (optional)"]
+    D -->|"...this restarts..."| E["5. Agent"]
 
     style A fill:#f9f,stroke:#333
-    style D fill:#bbf,stroke:#333
+    style E fill:#bbf,stroke:#333
 ```
 
 This guarantees the Agent never runs without a working `Task.Supervisor`. But
@@ -466,8 +470,8 @@ everything.
 
 - **Non-blocking execution** — the Agent stays responsive during tool runs
 - **Fault isolation** — one crashing tool doesn't take down the agent
-- **Steering support** — `drain_mailbox_steers` checks between tool dispatches
-- **Sequential with control** — tools run one at a time with abort/skip support
+- **Parallel batches** — tool calls in a turn are spawned concurrently
+- **Abort support** — in-flight tasks can be cancelled without blocking the loop
 
 ### Why sub-agents share the parent's Task.Supervisor?
 

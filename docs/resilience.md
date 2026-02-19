@@ -1,6 +1,6 @@
 # Resilience & Crash Recovery
 
-Opal's OTP supervision tree ensures process crashes are contained and restarted automatically. However, the current architecture has gaps between "process restarts" and "user-visible recovery" — a restarted agent loses in-flight state, and the CLI doesn't detect or recover from backend failures. This document maps those gaps and outlines the path to closing them.
+Opal's OTP supervision tree ensures process crashes are contained and restarted automatically. Since this audit was first written, most resilience gaps have been fixed: agent state recovery, crash signaling, heartbeat checks, and auto-save defaults are now in place. The main remaining gap is automatic backend respawn/reconnect in the CLI.
 
 ## Current Behavior
 
@@ -29,41 +29,42 @@ The gaps are in the layer between process restarts and user experience:
 sequenceDiagram
     participant User
     participant CLI as CLI (React/Ink)
-    participant RPC as RPC.Stdio
+    participant RPC as RPC.Server
     participant Agent as Agent (:gen_statem)
 
     User->>CLI: types a prompt
     CLI->>RPC: agent/prompt
-    RPC->>Agent: cast prompt
+    RPC->>Agent: call prompt
     Agent->>Agent: streaming response...
 
     Note over Agent: 💥 crash (e.g. unhandled event shape)
 
-    Agent->>Agent: supervisor restarts with blank state
-    Note over CLI: UI still shows last message<br/>No error displayed<br/>No indication agent died<br/>Input appears to work but does nothing
+    Agent->>Agent: supervisor restarts and recovers session state
+    Note over CLI: UI now surfaces recovery/error state<br/>but backend process exits still require manual restart
 ```
 
-## Gap 1: Silent Death in the CLI
+## Gap 1: Silent Death in the CLI — Resolved
 
-**Problem:** When the agent crashes after `sessionReady`, the CLI captures the error in state but never renders it. The error-display path only triggers pre-session. The user sees a working-looking UI that silently does nothing.
-
-**Where it happens:**
-
-- `src/hooks/use-opal.ts` — `"error"` event sets `state.error`, but the UI only checks `state.error` when `!state.sessionReady` (`src/app.tsx`).
-- `src/sdk/client.ts` — on process exit, pending requests reject with `"opal-server exited"` but no reconnect is attempted.
-
-**What recovery looks like:** The CLI should detect the crash and display a clear message: *"The agent crashed and lost its current turn. Your conversation history is saved. Press Enter to continue."* The input should remain functional.
-
-## Gap 2: Restarted Agent Has Blank State
-
-**Problem:** When the supervisor restarts the agent after a crash, the new process starts in `:idle` with an empty message history. The `Session` GenServer (which holds the ETS conversation tree) survives the crash (`:rest_for_one` only restarts children after the crashed one), but the restarted agent doesn't reload from it.
+**Status:** Resolved for post-ready crash visibility. The CLI now renders errors after startup and shows an explicit recovery message when the agent restarts.
 
 **Where it happens:**
 
-- `lib/opal/agent/agent.ex` `init/1` — initializes fresh state, does not check for an existing `Session` process or load prior messages.
-- `lib/opal/session_server.ex` — starts children in order but has no post-restart hook to reconnect the agent to the surviving session.
+- `cli/src/lib/reducers.ts` — `"error"` sets `state.error`; `"agentRecovered"` adds a visible recovery timeline message.
+- `cli/src/app.tsx` — renders `state.error` even when `state.sessionReady` is true.
+- `cli/src/sdk/client.ts` — still does not auto-reconnect after process exit (covered in Gap 6).
 
-**What recovery looks like:** On init, the agent should detect whether a `Session` process already exists for its session ID. If so, it should call `Session.get_path/1` to reload the conversation history into its state. The user loses the in-flight turn but keeps the full conversation.
+**Current UX:** Users now see either an error banner (`⚠ ...`) or the recovery message *"⚠ Agent crashed and recovered — conversation history preserved."* rather than a silent no-op UI.
+
+## Gap 2: Restarted Agent Has Blank State — Resolved
+
+**Status:** Resolved. A restarted agent reloads conversation history from the surviving `Session` process.
+
+**Where it happens:**
+
+- `opal/lib/opal/agent/agent.ex` `init/1` → `maybe_recover_session/1` loads `Opal.Session.get_path/1` and emits `{:agent_recovered}`.
+- `opal/lib/opal/session/server.ex` — uses `:rest_for_one` and starts `Opal.Session` before `Opal.Agent`, so the session survives agent-only crashes.
+
+**Current behavior:** In-flight work is lost, but prior conversation history is restored automatically.
 
 ```mermaid
 flowchart LR
@@ -75,48 +76,51 @@ flowchart LR
     Fresh --> Idle
 ```
 
-## Gap 3: No Crash Notification to Subscribers
+## Gap 3: No Crash Notification to Subscribers — Partially Resolved
 
-**Problem:** When the agent crashes, event subscribers (the CLI, the inspect watcher, tests) receive no notification. The `Events.Registry` subscription is per-process — the *old* agent process's broadcasts stop, and the *new* agent process hasn't broadcast anything yet. Subscribers are left waiting for events that will never arrive.
+**Status:** Partially resolved. Subscribers now get a recovery lifecycle event, but there is still no crash-reason payload.
 
 **Where it happens:**
 
-- `lib/opal/events.ex` — no mechanism for broadcasting lifecycle events about the agent process itself (as opposed to events *from* the agent).
-- `lib/opal/rpc/stdio.ex` — subscribes to events but has no monitor on the agent process.
+- `opal/lib/opal/agent/agent.ex` — broadcasts `{:agent_recovered}` during startup recovery.
+- `opal/lib/opal/rpc/server.ex` — serializes this as `"agent_recovered"` on `agent/event`.
+- `cli/src/lib/reducers.ts` — handles `agentRecovered` and appends a visible timeline notice.
 
-**What recovery looks like:** The `SessionServer` (or a dedicated monitor process) should detect agent termination and broadcast a recovery event:
+**Current recovery event:**
 
 ```elixir
-{:agent_crashed, %{reason: reason, recovered: true}}
+{:agent_recovered}
 ```
 
-Subscribers can then update their UI, flush pending state, and wait for the recovered agent to become ready.
+Subscribers can recover UI state, but they still cannot inspect the original crash reason through the event stream.
 
-## Gap 4: No Heartbeat or Liveness Detection
+## Gap 4: No Heartbeat or Liveness Detection — Resolved
 
-**Problem:** The CLI spawns the backend as a child process and communicates over stdio JSON-RPC. If the backend hangs (deadlock, infinite loop in a tool, blocked on I/O), the CLI has no way to detect it. There is no heartbeat, ping/pong, or request timeout.
-
-**Where it happens:**
-
-- `lib/opal/rpc/stdio.ex` — reads stdin in a loop, writes to stdout. No periodic liveness signal.
-- `src/sdk/client.ts` — sends requests and waits for responses. No timeout on individual requests. Server→client requests use a 30s timeout, but client→server requests wait indefinitely.
-
-**What recovery looks like:** A `ping` method (or periodic heartbeat notification) that the CLI can use to verify the backend is responsive. If N consecutive pings fail, surface a "backend unresponsive" message and offer to restart.
-
-## Gap 5: Auto-Save is Not the Default
-
-**Problem:** Session persistence depends on `config.auto_save == true`. When auto-save is off (or the agent crashes mid-turn before reaching `:idle`), conversation history exists only in the ETS table. If the entire `SessionServer` crashes (not just the agent), the ETS table is destroyed and the conversation is gone.
+**Status:** Resolved for liveness detection (not automatic restart).
 
 **Where it happens:**
 
-- `lib/opal/agent/agent.ex` — `maybe_auto_save/1` only runs on transition to `:idle`.
-- `lib/opal/session.ex` — ETS table is owned by the `Session` GenServer. If that process dies, the table is deleted (`terminate/2` cleans up).
+- `opal/lib/opal/rpc/server.ex` — exposes `opal/ping`.
+- `cli/src/sdk/client.ts` — `ping(timeoutMs = 5000)` issues a timed JSON-RPC request.
+- `cli/src/hooks/use-opal.ts` — pings every 15s while idle; after 2 failures sets `state.error = "Server is unresponsive"`.
 
-**What recovery looks like:**
+**Current behavior:** The CLI detects an unresponsive backend and surfaces an error; reconnect/respawn is still an open gap (see Gap 6).
 
-1. **Auto-save should be on by default.** Every transition to `:idle` should persist.
-2. **Save on crash:** The `Session` GenServer's `terminate/2` should save to disk before the ETS table is destroyed (best-effort — `terminate` is not guaranteed to run on brutal kills, but it covers normal shutdowns and linked crashes).
-3. **Session resume in the CLI:** A `--resume` flag or automatic "resume last session" flow that loads the saved JSONL on startup.
+## Gap 5: Auto-Save is Not the Default — Resolved
+
+**Status:** Resolved.
+
+**Where it happens:**
+
+- `opal/lib/opal/config.ex` — `auto_save: true` by default.
+- `opal/lib/opal/agent/agent.ex` — `auto_save/1` persists on transition to `:idle`.
+- `opal/lib/opal/session/session.ex` — `terminate/2` attempts best-effort DETS persistence on non-`:normal` exits.
+
+**Current behavior:**
+
+1. Auto-save is enabled by default.
+2. Non-normal session termination attempts one last save before ETS cleanup.
+3. CLI resume is available via `opal --session <id>` (`cli/src/bin.ts`).
 
 ## Gap 6: CLI Has No Reconnection Logic
 
@@ -124,10 +128,10 @@ Subscribers can then update their UI, flush pending state, and wait for the reco
 
 **Where it happens:**
 
-- `src/sdk/client.ts` — `spawn` is called once in the constructor. The `"exit"` handler rejects pending requests but does not attempt recovery.
-- `src/bin.ts` — renders the app once, no top-level error boundary or restart wrapper.
+- `cli/src/sdk/client.ts` — `spawn` is called once in the constructor. The `"exit"` handler rejects pending requests but does not attempt recovery.
+- `cli/src/bin.ts` — renders the app once, no top-level restart wrapper.
 
-**What recovery looks like:** The client should catch backend exits and attempt to respawn the process, re-establish the session (loading from the last auto-saved state), and resume. The UI should show a brief "reconnecting..." status rather than silently dying.
+**What recovery looks like:** The client should catch backend exits and attempt to respawn the process, re-establish the session (loading from the last auto-saved state), and resume. The UI should show a brief "reconnecting..." status rather than requiring manual restart.
 
 ## Gap 7: Orphaned tool_use After Abort — Resolved
 
@@ -137,7 +141,7 @@ Subscribers can then update their UI, flush pending state, and wait for the reco
 
 Three defense layers prevent this class of error:
 
-1. **Full-scan orphan repair** — `repair_orphaned_tool_calls` scans ALL assistant messages (not just the most recent) on every turn start and abort.
+1. **Full-scan orphan repair** — `repair_orphans` + `find_orphaned_calls` scan ALL assistant messages (not just the most recent) on every turn start and abort.
 2. **Positional validation** — `ensure_tool_results` runs on the final message list in `build_messages`, injecting synthetic results at the correct position and stripping orphaned results.
 3. **Stream error guard** — a `stream_errored` flag prevents `finalize_response` from creating broken assistant messages when the provider sends an error event mid-stream.
 
@@ -145,23 +149,26 @@ Three defense layers prevent this class of error:
 
 | Gap | Severity | Effort | Description |
 |-----|----------|--------|-------------|
-| Silent death in CLI | Critical | Low | Surface `state.error` in post-ready UI |
-| Blank state on restart | High | Medium | Agent init loads from surviving Session |
-| No crash notification | High | Medium | SessionServer broadcasts recovery event |
-| No heartbeat | Medium | Low | Add `ping` RPC method + client timeout |
-| Auto-save not default | Medium | Low | Flip default, add terminate-save |
-| No CLI reconnection | Medium | High | Client respawn + session resume flow |
+| Silent death in CLI | ~~Critical~~ | ~~Low~~ | ✅ Resolved — post-ready errors render in `cli/src/app.tsx` |
+| Blank state on restart | ~~High~~ | ~~Medium~~ | ✅ Resolved — agent reloads `Opal.Session.get_path/1` on restart |
+| Crash notification detail | Medium | Medium | ⚠ Partial — `agent_recovered` exists, but no crash reason payload |
+| No heartbeat | ~~Medium~~ | ~~Low~~ | ✅ Resolved — `opal/ping` + CLI liveness checks |
+| Auto-save not default | ~~Medium~~ | ~~Low~~ | ✅ Resolved — `auto_save: true` + best-effort terminate save |
+| No CLI reconnection | Medium | High | Open — no client respawn/reconnect flow yet |
 | Orphaned tool_use on abort | ~~High~~ | ~~Low~~ | ✅ Resolved — three-layer defense (see [conversation-integrity.md](conversation-integrity.md)) |
 
 ## Source
 
-- `lib/opal/agent/agent.ex` — Agent state machine, init, auto-save
-- `lib/opal/session.ex` — Session GenServer, ETS storage, persistence
-- `lib/opal/session_server.ex` — Per-session supervisor
-- `lib/opal/rpc/stdio.ex` — Stdio transport
-- `lib/opal/events.ex` — Event broadcasting
-- `lib/opal/agent/tool_runner.ex` — Tool execution, cancel_all_tasks
-- `lib/opal/agent/retry.ex` — Error classification (transient vs permanent)
-- `src/sdk/client.ts` — RPC client, process lifecycle
-- `src/hooks/use-opal.ts` — Agent state management in the UI
-- `src/app.tsx` — Error display logic
+- `opal/lib/opal/agent/agent.ex` — Agent state machine, session recovery, auto-save
+- `opal/lib/opal/agent/repair.ex` — Orphan/tool-result integrity repairs
+- `opal/lib/opal/session/session.ex` — Session GenServer, ETS storage, DETS persistence
+- `opal/lib/opal/session/server.ex` — Per-session supervisor
+- `opal/lib/opal/rpc/server.ex` — JSON-RPC server + `opal/ping`
+- `opal/lib/opal/events.ex` — Event broadcasting
+- `opal/lib/opal/agent/tool_runner.ex` — Tool execution, cancel_all
+- `opal/lib/opal/agent/retry.ex` — Error classification (transient vs permanent)
+- `cli/src/sdk/client.ts` — RPC client, process lifecycle, ping timeout
+- `cli/src/hooks/use-opal.ts` — Agent state management, heartbeat handling
+- `cli/src/lib/reducers.ts` — UI event reduction (`error`, `agentRecovered`)
+- `cli/src/app.tsx` — Error display logic
+- `cli/src/bin.ts` — CLI entrypoint and resume flag (`--session`)

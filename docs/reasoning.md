@@ -21,27 +21,25 @@ graph TD
     User["User selects<br/>model + thinking level"]
     Model["Opal.Provider.Model<br/><small>thinking_level: :high</small>"]
     Copilot["Provider.Copilot"]
-    ChatAPI["Chat Completions API<br/><small>reasoning_effort: high</small><br/>⚠️ No visible thinking returned"]
-    RespAPI["Responses API<br/><small>reasoning.effort: high<br/>reasoning.summary: auto</small><br/>✅ Reasoning content returned"]
+    ChatAPI["Chat Completions API<br/><small>reasoning_effort: high</small><br/>reasoning_content deltas when provided"]
+    RespAPI["Responses API<br/><small>reasoning.effort: high<br/>reasoning.summary: auto</small><br/>reasoning_summary_text deltas"]
 
     User --> Model
     Model --> Copilot
-    Copilot -->|"Claude (param sent,<br/>no thinking returned)"| ChatAPI
-    Copilot -->|"GPT-5 family"| RespAPI
+    Copilot -->|"Claude / o3 / o4 / others"| ChatAPI
+    Copilot -->|"GPT-5 / oswe families"| RespAPI
 ```
 
 ### Copilot Provider
 
-The Copilot API proxies multiple model families through two API variants. Reasoning effort is sent in the request body for thinking-capable models, though **not all models return visible reasoning content** through the proxy.
+The Copilot API proxies multiple model families through two API variants. Reasoning effort is sent in the request body for thinking-capable models, and Opal parses thinking deltas when providers emit them.
 
-> **Known limitation (as of Feb 2025):** The Copilot proxy does **not** return `reasoning_content` for Claude models. The `reasoning_effort` parameter is silently accepted (200 OK) but no thinking tokens appear in the response stream. This affects all Claude models (Sonnet 4, Opus 4.5, etc.) regardless of parameter combinations tried — including Anthropic-native `thinking.type` formats. The o3/o4 model families are also not available through the proxy. Only **GPT-5 family** models produce visible reasoning output via the Responses API path. This is confirmed by reports from other tools (opencode#6864). The parameter may still influence response quality even without visible thinking.
-
-**Chat Completions** (Claude): Adds `reasoning_effort` string to the request body. No visible thinking is returned.
+**Chat Completions**: Adds `reasoning_effort` string to the request body for thinking-capable model IDs.
 
 ```elixir
 # In Provider.Copilot — delegates to shared Provider module
 defp maybe_add_reasoning(body, %{thinking_level: level, id: id}, :completions) do
-  if supports_thinking?(id) do
+  if thinking_capable?(id) do
     Map.put(body, :reasoning_effort, Opal.Provider.reasoning_effort(level))
   else
     body
@@ -49,13 +47,13 @@ defp maybe_add_reasoning(body, %{thinking_level: level, id: id}, :completions) d
 end
 ```
 
-**Responses API** (GPT-5 family): Adds `reasoning` object with effort level and `summary: "auto"` (required to get reasoning summary text in the stream). Also switches system role to `"developer"`. **This is the only Copilot path that produces visible reasoning content.**
+**Responses API** (`gpt-5*` and `oswe*`): Adds `reasoning` object with effort level and `summary: "auto"`, and switches system role to `"developer"` when thinking is enabled.
 
 ```elixir
 # In Provider.Copilot — Responses API reasoning
 defp maybe_add_reasoning(body, %{thinking_level: :off}, :responses), do: body
 defp maybe_add_reasoning(body, %{thinking_level: level}, :responses) do
-  Map.put(body, :reasoning, %{effort: thinking_level_to_effort(level), summary: "auto"})
+  Map.put(body, :reasoning, %{effort: Opal.Provider.reasoning_effort(level), summary: "auto"})
 end
 ```
 
@@ -65,12 +63,11 @@ end
 
 **Copilot thinking support matrix:**
 
-| Model Family | API Path | Reasoning Sent? | Visible Thinking? |
-|-------------|----------|----------------|-------------------|
-| GPT-5, GPT-5.1, GPT-5.2, GPT-5.3 | Responses API | ✅ `reasoning.effort` | ✅ `reasoning_summary_text.delta` events |
-| Claude Sonnet 4, Opus 4.5+ | Chat Completions | ✅ `reasoning_effort` | ❌ Silently ignored by proxy |
-| o3, o4 | Chat Completions | N/A | N/A — not available on proxy |
-| GPT-4o, GPT-4.1 | Chat Completions | ❌ Not sent | ❌ Not supported |
+| Model Family | API Path | Reasoning Sent? | Thinking Event Parsed |
+|-------------|----------|----------------|-----------------------|
+| GPT-5, GPT-5.1, GPT-5.2, GPT-5.3, `oswe*` | Responses API | ✅ `reasoning.effort` | `response.reasoning_summary_text.delta` → `{:thinking_delta, text}` |
+| Claude Sonnet 4, Opus 4.x, Haiku 4.5, o3/o4 | Chat Completions | ✅ `reasoning_effort` (thinking-capable IDs) | `choices[].delta.reasoning_content` → `{:thinking_delta, text}` |
+| GPT-4o, GPT-4.1 | Chat Completions | ❌ Not sent | N/A |
 
 Thinking output is parsed from SSE into Opal's semantic events:
 
@@ -101,7 +98,7 @@ Thinking content is **persisted in messages** via the `thinking` field on `Opal.
 graph LR
     Stream["SSE Stream"] --> Accumulate["stream.ex<br/><small>current_thinking</small>"]
     Accumulate --> Finalize["agent.ex<br/><small>Message.assistant(text, calls, thinking: ...)</small>"]
-    Finalize --> Session["session.ex<br/><small>JSONL persistence</small>"]
+    Finalize --> Session["session/session.ex<br/><small>DETS persistence</small>"]
     Finalize --> NextTurn["Next API call<br/><small>Thinking included in<br/>message conversion</small>"]
 ```
 
@@ -110,7 +107,7 @@ graph LR
 **How it roundtrips per API variant:**
 
 - **Chat Completions**: Previous assistant messages include `reasoning_content` field if they had thinking content.
-- **Responses API**: A `reasoning` item with `summary_text` is prepended to the assistant's output items in the input array.
+- **Responses API**: A `reasoning` item with `summary: [%{type: "summary_text", text: ...}]` is prepended to the assistant's output items in the input array.
 
 The `stream.ex` handler auto-emits a `thinking_start` event before the first `thinking_delta` if the provider didn't send one (Chat Completions doesn't emit explicit start events). This is detected via `current_thinking` being `nil` (not started) vs `""` (started).
 
@@ -151,15 +148,15 @@ The `/models` command opens an interactive picker. After selecting a model that 
 ### Via Elixir API
 
 ```elixir
-# At session start (thinking_level flows through Session.Builder)
+# At session start
 Opal.start_session(%{
   model: {:copilot, "claude-opus-4.6"},
   thinking_level: :high
 })
 
 # Mid-session
-model = Opal.Model.new(:copilot, "claude-opus-4.6", thinking_level: :high)
-GenServer.call(agent, {:set_model, model})
+model = Opal.Provider.Model.new(:copilot, "claude-opus-4.6", thinking_level: :high)
+Opal.set_model(agent, model)
 ```
 
 ## Model Discovery
@@ -211,7 +208,7 @@ Provider SSE → parse_stream_event/1 → {:thinking_start, %{}}
              → CLI reducer           → Timeline: {kind: "thinking", text: "..."}
                                       → AgentView.thinking: "..." (indicator)
              → finalize_response     → Message.assistant(text, calls, thinking: "...")
-                                      → Persisted to session JSONL
+                                      → Persisted via Session DETS store
 ```
 
 ## Source
@@ -220,11 +217,11 @@ Provider SSE → parse_stream_event/1 → {:thinking_start, %{}}
 - `lib/opal/provider/registry.ex` — Per-model `thinking_levels` from LLMDB, `supports_max_thinking?/1`
 - `lib/opal/message.ex` — `thinking` field on Message struct
 - `lib/opal/provider/provider.ex` — Shared `parse_chat_event/1`, `convert_messages_openai/2`, `reasoning_effort/1`
-- `lib/opal/provider/copilot.ex` — `maybe_add_reasoning/3`, `supports_thinking?/1`, Responses API conversion
+- `lib/opal/provider/copilot.ex` — `maybe_add_reasoning/3`, `thinking_capable?/1`, Responses API conversion
 - `lib/opal/agent/stream.ex` — Thinking accumulation and auto-start detection
 - `lib/opal/agent/agent.ex` — `current_thinking` state, SSE stream handling, `finalize_response`
-- `lib/opal/session.ex` — Thinking persistence in JSONL
-- `lib/opal/rpc/handler.ex` — `thinking/set` and `model/set` with `thinking_level`
+- `lib/opal/session/session.ex` — Thinking persistence on messages in the session store (DETS)
+- `lib/opal/rpc/server.ex` — `thinking/set` and `model/set` with `thinking_level`
 - `src/hooks/use-opal.ts` — Timeline thinking entries, `appendThinkingDelta`
 - `src/components/message-list.tsx` — `ThinkingBlock` component
 - `src/components/model-picker.tsx` — Two-step picker (model → thinking level)
@@ -237,4 +234,3 @@ Provider SSE → parse_stream_event/1 → {:thinking_start, %{}}
 
 - [OpenAI Reasoning Guide](https://developers.openai.com/api/docs/guides/reasoning) — Official docs for `reasoning.effort` and `reasoning.summary` parameters on the Responses API.
 - [Anthropic Extended Thinking](https://platform.claude.com/docs/en/build-with-claude/extended-thinking) — Official docs for budget-based and adaptive thinking modes, including `output_config.effort` levels.
-- [opencode#6864](https://github.com/anomalyco/opencode/issues/6864) — Confirms the Copilot proxy does not return `reasoning_content` for Claude models. Other tools experience the same limitation.

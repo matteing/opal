@@ -31,7 +31,7 @@ Results are grouped by file path. Each matching line includes context, all hashl
 
 Context ranges for adjacent matches are merged so lines aren't repeated.
 
-When results are capped, a `[Results capped]` hint is appended.
+When results are capped, a summary like `[Showing N matches. Results capped — refine pattern or path.]` is appended.
 
 ## Exclusions
 
@@ -60,7 +60,7 @@ UTF-8 BOM is stripped before matching. CRLF line endings are normalized to LF fo
 
 ## Path Safety
 
-Paths are resolved through `Opal.Path.safe_relative/2`, same as `read_file` and `write_file`. Searches cannot escape the working directory.
+Paths are resolved through `Opal.FileIO.resolve_path/3` (which uses `Opal.Path.safe_relative/2`), same as `read_file` and `write_file`. Searches cannot escape the working directory or other explicitly allowed base directories.
 
 ## Truncation
 

@@ -15,7 +15,7 @@ Returns a compact runtime snapshot of the current agent session for self-diagnos
 The tool returns pretty-printed JSON with:
 
 - session/runtime metadata (`session_id`, `status`, `model`, `provider`, `working_dir`)
-- queue/tool state (`pending_steers`, tool call queue, enabled/disabled tools)
+- queue/tool state (`pending_messages`, `pending_tool_tasks`, `in_flight_tools`, plus tool `all/enabled/disabled` lists)
 - token usage snapshot
 - message counts (and optional recent message samples)
 - recent agent events captured from in-memory debug event log
@@ -49,6 +49,6 @@ When debug is disabled, event capture is off and existing in-memory debug events
 
 ## Source
 
-- `lib/opal/tool/debug.ex`
-- `lib/opal/agent/event_log.ex`
+- `lib/opal/tool/debug_state.ex`
+- `lib/opal/agent/emitter.ex`
 - `lib/opal/agent/tool_runner.ex`

@@ -120,7 +120,7 @@ Saves an API key for a direct provider. The key is persisted to `~/.opal/setting
 
 When the CLI receives `auth.status == "setup_required"` from `session/start`, it shows an interactive setup wizard:
 
-1. **Provider picker** — Lists all available providers with arrow-key navigation
+1. **Provider picker** — Lists providers that still need setup with arrow-key navigation
 2. **Copilot flow** — Shows the device code and verification URL, waits for authorization
 3. **API key flow** — Shows a masked text input for pasting the key
 
@@ -137,7 +137,7 @@ The auth system is designed so integrators don't need to implement auth flows:
 # Check auth programmatically
 case Opal.Auth.probe() do
   %{status: "ready"} -> :ok
-  %{status: "setup_required"} -> # handle setup
+  %{status: "setup_required"} -> :setup_required
 end
 
 # Or just set credentials before starting
@@ -148,7 +148,7 @@ If no auth check is done and credentials are missing, the agent will return an e
 
 ## Source Files
 
-- [`lib/opal/auth.ex`](../lib/opal/auth.ex) — Credential probe logic
-- [`lib/opal/auth/copilot.ex`](../lib/opal/auth/copilot.ex) — Copilot OAuth device-code flow
-- [`lib/opal/rpc/handler.ex`](../lib/opal/rpc/handler.ex) — RPC method handlers
-- [`src/components/device-auth.tsx`](../src/components/device-auth.tsx) — Setup wizard UI
+- [`opal/lib/opal/auth/auth.ex`](../opal/lib/opal/auth/auth.ex) — Credential probe logic
+- [`opal/lib/opal/auth/copilot.ex`](../opal/lib/opal/auth/copilot.ex) — Copilot OAuth device-code flow
+- [`opal/lib/opal/rpc/server.ex`](../opal/lib/opal/rpc/server.ex) — RPC method handlers
+- [`cli/src/components/device-auth.tsx`](../cli/src/components/device-auth.tsx) — Setup wizard UI

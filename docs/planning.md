@@ -1,13 +1,13 @@
 # Planning — Plan Documents & `Ctrl+Y` Editor
 
-The planning system lets the agent create and maintain a structured plan document (`plan.md`) during complex tasks. The user can open the plan at any time by pressing `Ctrl+Y` in the CLI, which launches the file in the user's default editor (`$EDITOR` / `$VISUAL`, falling back to platform defaults). Plans are session-scoped, persisted to `~/.opal/sessions/<session_id>/plan.md`, and survive conversation compaction.
+The planning system lets the agent create and maintain a structured plan document (`plan.md`) during complex tasks. The user can open the plan at any time by pressing `Ctrl+Y` in the CLI, which launches the file in the user's default editor (`$EDITOR` / `$VISUAL`, falling back to platform defaults). Plans are session-scoped, persisted to `<data_dir>/sessions/<session_id>/plan.md` (default `~/.opal/sessions/<session_id>/plan.md` on macOS/Linux), and survive conversation compaction.
 
 ## Interface
 
 ### Plan File Location
 
 ```
-~/.opal/sessions/<session_id>/plan.md
+<data_dir>/sessions/<session_id>/plan.md
 ```
 
 The agent writes to this path using the existing `write_file` tool — no new tool is needed. The full expanded path is provided in the system prompt at session start.
@@ -42,7 +42,7 @@ sequenceDiagram
     participant FS as Filesystem
 
     Note over Agent: System prompt includes plan path
-    Agent->>FS: write_file(~/.opal/sessions/xyz/plan.md)
+    Agent->>FS: write_file(<sessions_dir>/xyz/plan.md)
     FS-->>Agent: {:ok, ...}
 
     User->>CLI: Ctrl+Y
@@ -59,97 +59,81 @@ sequenceDiagram
 
 ### System Prompt Injection
 
-In `Opal.Agent` or `Opal.Context`, when building the system prompt, append
-the planning instructions with the resolved path:
+In `Opal.Agent.SystemPrompt.format_planning/1`, planning instructions are
+added only when the agent has a session. The path is resolved from
+`Opal.Config.sessions_dir(config)`:
 
 ```elixir
-defp planning_instructions(session_id) do
-  session_dir = Opal.Session.session_dir(session_id)
+def format_planning(%State{session: nil}), do: ""
+
+def format_planning(%State{config: config, session_id: session_id}) do
+  session_dir = Path.join(Opal.Config.sessions_dir(config), session_id)
   """
 
-  ## Planning
+  <planning>
 
   For complex multi-step tasks, create a plan document at:
     #{session_dir}/plan.md
 
   Write your plan before starting implementation. Update it as you
   complete steps. The user can review the plan at any time with Ctrl+Y.
+  </planning>
   """
 end
 ```
 
 ### CLI — `Ctrl+Y` Open in Editor
 
-When the user presses `Ctrl+Y`, the CLI opens `~/.opal/sessions/<session_id>/plan.md` in the user's preferred editor. If the file doesn't exist yet, the CLI shows a brief inline message: "No plan yet."
+When the user presses `Ctrl+Y`, the CLI opens `<session_dir>/plan.md` from `session/start`. If the file doesn't exist yet, the CLI writes `No plan.md found yet.` to stderr.
 
 **Editor resolution** (cross-platform):
 1. `$VISUAL` environment variable (preferred for GUI editors)
 2. `$EDITOR` environment variable
-3. Platform fallback: `code --wait` → `nano` → `vi` on Unix; `notepad` on Windows
+3. Platform fallback: `code` on Unix; `notepad` on Windows
 
 **Keyboard handler** in `app.tsx`:
 
 ```typescript
-import { execSync } from "child_process";
-import { existsSync } from "fs";
-
 if (input === "y" && key.ctrl) {
-  const planPath = path.join(sessionDir, "plan.md");
-  if (!existsSync(planPath)) {
-    addSystemMessage("No plan yet.");
-    return;
-  }
-  const editor = process.env.VISUAL
-    || process.env.EDITOR
-    || (process.platform === "win32" ? "notepad" : "code --wait");
-  // Spawn detached so the CLI stays responsive
-  const child = spawn(editor, [planPath], {
-    detached: true,
-    stdio: "ignore",
-    shell: true,
-  });
-  child.unref();
+  openPlanInEditor(sessionDirRef.current);
 }
 ```
 
-The editor is spawned detached so the Ink app remains fully interactive. If the user's editor is terminal-based (e.g. `vim`, `nano`), we may need to temporarily surrender stdin/stdout — this can be handled by detecting whether the editor is a TUI (heuristic: no `--wait` flag, not in a known GUI list) and using `spawnSync` with `stdio: "inherit"` instead.
+The `openPlanInEditor` helper resolves `$VISUAL` → `$EDITOR` → platform default, then spawns the editor detached with `stdio: "ignore"` and `shell: true` so the Ink app remains responsive.
 
-**Bottom bar**: Add `ctrl+y plan` to the shortcuts display in `bottom-bar.tsx`.
+**Bottom bar**: `bottom-bar.tsx` includes the `ctrl+y plan` shortcut hint.
 
 ### Determining the Plan Path
 
-The CLI needs to know the session directory. The recommended approach is to
-return `session_dir` in the `session/start` RPC result — add a `session_dir`
-field to the response. This avoids hardcoding the path convention in two
-places. As a fallback, the CLI can derive it from `~/.opal/sessions/${sessionId}/plan.md` using `os.homedir()` and `path.join`.
+The CLI gets the session directory directly from `session/start` (`session_dir` in RPC, `sessionDir` in the generated TypeScript client). This avoids hardcoding path conventions in the CLI.
 
 ## Implementation Checklist
 
-1. **Core — Session directory helper**
-   - Ensure `Opal.Session.session_dir(session_id)` returns the path
-   - Ensure the directory exists at session start
+1. **Core — Session directory path**
+   - Resolve with `Path.join(Opal.Config.sessions_dir(config), session_id)`
+   - `sessions_dir` comes from configurable `data_dir`
 
 2. **Core — System prompt**
-   - Add planning instructions to the system prompt in `Opal.Agent` or
-     `Opal.Context`, including the resolved plan path
+   - Planning instructions are injected in
+     `Opal.Agent.SystemPrompt.format_planning/1`, including the resolved plan path
    - Only inject for interactive sessions (not sub-agents)
 
-3. **Core — Protocol** (optional, for Option B)
-   - Add `session_dir` field to `session/start` result
+3. **Core — Protocol**
+   - `session/start` includes `session_dir` in the result
 
 4. **CLI — Keyboard handler** (`app.tsx`)
-   - Add `Ctrl+Y` handler to open plan in `$VISUAL` / `$EDITOR`
-   - Show "No plan yet." if file doesn't exist
+   - `Ctrl+Y` calls `openPlanInEditor(sessionDirRef.current)`
+   - Missing file logs `No plan.md found yet.` to stderr
 
-5. **CLI — Editor spawning** (`app.tsx` or utility)
+5. **CLI — Editor spawning** (`open-editor.ts`)
    - Resolve editor from `$VISUAL` → `$EDITOR` → platform default
-   - Spawn detached for GUI editors; `spawnSync` with inherited stdio for TUI editors
+   - Spawn detached with `stdio: "ignore"` and `shell: true`
 
 6. **CLI — Bottom bar** (`components/bottom-bar.tsx`)
-   - Add `ctrl+y plan` shortcut hint
+   - Includes `ctrl+y plan` shortcut hint
 
 7. **CLI — Path resolution**
-   - Compute plan path from session ID (or `session_dir` from start result)
+   - Compute `plan.md` path from `session_dir` returned by `session/start`
 
 ## Alternatives Considered
 
@@ -181,11 +165,9 @@ and broadcast an event.
 - **Concurrent writes**: The agent writes sequentially (one tool at a time),
   so there's no write contention. Most editors handle external file changes
   gracefully (VS Code auto-reloads, vim shows a warning).
-- **Terminal editors** (`vim`, `nano`): Need `spawnSync` with `stdio: "inherit"` 
-  which temporarily takes over the terminal. The Ink app must pause rendering
-  and resume after the editor exits.
-- **No `$EDITOR` set**: Fall back to `code --wait` (common for developers),
-  then `nano`, then `vi`. On Windows, `notepad`.
+- **Terminal editors** (`vim`, `nano`): The current implementation uses the
+  same detached spawn path for all editors; there is no TUI handoff mode.
+- **No `$EDITOR` set**: Fall back to `code` on Unix and `notepad` on Windows.
 - **Plan editing**: Changes the user makes in the editor are immediately
   visible to the agent via `read_file`. No special handling needed.
 

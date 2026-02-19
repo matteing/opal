@@ -1,6 +1,6 @@
 # Inspecting a Running Agent
 
-Opal exposes a live event stream you can tap into from a second terminal. This uses Erlang's built-in distribution protocol — the running agent and the inspector are two BEAM nodes that talk directly via message passing, with zero serialization overhead.
+Opal exposes a live event stream you can tap into from a second terminal. This uses Erlang's built-in distribution protocol — the running agent and the inspector are two BEAM nodes that talk directly via message passing without adding a separate JSON-RPC layer.
 
 ## Quick Start
 
@@ -42,9 +42,9 @@ graph LR
 
 ### Distribution Setup
 
-When Opal starts, `Opal.Application.start_distribution/0` activates Erlang distribution:
+When distribution is enabled, `Opal.Application.start_distribution/0` activates Erlang distribution:
 
-1. Calls `Node.start(:"opal_#{pid}", :shortnames)` to make the BEAM addressable
+1. Calls `Node.start(:"opal_#{pid}", name_domain: :shortnames)` to make the BEAM addressable
 2. Generates a random cookie (or reads from `config :opal, :distribution_cookie`)
 3. Writes the node name and cookie to `~/.opal/node` (permissions `0600`) for discovery
 
@@ -55,7 +55,7 @@ If the node was already started with `--sname` (e.g. during development with `ie
 The `mise run inspect` command runs `scripts/inspect.sh`, which:
 
 1. Reads the node name and cookie from `~/.opal/node`
-2. Launches `iex --sname inspector_PID --cookie <cookie> --remsh <node> --dot-iex scripts/inspect.exs`
+2. Launches `iex --sname "inspector_$$" --cookie "$COOKIE" --remsh "$NODE_NAME" --dot-iex "$SCRIPT_DIR/inspect.exs"`
 
 This creates a remote IEx shell (`--remsh`) that connects to the Opal node and automatically loads `scripts/inspect.exs`, which calls `Opal.Inspect.watch/0`.
 
@@ -112,6 +112,6 @@ See [recipes.md](recipes.md) for more examples.
 ## Source Files
 
 - `lib/opal/util/inspect.ex` — Inspection helpers and event watch loop
-- `lib/opal/agent/events.ex` — Registry-based pub/sub
+- `lib/opal/events.ex` — Registry-based pub/sub
 - `lib/opal/application.ex` — Distribution startup and `~/.opal/node` file
 - `scripts/inspect.exs` — Auto-run script for `mise run inspect`

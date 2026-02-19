@@ -6,7 +6,7 @@ Reads file contents with hashline-tagged output for use with `edit_file`.
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
-| `path` | string | yes | File path (relative to working directory) |
+| `path` | string | yes | File path resolved under the working directory (or another allowed base directory) |
 | `offset` | integer | no | 1-indexed start line |
 | `limit` | integer | no | Max lines to return |
 
@@ -30,9 +30,9 @@ Large files are head-truncated to keep tool output within reasonable context lim
 
 | Condition | Behavior |
 |-----------|----------|
-| > 2,000 lines | Show first 2,000 with `[Use offset=N to continue]` |
+| > 2,000 lines | Show first 2,000 with `[Showing lines S-E of T. Use offset=N to continue.]` |
 | > 50 KB | Truncate at last line boundary before 50 KB |
-| Single line > 50 KB | Suggest `head -c` shell command instead |
+| Single line > 50 KB | Return guidance to use `read_file` with `offset=1` and `limit=2000` (or split with a shell command) |
 
 Head-truncation is intentional — file structure, imports, and module definitions are at the top.
 
@@ -42,4 +42,4 @@ UTF-8 BOM is stripped before output. The LLM never sees it, preventing invisible
 
 ## Source
 
-`lib/opal/tool/read.ex`, `lib/opal/tool/file_helper.ex`
+`opal/lib/opal/tool/read_file.ex`, `opal/lib/opal/util/file_io.ex`, `opal/lib/opal/util/hashline.ex`

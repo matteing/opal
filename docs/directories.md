@@ -1,6 +1,6 @@
 # App Directories
 
-Opal uses two directory hierarchies: a **global data directory** for runtime state and credentials, and **per-project `.opal/` directories** for project configuration (analogous to `.claude/`).
+Opal uses two directory hierarchies: a **global data directory** for runtime state and credentials, and **project-local config/skill directories** (like `.opal/`, `.agents/`, `.github/`, `.claude/`).
 
 ## Directory Layout
 
@@ -9,20 +9,21 @@ Opal uses two directory hierarchies: a **global data directory** for runtime sta
 ├── auth.json                     # GitHub Copilot OAuth tokens
 ├── settings.json                 # Persistent user preferences
 ├── node                          # Erlang distribution discovery file
-├── sessions/                     # Saved conversation history
-│   └── {session_id}.jsonl        # One session per file (JSON Lines)
-├── tasks/                        # Per-project task databases (created on first use by tasks tool)
-│   └── {project_hash}.dets       # DETS file keyed by working directory
+├── sessions/                     # Saved conversation state
+│   └── {session_id}.dets         # One session per file (DETS)
+├── tasks/                        # Task databases (created on first use by tasks tool)
+│   └── {scope_hash}.dets         # DETS file keyed by session_id (or working-dir fallback)
 ├── skills/                       # Global skill directories (user-created, not auto-created)
 └── logs/                         # Reserved for structured logging
 
 {project}/.opal/                  # Per-project configuration (committed to repo)
 ├── mcp.json                      # MCP server configuration
-├── skills/                       # Project-specific skills
-│   └── {name}/SKILL.md           # One skill per subdirectory
 └── ...                           # Future project-level config
 
-/tmp/opal-shell-{id}.log          # Truncated shell output (ephemeral)
+{project}/.{agents,github,claude}/skills/
+└── {name}/SKILL.md               # Project-specific skills
+
+{System.tmp_dir!()}/opal-shell/{id}.log  # Truncated shell output (ephemeral)
 ```
 
 ## Per-Project Configuration (`{project}/.opal/`)
@@ -33,11 +34,10 @@ Opal discovers these directories during context and skill walk-up:
 
 | Path | Purpose |
 |------|---------|
-| `.opal/mcp.json` | MCP server definitions (also checks `.vscode/mcp.json`, `.github/mcp.json`) |
-| `.opal/skills/{name}/SKILL.md` | Project-scoped skills with progressive disclosure |
-| `.agents/skills/` | Claude-compatible skill path (also discovered) |
+| `.opal/mcp.json` | MCP server definitions (also checks `.vscode/mcp.json`, `.github/mcp.json`, `.mcp.json`, `~/.opal/mcp.json`) |
+| `.{agents,github,claude}/skills/{name}/SKILL.md` | Project-scoped skills with progressive disclosure |
 
-Context file discovery (`AGENTS.md`, `OPAL.md`) walks up from the working directory, checking standard locations including `.opal/` and `.agents/` variants. See `Opal.Config.Features` for the full list of discoverable filenames and directories.
+Context file discovery (`AGENTS.md`, `OPAL.md`) walks up from the working directory, checking standard locations including `.opal/` and `.agents/` variants. See `Opal.Context` (and `Opal.Config.Features` overrides) for the full discovery behavior.
 
 ## Global Data (`~/.opal/`)
 
@@ -79,21 +79,21 @@ Persistent user preferences. Managed by `Opal.Settings`.
 Erlang distribution discovery file for remote debugging. Managed by `Opal.Application`.
 
 ```
-opal_12345
-opal
+opal_12345@hostname
+N3Q0N2JfY29va2ll
 ```
 
 - Line 1: Node name
 - Line 2: Cookie atom
-- Used by `opal --connect <node>` to attach a remote IEx session
+- Used by `scripts/inspect.sh` / `mise run inspect` to attach a remote IEx session
 
 ### `sessions/`
 
-Conversation history in JSON Lines format. Managed by `Opal.Session`.
+Conversation state in DETS format. Managed by `Opal.Session`.
 
-Each file is `{session_id}.jsonl`:
-- Line 1: Session metadata (`session_id`, `current_id`, `metadata`)
-- Lines 2+: One message per line (`role`, `content`, `tool_calls`, `metadata`)
+Each file is `{session_id}.dets`:
+- `:__session_meta__` record with `session_id`, `current_id`, and `metadata`
+- One record per message (`{message_id, %Opal.Message{...}}`)
 
 Sessions are written when `auto_save: true` or explicitly via `Opal.Session.save/2`.
 
@@ -103,17 +103,17 @@ Reserved directory for structured logging output. Created by `Opal.Config.ensure
 
 ## Runtime Data (`~/.opal/tasks/`)
 
-### `{project_hash}.dets`
+### `{scope_hash}.dets`
 
 Erlang DETS (Disk Erlang Term Storage) file for the task tracker tool. Managed by `Opal.Tool.Tasks`.
 
-Each working directory gets a unique DETS file named by a SHA-256 hash of the directory path (first 12 chars, URL-safe base64). This keeps runtime data in the global data directory rather than mixing it with project configuration in `{project}/.opal/`.
+Each scope key gets a unique DETS file named by a SHA-256 hash (first 12 chars, URL-safe base64). Scope is session ID when available, with working-directory fallback for compatibility. This keeps runtime data in the global data directory rather than mixing it with project configuration in `{project}/.opal/`.
 
 Each record contains: `id`, `label`, `status`, `priority`, `group_name`, `tags`, `due`, `notes`, `blocked_by`, `created_at`, `updated_at`.
 
 ## Temporary Files
 
-### `/tmp/opal-shell-{id}.log`
+### `{System.tmp_dir!()}/opal-shell/{id}.log`
 
 Full output from shell commands that were truncated (>2000 lines or >50KB). Created by `Opal.Tool.Shell.save_full_output/1`. These are ephemeral and referenced by the LLM for context when output is large.
 
@@ -129,17 +129,21 @@ config :opal, data_dir: "/custom/path"
 Opal.start_session(%{data_dir: "/custom/path"})
 
 # Environment variable (via runtime.exs)
-config :opal, data_dir: System.get_env("OPAL_DATA_DIR", "~/.opal")
+if data_dir = System.get_env("OPAL_DATA_DIR") do
+  config :opal, data_dir: data_dir
+end
 ```
 
 `Opal.Config.ensure_dirs!/1` auto-creates `data_dir`, `sessions/`, and `logs/` on session start. The `tasks/` directory is created lazily by `Opal.Tool.Tasks` on first use; `skills/` is scanned if present but must be created manually.
 
 ## Source
 
-- `lib/opal/config.ex` — Data directory paths and `ensure_dirs!/1`
-- `lib/opal/auth/copilot.ex` — Copilot token persistence (`save_token/1`, `load_token/0`)
-- `lib/opal/settings.ex` — User preferences persistence
-- `lib/opal/session.ex` — Session save/load in JSONL format
-- `lib/opal/tool/tasks.ex` — DETS-backed task storage
-- `lib/opal/tool/shell.ex` — Temporary output files
-- `lib/opal/application.ex` — Node discovery file
+- `opal/lib/opal/config.ex` — Data directory paths and `ensure_dirs!/1`
+- `opal/lib/opal/auth/copilot.ex` — Copilot token persistence (`save_token/1`, `load_token/0`)
+- `opal/lib/opal/util/settings.ex` — User preferences persistence
+- `opal/lib/opal/session/session.ex` — DETS-backed session persistence
+- `opal/lib/opal/tool/tasks.ex` — DETS-backed task storage
+- `opal/lib/opal/tool/shell.ex` — Temporary output files
+- `opal/lib/opal/application.ex` — Node discovery file
+- `opal/lib/opal/context/context.ex` — Context/skills discovery paths
+- `opal/lib/opal/mcp/config.ex` — MCP config discovery paths

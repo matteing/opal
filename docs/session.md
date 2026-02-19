@@ -4,16 +4,16 @@ The session is a conversation tree stored in an ETS table, managed by an `Opal.S
 
 ## Session Startup
 
-`Opal.Session.Builder` resolves all configuration needed to start a new session. `Opal.start_session/1` delegates to `Builder.build_opts/1`, which applies a priority cascade and returns a keyword list ready for `SessionServer.start_link`:
+`Opal.start_session/1` builds child options internally (`build_child_opts/1` in `Opal`) and starts `Opal.SessionServer` under `Opal.SessionSupervisor`. Model/provider selection uses a priority cascade:
 
 ```mermaid
 flowchart LR
-    A["User opts map"] --> B["Builder.build_opts/1"]
+    A["User opts map"] --> B["Opal.build_child_opts/1 (private)"]
     B --> C["Resolve model<br/><small>explicit → saved setting → default</small>"]
-    B --> D["Resolve provider<br/><small>explicit → app config → derive from model</small>"]
+    B --> D["Resolve provider<br/><small>explicit → Opal.Config provider</small>"]
     C --> E["opts keyword list"]
     D --> E
-    E --> F["SessionServer.start_link"]
+    E --> F["DynamicSupervisor.start_child(..., {SessionServer, opts})"]
 ```
 
 **Model resolution** follows a three-level cascade:
@@ -25,8 +25,8 @@ flowchart LR
 **Provider resolution** follows a similar cascade:
 
 1. Explicit `:provider` module in the opts map
-2. App-level `Opal.Config` provider (if not the default Copilot)
-3. Default: `Opal.Provider.Copilot`
+2. `Opal.Config` provider value (from app/session config)
+3. Struct default in `Opal.Config` (`Opal.Provider.Copilot`)
 
 ## Data Model
 
@@ -74,36 +74,36 @@ Messages live in a `:set` ETS table (one per session). ETS gives O(1) lookups by
 
 ## Branching
 
-`Session.branch(session, message_id)` rewinds the `current_id` pointer to `message_id`. The next `append/2` call creates a new child of that message — a fork in the tree. Old branches remain intact and can be navigated back to.
+`Opal.Session.branch(session, message_id)` rewinds the `current_id` pointer to `message_id`. The next `append/2` call creates a new child of that message — a fork in the tree. Old branches remain intact and can be navigated back to.
 
-**Branch summaries:** When branching, an optional LLM-generated summary of the abandoned path can be stored as metadata. This is used by the system prompt to give the model context about what was tried before.
+Branching itself only moves the pointer; summaries are introduced by compaction (`Opal.Session.Compaction`), not by `branch/2`.
 
 ## Persistence
 
-Sessions serialize to JSONL (JSON Lines) files:
+Sessions persist to DETS (`.dets`) files:
 
 ```
-{"metadata": {"title": "Fix auth bug", "created_at": "..."}}
-{"id": "msg_1", "parent_id": null, "role": "user", "content": "fix the bug"}
-{"id": "msg_2", "parent_id": "msg_1", "role": "assistant", "content": "...", "tool_calls": [...]}
+{:__session_meta__, %{session_id: "abc", current_id: "msg_2", metadata: %{title: "Fix auth bug"}}}
+{"msg_1", %Opal.Message{parent_id: nil, role: :user, content: "fix the bug"}}
+{"msg_2", %Opal.Message{parent_id: "msg_1", role: :assistant, content: "...", tool_calls: [...]}}
 ...
 ```
 
-Line 1 is metadata. Each subsequent line is one message. Loading reconstructs the ETS table and sets `current_id` to the last message in the longest path.
+The reserved `:__session_meta__` record stores session metadata and `current_id`; each message is keyed by message ID. Loading reconstructs ETS and restores `current_id` from metadata.
 
 ## Segment Replacement
 
 `replace_path_segment/3` swaps a range of messages with a replacement (used by compaction). It:
 
 1. Removes the target messages from ETS
-2. Inserts the replacement message(s)
+2. Inserts the replacement message
 3. Re-parents orphaned children to the replacement
 
 This is how compaction summarizes old messages without breaking the tree structure.
 
 ## Source
 
-- `lib/opal/session.ex` — GenServer, ETS operations, persistence
-- `lib/opal/session/builder.ex` — Session startup config resolution
+- `lib/opal/session/session.ex` — `Opal.Session` GenServer, ETS operations, DETS persistence
+- `lib/opal/session/server.ex` — `Opal.SessionServer` supervision and session process wiring
+- `lib/opal.ex` — `Opal.start_session/1` option resolution (`build_child_opts/1`)
 - `lib/opal/session/compaction.ex` — Compaction algorithm (see [compaction.md](compaction.md))
-- `lib/opal/session/branch_summary.ex` — LLM-generated branch summaries

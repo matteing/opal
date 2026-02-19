@@ -1,14 +1,14 @@
 # Architecture Overview
 
-Opal is a coding agent harness built on Elixir/OTP. The core (`lib/opal/`) provides the agent runtime, and the CLI (`cli/`) provides a TypeScript terminal UI connected via JSON-RPC over stdio.
+Opal is a coding agent harness built on Elixir/OTP. The core (`opal/lib/opal/`) provides the agent runtime, and the CLI (`cli/`) provides a TypeScript terminal UI connected via JSON-RPC over stdio.
 
 ## Process Model
 
-Every agent session is an isolated OTP supervision tree. No global state is shared between sessions except the event registry.
+Every agent session is an isolated OTP supervision tree. No global state is shared between sessions except root registries (`Opal.Registry` and `Opal.Events.Registry`).
 
 ```mermaid
 graph TD
-    Sup["Opal.Supervisor<br/><small>:one_for_one</small>"]
+    Sup["Opal.Supervisor<br/><small>:rest_for_one</small>"]
     Reg["Opal.Events.Registry<br/><small>shared pub/sub backbone</small>"]
     DSup["Opal.SessionSupervisor<br/><small>DynamicSupervisor</small>"]
     Sup --> Reg
@@ -34,18 +34,19 @@ graph TD
 ```mermaid
 graph LR
     CLI["CLI<br/><small>TypeScript</small>"]
-    Stdio["Opal.RPC.Stdio"]
-    Handler["Opal.RPC.Handler"]
+    RPC["Opal.RPC.Server"]
     Agent["Opal.Agent<br/><small>:gen_statem</small>"]
     Provider["Provider.stream<br/><small>SSE → handle_info</small>"]
     Tools["Tool execution<br/><small>Task.Supervisor</small>"]
-    Session["Opal.Session<br/><small>ETS tree</small>"]
+    Session["Opal.Session<br/><small>ETS + DETS (optional)</small>"]
     Events["Opal.Events.Registry"]
 
-    CLI -- "JSON-RPC over stdio" --> Stdio --> Handler --> Agent
-    Agent --> Provider --> Session
+    CLI -- "JSON-RPC over stdio" --> RPC --> Agent
+    Agent --> Provider
+    Agent --> Session
     Agent --> Tools
-    Events -- "notifications" --> CLI
+    Events -- "broadcasts" --> RPC
+    RPC -- "notifications" --> CLI
     Agent -- "broadcasts" --> Events
 ```
 
@@ -84,22 +85,23 @@ graph LR
 ## Source Layout
 
 ```
-lib/opal/
+opal/lib/opal/
+├── application.ex           # Root supervisor and optional RPC/distribution startup
 ├── agent/agent.ex           # Agent loop :gen_statem
 ├── agent/state.ex           # Agent runtime state struct
-├── agent/                   # Stream/tools/retry/compaction/reducer helpers
-├── session.ex               # Conversation tree (ETS)
-├── session/                 # Compaction, branch summaries
+├── agent/token.ex           # Token estimation heuristics
+├── agent/                   # Stream/tools/retry/compaction helpers
+├── session/session.ex       # Conversation tree (ETS + DETS persistence)
+├── session/                 # Compaction helpers
 ├── events.ex                # Registry-based pub/sub
-├── provider.ex              # Provider behaviour
+├── provider/provider.ex     # Provider behaviour
 ├── provider/copilot.ex      # GitHub Copilot implementation
-├── auth.ex                  # Device-code OAuth
-├── tool.ex                  # Tool behaviour
+├── auth/auth.ex             # Provider-agnostic auth probe
+├── tool/tool.ex             # Tool behaviour
 ├── tool/                    # Built-in tools (read, edit, write, shell, etc.)
 ├── mcp/                     # MCP bridge (client, discovery, supervisor)
-├── rpc/                     # JSON-RPC protocol, handler, stdio transport
+├── rpc/                     # JSON-RPC protocol and stdio server
 ├── config.ex                # Runtime configuration
-├── context.ex               # Project context discovery (AGENTS.md, skills)
-├── token.ex                 # Token estimation heuristics
-└── path.ex                  # Path safety (traversal prevention)
+├── context/context.ex       # Project context discovery (AGENTS.md, skills)
+└── util/path.ex             # Path safety (traversal prevention)
 ```
