@@ -19,9 +19,11 @@ Opal is two things:
 - A **small coding agent CLI** you can use to build things.
 - An **idiomatic Elixir library** you can drop into your app to get an agent system.
 
-It features support for the basics: [basic tools](), [auto-compaction](), and [extended thinking](). There's some niceties thrown in as well: discovery of [agent skills]() and a [JSON-RPC transport]() for building your own UI.
+It features support for the basics: [basic tools](docs/tools.md), [auto-compaction](docs/compaction.md), and [extended thinking](docs/reasoning.md). There's some niceties thrown in as well: discovery of [agent skills](docs/tools/use-skill.md) and a [JSON-RPC transport](docs/rpc.md) for building your own UI.
 
-The only supported provider is [GitHub Copilot](), but it's been designed with the ability to add more if anyone uses it.
+The only supported provider is [GitHub Copilot](docs/providers.md), but it's been designed with the ability to add more if anyone uses it.
+
+So far, we're at the point where **it's building itself reliably**.
 
 ## What can it do?
 
