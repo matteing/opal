@@ -181,6 +181,7 @@ defmodule Opal.Agent do
       |> State.append_message(Opal.Message.user(text))
       |> Map.put(:status, :running)
 
+    Emitter.broadcast(state, {:message_applied, text})
     Emitter.broadcast(state, {:agent_start})
 
     {:next_state, :running, state,

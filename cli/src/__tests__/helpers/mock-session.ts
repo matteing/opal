@@ -29,7 +29,6 @@ export interface MockSession {
   authStatus: ReturnType<typeof vi.fn>;
   authLogin: ReturnType<typeof vi.fn>;
   authPoll: ReturnType<typeof vi.fn>;
-  authSetKey: ReturnType<typeof vi.fn>;
   ping: ReturnType<typeof vi.fn>;
   close: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
@@ -82,7 +81,6 @@ export function createMockSession(overrides: Partial<MockSession> = {}): MockSes
       interval: 5,
     }),
     authPoll: vi.fn().mockResolvedValue({ authenticated: true }),
-    authSetKey: vi.fn().mockResolvedValue({ ok: true }),
     ping: vi.fn().mockResolvedValue(undefined),
     close: vi.fn(),
     on: vi.fn(),

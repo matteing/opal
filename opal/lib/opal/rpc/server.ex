@@ -161,8 +161,6 @@ defmodule Opal.RPC.Server do
 
   def dispatch("session/start", params) do
     with {:ok, opts} <- decode_session_opts(params),
-         :ok <-
-           validate_tool_names(opts[:tool_names], fn -> Opal.Config.new(opts).default_tools end),
          {:ok, agent} <- start_session(opts) do
       info = Opal.get_info(agent)
 
@@ -318,20 +316,9 @@ defmodule Opal.RPC.Server do
 
   # -- Models & thinking --
 
-  def dispatch("models/list", params) do
+  def dispatch("models/list", _params) do
     copilot = Opal.Auth.Copilot.list_models() |> Enum.map(&Map.put(&1, :provider, "copilot"))
-
-    case list_provider_models(params["providers"]) do
-      {:ok, extra} ->
-        {:ok, %{models: copilot ++ extra}}
-
-      {:error, p} ->
-        error(
-          :invalid_params,
-          "Unknown provider in providers list",
-          "unknown provider: #{inspect(p)}"
-        )
-    end
+    {:ok, %{models: copilot}}
   end
 
   def dispatch("model/set", %{"session_id" => sid, "model_id" => model_id} = params) do
@@ -396,16 +383,6 @@ defmodule Opal.RPC.Server do
 
   def dispatch("auth/poll", _),
     do: error(:invalid_params, "Missing required params: device_code, interval")
-
-  def dispatch("auth/set_key", %{"provider" => p, "api_key" => key})
-      when is_binary(p) and is_binary(key) and key != "" do
-    Opal.Settings.save(%{"#{p}_api_key" => key})
-    System.put_env("#{String.upcase(p)}_API_KEY", key)
-    {:ok, %{ok: true}}
-  end
-
-  def dispatch("auth/set_key", _),
-    do: error(:invalid_params, "Missing required params: provider, api_key")
 
   # -- Tasks --
 
@@ -516,13 +493,11 @@ defmodule Opal.RPC.Server do
 
   defp decode_session_opts(params) when is_map(params) do
     with {:ok, model} <- parse_model(params["model"]),
-         {:ok, features} <- parse_features(params["features"]),
-         {:ok, tools} <- parse_string_list(params["tools"], "tools") do
+         {:ok, features} <- parse_features(params["features"]) do
       opts =
         %{working_dir: params["working_dir"] || File.cwd!()}
         |> put_if_present(:model, model)
         |> put_if_present(:features, normalize_features(features))
-        |> put_if_present(:tool_names, tools)
         |> put_string(params, "system_prompt", :system_prompt)
         |> put_flag(params, "session", :session)
         |> put_string(params, "session_id", :session_id)
@@ -538,13 +513,13 @@ defmodule Opal.RPC.Server do
 
   defp parse_model(nil), do: {:ok, nil}
 
-  defp parse_model(%{"provider" => p, "id" => id})
-       when is_binary(p) and p != "" and is_binary(id) and id != "" do
-    {:ok, "#{p}:#{id}"}
+  defp parse_model(%{"id" => id} = m) when is_binary(id) and id != "" do
+    level = parse_thinking_level(m["thinking_level"])
+    {:ok, Opal.Provider.Model.new(id, thinking_level: level)}
   end
 
   defp parse_model(_),
-    do: error(:invalid_params, "model must be {provider, id} with non-empty strings")
+    do: error(:invalid_params, "model must have a non-empty id string")
 
   defp normalize_features(nil), do: nil
   defp normalize_features(f) when map_size(f) == 0, do: nil
@@ -615,23 +590,6 @@ defmodule Opal.RPC.Server do
   @valid_thinking ~w(off low medium high max)
   defp parse_thinking_level(l) when l in @valid_thinking, do: String.to_atom(l)
   defp parse_thinking_level(_), do: :off
-
-  defp list_provider_models(nil), do: {:ok, []}
-
-  defp list_provider_models(providers) when is_list(providers) do
-    Enum.reduce_while(providers, {:ok, []}, fn p, {:ok, acc} ->
-      try do
-        provider = String.to_existing_atom(p)
-
-        models =
-          Opal.Provider.Registry.list_provider(provider) |> Enum.map(&Map.put(&1, :provider, p))
-
-        {:cont, {:ok, acc ++ models}}
-      rescue
-        ArgumentError -> {:halt, {:error, p}}
-      end
-    end)
-  end
 
   # ── Runtime config ─────────────────────────────────────────────────
 
@@ -721,6 +679,13 @@ defmodule Opal.RPC.Server do
   defp serialize_event({:message_queued, text}), do: {"message_queued", %{text: text}}
   defp serialize_event({:message_applied, text}), do: {"message_applied", %{text: text}}
   defp serialize_event({:status_update, msg}), do: {"status_update", %{message: msg}}
+
+  defp serialize_event({:tool_output, tool, call_id, chunk}),
+    do: {"tool_output", %{tool: tool, call_id: call_id, chunk: chunk}}
+
+  defp serialize_event({:tool_output, tool, chunk}),
+    do: {"tool_output", %{tool: tool, call_id: "", chunk: chunk}}
+
   defp serialize_event({:error, reason}), do: {"error", %{reason: inspect(reason)}}
   defp serialize_event({:context_discovered, files}), do: {"context_discovered", %{files: files}}
 

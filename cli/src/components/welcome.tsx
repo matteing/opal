@@ -5,12 +5,16 @@ import { homedir } from "os";
 import { fileURLToPath } from "url";
 import { resolve, dirname } from "path";
 import { PALETTE, colors } from "../lib/palette.js";
+import { toRootRelativePath } from "../lib/formatting.js";
+
+// ── Constants ────────────────────────────────────────────────────
 
 const CLI_VERSION = (() => {
   try {
     const dir = dirname(fileURLToPath(import.meta.url));
-    const pkgPath = resolve(dir, "../../package.json");
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version: string };
+    const pkg = JSON.parse(readFileSync(resolve(dir, "../../package.json"), "utf-8")) as {
+      version: string;
+    };
     return pkg.version;
   } catch {
     return null;
@@ -29,10 +33,11 @@ const SHAPE = [
   "      ▀▀████▀▀",
 ];
 
-const FADE_MS = 1500;
-
 const ROWS = SHAPE.length;
 const COLS = Math.max(...SHAPE.map((l) => l.length));
+const FADE_MS = 1500;
+
+// ── Color helpers ────────────────────────────────────────────────
 
 function parseHex(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
@@ -43,7 +48,6 @@ function toHex(r: number, g: number, b: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }
 
-// Desaturate by lerping each channel toward the luminance midpoint.
 function desaturate(hex: string, amount: number): string {
   const [r, g, b] = parseHex(hex);
   const lum = Math.round(r * 0.299 + g * 0.587 + b * 0.114);
@@ -61,7 +65,6 @@ function opalColor(row: number, col: number, phase: number): string {
   return PALETTE[Math.min(idx, PALETTE.length - 1)];
 }
 
-// Pre-compute the fully-dimmed color grid once (sat = 0.85, phase frozen at final value).
 function computeStaticColors(finalPhase: number): { grid: string[][]; title: string } {
   const sat = 0.85;
   const grid = SHAPE.map((line, row) =>
@@ -72,28 +75,79 @@ function computeStaticColors(finalPhase: number): { grid: string[][]; title: str
   return { grid, title: desaturate(colors.title, sat) };
 }
 
+// ── Gem renderer ─────────────────────────────────────────────────
+
+const Gem: FC<{ colorAt: (row: number, col: number) => string }> = ({ colorAt }) => (
+  <Box flexDirection="column">
+    {SHAPE.map((line, row) => (
+      <Text key={row}>
+        {[...line].map((ch, col) =>
+          ch === " " ? (
+            " "
+          ) : (
+            <Text key={col} color={colorAt(row, col)}>
+              {ch}
+            </Text>
+          ),
+        )}
+      </Text>
+    ))}
+  </Box>
+);
+
+// ── Subtitle lines ───────────────────────────────────────────────
+
+const Subtitle: FC<{ text: string; color?: string; dimColor?: boolean }> = ({
+  text,
+  color,
+  dimColor,
+}) => (
+  <Box>
+    <Text color={color} dimColor={dimColor}>
+      {text}
+    </Text>
+  </Box>
+);
+
+// ── Main component ───────────────────────────────────────────────
+
 export interface WelcomeProps {
   dimmed?: boolean;
   workingDir?: string;
+  contextFiles?: readonly string[];
+  skills?: readonly string[];
 }
 
-const WelcomeInner: FC<WelcomeProps> = ({ dimmed = false, workingDir }) => {
-  const shortCwd = workingDir ? workingDir.replace(homedir(), "~") : null;
-  const versionLabel = CLI_VERSION ? `v${CLI_VERSION}` : null;
-  const infoText = [versionLabel, shortCwd].filter(Boolean).join(" · ");
+const WelcomeInner: FC<WelcomeProps> = ({
+  dimmed = false,
+  workingDir,
+  contextFiles = [],
+  skills = [],
+}) => {
+  // Build subtitle strings
+  const shortCwd = workingDir?.replace(homedir(), "~");
+  const infoText = [CLI_VERSION ? `v${CLI_VERSION}` : null, shortCwd].filter(Boolean).join(" · ");
+
+  const discoveryParts: string[] = [];
+  if (contextFiles.length > 0) {
+    discoveryParts.push(contextFiles.map((f) => toRootRelativePath(f, workingDir)).join(", "));
+  }
+  if (skills.length > 0) {
+    discoveryParts.push(`${skills.length} skill${skills.length > 1 ? "s" : ""}`);
+  }
+  const discoveryText = discoveryParts.join(" · ") || null;
+
+  // Animation state
   const [phase, setPhase] = useState(0);
   const [mute, setMute] = useState(0);
   const fadeStart = useRef<number | null>(null);
   const finalPhaseRef = useRef(0);
 
   useEffect(() => {
-    if (dimmed && fadeStart.current === null) {
-      fadeStart.current = Date.now();
-    }
+    if (dimmed && fadeStart.current === null) fadeStart.current = Date.now();
   }, [dimmed]);
 
-  // Animation slows exponentially and colors desaturate.
-  // Speed: 0.04 → 0 over FADE_MS. Saturation: 1 → 0.15 (keeps a hint of color).
+  // Iridescent animation — slows exponentially and desaturates during fade.
   useEffect(() => {
     if (mute >= 1) return;
     const id = setInterval(() => {
@@ -101,7 +155,7 @@ const WelcomeInner: FC<WelcomeProps> = ({ dimmed = false, workingDir }) => {
       if (fadeStart.current !== null) {
         const t = Math.min(1, (Date.now() - fadeStart.current) / FADE_MS);
         setMute(t);
-        speed = 0.04 * (1 - t) * (1 - t); // quadratic ease-out
+        speed *= (1 - t) * (1 - t);
       }
       setPhase((p) => {
         const next = (p + speed) % 1;
@@ -112,75 +166,32 @@ const WelcomeInner: FC<WelcomeProps> = ({ dimmed = false, workingDir }) => {
     return () => clearInterval(id);
   }, [mute >= 1]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Once fade is complete, pre-compute the static dimmed colors and cache them.
+  // Once fully dimmed, freeze into a static color grid.
   const staticColors = useMemo(() => {
     if (mute < 1) return null;
     return computeStaticColors(finalPhaseRef.current);
   }, [mute >= 1]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fully-static render path — no interval, no per-character computation.
-  if (staticColors) {
-    return (
-      <Box flexDirection="column" alignItems="center" paddingX={1} marginBottom={1}>
-        <Box flexDirection="column">
-          {SHAPE.map((line, row) => (
-            <Text key={row}>
-              {[...line].map((ch, col) =>
-                ch === " " ? (
-                  " "
-                ) : (
-                  <Text key={col} color={staticColors.grid[row][col]}>
-                    {ch}
-                  </Text>
-                ),
-              )}
-            </Text>
-          ))}
-        </Box>
-        <Box marginTop={1}>
-          <Text color={staticColors.title}>✦ opal</Text>
-        </Box>
-        {infoText && (
-          <Box marginTop={0}>
-            <Text dimColor>{infoText}</Text>
-          </Box>
-        )}
-      </Box>
-    );
-  }
-
-  // Animated render path — active during fade-in / fade-out.
-  const sat = 0.85 * mute; // 0 → 0.85 desaturation (keeps a tint)
+  // Color functions for the two render modes
+  const sat = 0.85 * mute;
+  const colorAt = staticColors
+    ? (row: number, col: number) => staticColors.grid[row][col]
+    : (row: number, col: number) => desaturate(opalColor(row, col, phase), sat);
+  const titleColor = staticColors ? staticColors.title : desaturate(colors.title, sat);
+  const isAnimating = !staticColors;
 
   return (
-    <Box flexDirection="column" alignItems="center" paddingX={1} marginTop={1} marginBottom={1}>
-      <Box flexDirection="column">
-        {SHAPE.map((line, row) => (
-          <Text key={row}>
-            {[...line].map((ch, col) =>
-              ch === " " ? (
-                " "
-              ) : (
-                <Text key={col} color={desaturate(opalColor(row, col, phase), sat)}>
-                  {ch}
-                </Text>
-              ),
-            )}
-          </Text>
-        ))}
-      </Box>
+    <Box flexDirection="column" alignItems="center" paddingX={1} marginY={1} marginX={1}>
+      <Gem colorAt={colorAt} />
       <Box marginTop={1}>
-        <Text bold={mute < 1} color={desaturate(colors.title, sat)}>
+        <Text bold={isAnimating} color={titleColor}>
           ✦ opal
         </Text>
       </Box>
-      {infoText && (
-        <Box marginTop={0}>
-          <Text dimColor>{infoText}</Text>
-        </Box>
-      )}
+      {infoText && <Subtitle text={infoText} dimColor />}
+      {discoveryText && <Subtitle text={discoveryText} color="#555" />}
     </Box>
   );
-};
+};;
 
 export const Welcome = React.memo(WelcomeInner);

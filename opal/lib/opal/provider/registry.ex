@@ -44,49 +44,38 @@ defmodule Opal.Provider.Registry do
   end
 
   @doc """
-  Lists models available for a direct provider (e.g., `:anthropic`, `:openai`).
+  Lists models available for a specific provider.
 
-  Only returns models with chat capability. Returns a list of `%{id, name, supports_thinking}` maps.
+  Since Opal normalizes all providers to GitHub Copilot, this returns the same
+  models as `list_copilot/0` regardless of the provider argument.
+
+  ## Examples
+
+      iex> Opal.Provider.Registry.list_provider(:anthropic)
+      [%{id: "claude-opus-4.6", ...}, ...]
+
   """
   @spec list_provider(atom()) :: [
           %{id: String.t(), name: String.t(), supports_thinking: boolean()}
         ]
-  def list_provider(provider) when is_atom(provider) do
-    LLMDB.models()
-    |> Enum.filter(fn m ->
-      m.provider == provider and
-        not m.deprecated and
-        not m.retired and
-        get_in(m.capabilities, [:chat]) == true
-    end)
-    |> Enum.map(&to_model_info/1)
-    |> Enum.sort_by(& &1.id)
-  rescue
-    e ->
-      Logger.warning("LLMDB list_provider(#{inspect(provider)}) failed: #{Exception.message(e)}")
-      []
+  def list_provider(_provider) do
+    list_copilot()
   end
 
   @doc """
   Returns the context window size for a model.
 
-  Looks up the model in LLMDB by provider and ID. For Copilot models,
-  queries the `github_copilot` provider. Falls back to #{@default_context_window}
-  if the model is not found.
+  Looks up the model in LLMDB via the `github_copilot` provider.
+  Falls back to #{@default_context_window} if the model is not found.
 
   ## Examples
 
-      iex> Opal.Provider.Registry.context_window(%Opal.Provider.Model{provider: :copilot, id: "claude-opus-4.6"})
+      iex> Opal.Provider.Registry.context_window(%Opal.Provider.Model{id: "claude-opus-4.6"})
       128_000
-
-      iex> Opal.Provider.Registry.context_window(%Opal.Provider.Model{provider: :anthropic, id: "claude-sonnet-4-5"})
-      200_000
   """
   @spec context_window(Opal.Provider.Model.t()) :: pos_integer()
-  def context_window(%{provider: provider, id: id}) do
-    llmdb_provider = if provider == :copilot, do: :github_copilot, else: provider
-
-    case LLMDB.model("#{llmdb_provider}:#{id}") do
+  def context_window(%{id: id}) do
+    case LLMDB.model("github_copilot:#{id}") do
       {:ok, %{limits: %{context: ctx}}} when is_integer(ctx) and ctx > 0 -> ctx
       _ -> @default_context_window
     end
@@ -103,10 +92,8 @@ defmodule Opal.Provider.Registry do
   Useful for checking aliases, capabilities, and other metadata.
   """
   @spec resolve(Opal.Provider.Model.t()) :: {:ok, LLMDB.Model.t()} | {:error, :not_found}
-  def resolve(%{provider: provider, id: id}) do
-    llmdb_provider = if provider == :copilot, do: :github_copilot, else: provider
-
-    case LLMDB.model("#{llmdb_provider}:#{id}") do
+  def resolve(%{id: id}) do
+    case LLMDB.model("github_copilot:#{id}") do
       {:ok, _model} = result -> result
       _ -> {:error, :not_found}
     end

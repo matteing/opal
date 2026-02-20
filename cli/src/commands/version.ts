@@ -2,6 +2,8 @@
  * `opal --version` — Print CLI and server versions, then exit.
  */
 import { OpalClient } from "../sdk/client.js";
+import { RpcConnection } from "../sdk/rpc/connection.js";
+import { StdioTransport } from "../sdk/transport/stdio.js";
 
 export async function runVersion(): Promise<void> {
   const pkg = await import("../../package.json", { with: { type: "json" } });
@@ -10,7 +12,9 @@ export async function runVersion(): Promise<void> {
   console.log(`opal ${cliVersion}`);
 
   try {
-    const client = new OpalClient();
+    const transport = new StdioTransport();
+    const rpc = new RpcConnection(transport);
+    const client = new OpalClient(rpc);
     const result = (await client.request("opal/version", {} as Record<string, never>)) as {
       serverVersion: string;
       protocolVersion: string;

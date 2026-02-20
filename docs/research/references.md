@@ -38,6 +38,10 @@ Compiled from `## References` sections across docs, plus README and ongoing rese
 
 - [Handle approvals and user input](https://platform.claude.com/docs/en/agent-sdk/user-input) — Anthropic, 2025. Claude Agent SDK documentation for surfacing approval requests and clarifying questions. Informed the `ask_user` tool design and the planning approach. ([user-input](../tools/user-input.md), [planning](../planning.md))
 
+## Schema & Validation
+
+- [Zod JSON Schema](https://zod.dev/json-schema) — Zod 4's built-in `z.fromJsonSchema()` for deriving Zod schemas (with full type inference) from JSON Schema at runtime. ([rpc](../rpc.md))
+
 ## Auth & Standards
 
 - [RFC 8628 — OAuth 2.0 Device Authorization Grant](https://datatracker.ietf.org/doc/html/rfc8628) — GitHub device-code OAuth flow used by Opal. ([installing](../installing.md))

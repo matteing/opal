@@ -1,5 +1,9 @@
 import Config
 
+config :opal, start_rpc: false
+
+config :logger, level: :warning
+
 config :logger, level: :warning
 
 config :llm_db,

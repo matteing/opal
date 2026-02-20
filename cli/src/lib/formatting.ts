@@ -8,12 +8,6 @@ export function formatTokens(tokens: number | undefined): string {
   return tokens.toString();
 }
 
-export interface ContextDisplayInput {
-  files: string[];
-  skills: string[];
-  mcpServers: string[];
-}
-
 export function toRootRelativePath(filePath: string, rootDir?: string): string {
   if (!filePath || !rootDir || !path.isAbsolute(filePath)) return filePath;
 
@@ -25,22 +19,4 @@ export function toRootRelativePath(filePath: string, rootDir?: string): string {
   }
 
   return relative.split(path.sep).join("/");
-}
-
-export function buildContextLoadedItems(context: ContextDisplayInput, rootDir?: string): string[] {
-  const items: string[] = [];
-
-  for (const file of context.files) {
-    items.push(toRootRelativePath(file, rootDir));
-  }
-
-  if (context.skills.length > 0) {
-    items.push(`skill: ${context.skills.join(", ")}`);
-  }
-
-  for (const server of context.mcpServers) {
-    items.push(`mcp: ${server}`);
-  }
-
-  return items;
 }

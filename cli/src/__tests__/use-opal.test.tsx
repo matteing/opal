@@ -99,13 +99,13 @@ describe("useOpal hook", () => {
     it("sets authFlow when auth status is setup_required", async () => {
       mockSession.auth = {
         provider: "copilot",
-        providers: [{ id: "copilot", name: "GitHub Copilot", method: "device_code", ready: false }],
+        providers: [],
         status: "setup_required",
       };
       const { unmount } = render(React.createElement(HookWrapper));
       await tick(50);
       expect(capturedState?.authFlow).toBeDefined();
-      expect(capturedState?.authFlow?.providers).toHaveLength(1);
+      expect(capturedState?.authFlow?.providers).toHaveLength(0);
       expect(capturedState?.sessionReady).toBe(false);
       unmount();
     });
@@ -433,49 +433,7 @@ describe("useOpal hook", () => {
       unmount();
     });
 
-    it("authSubmitKey with empty key shows input screen", async () => {
-      mockSession.auth = {
-        provider: "copilot",
-        providers: [{ id: "openai", name: "OpenAI", method: "api_key", ready: false }],
-        status: "setup_required",
-      };
-      const { unmount } = render(React.createElement(HookWrapper));
-      await tick(50);
-      capturedActions?.authSubmitKey("openai", "");
-      await tick();
-      expect(capturedState?.authFlow?.apiKeyInput?.providerId).toBe("openai");
-      unmount();
-    });
 
-    it("authSubmitKey with key calls authSetKey and transitions to ready", async () => {
-      mockSession.auth = {
-        provider: "copilot",
-        providers: [{ id: "openai", name: "OpenAI", method: "api_key", ready: false }],
-        status: "setup_required",
-      };
-      const { unmount } = render(React.createElement(HookWrapper));
-      await tick(50);
-      capturedActions?.authSubmitKey("openai", "sk-test-123");
-      await tick(50);
-      expect(mockSession.authSetKey).toHaveBeenCalledWith("openai", "sk-test-123");
-      expect(capturedState?.sessionReady).toBe(true);
-      unmount();
-    });
-
-    it("authSubmitKey failure sets error", async () => {
-      mockSession.auth = {
-        provider: "copilot",
-        providers: [{ id: "openai", name: "OpenAI", method: "api_key", ready: false }],
-        status: "setup_required",
-      };
-      mockSession.authSetKey.mockRejectedValue(new Error("Invalid key"));
-      const { unmount } = render(React.createElement(HookWrapper));
-      await tick(50);
-      capturedActions?.authSubmitKey("openai", "bad-key");
-      await tick(50);
-      expect(capturedState?.error).toBe("Invalid key");
-      unmount();
-    });
   });
 
   // --- Event processing ---

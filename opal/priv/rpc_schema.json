@@ -412,6 +412,40 @@
         ],
         "type": "object"
       },
+      "tool_output": {
+        "description": "Streaming output chunk from a running tool.",
+        "properties": {
+          "call_id": {
+            "description": "Unique call identifier.",
+            "type": "string"
+          },
+          "chunk": {
+            "description": "Output chunk.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session this event belongs to.",
+            "type": "string"
+          },
+          "tool": {
+            "description": "Tool name.",
+            "type": "string"
+          },
+          "type": {
+            "const": "tool_output",
+            "description": "Event type discriminator.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "session_id",
+          "tool",
+          "call_id",
+          "chunk"
+        ],
+        "type": "object"
+      },
       "tool_execution_start": {
         "description": "A tool has started executing.",
         "properties": {
@@ -708,40 +742,8 @@
           "type": "object"
         }
       },
-      "auth/set_key": {
-        "description": "Save an API key for a provider. Takes effect immediately.",
-        "params": {
-          "properties": {
-            "api_key": {
-              "description": "The API key to save.",
-              "type": "string"
-            },
-            "provider": {
-              "description": "Provider ID (e.g. 'anthropic', 'openai').",
-              "type": "string"
-            }
-          },
-          "required": [
-            "provider",
-            "api_key"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "properties": {
-            "ok": {
-              "description": "True if the key was saved.",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "ok"
-          ],
-          "type": "object"
-        }
-      },
       "auth/status": {
-        "description": "Probe all credential sources and return auth readiness.",
+        "description": "Probe Copilot credentials and return auth readiness.",
         "params": {
           "properties": {},
           "type": "object"
@@ -749,16 +751,10 @@
         "result": {
           "properties": {
             "auth": {
-              "description": "Full probe result with provider list and readiness.",
+              "description": "Probe result: status is 'ready' or 'setup_required', provider is 'copilot' or null.",
               "properties": {
                 "provider": {
                   "type": "string"
-                },
-                "providers": {
-                  "items": {
-                    "type": "object"
-                  },
-                  "type": "array"
                 },
                 "status": {
                   "type": "string"
@@ -766,13 +762,12 @@
               },
               "required": [
                 "provider",
-                "providers",
                 "status"
               ],
               "type": "object"
             },
             "authenticated": {
-              "description": "True if any provider has credentials.",
+              "description": "True if Copilot credentials are available.",
               "type": "boolean"
             }
           },
@@ -836,17 +831,9 @@
         }
       },
       "models/list": {
-        "description": "List available LLM models. Copilot models are always included. Pass providers to also list direct provider models.",
+        "description": "List available LLM models from Copilot.",
         "params": {
-          "properties": {
-            "providers": {
-              "description": "Optional list of direct providers to include (e.g. [\"anthropic\", \"openai\"]).",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
+          "properties": {},
           "type": "object"
         },
         "result": {
@@ -1254,11 +1241,15 @@
                 },
                 "provider": {
                   "type": "string"
+                },
+                "thinking_level": {
+                  "type": "string"
                 }
               },
               "required": [
                 "id",
-                "provider"
+                "provider",
+                "thinking_level"
               ],
               "type": "object"
             },
@@ -1274,13 +1265,6 @@
               "description": "System prompt for the agent.",
               "type": "string"
             },
-            "tools": {
-              "description": "Tool names to enable.",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
             "working_dir": {
               "description": "Working directory. Defaults to server cwd.",
               "type": "string"
@@ -1291,16 +1275,10 @@
         "result": {
           "properties": {
             "auth": {
-              "description": "Auth probe result: status is 'ready' or 'setup_required', provider is auto-selected ID or null, providers lists all known options with readiness.",
+              "description": "Auth probe result: status is 'ready' or 'setup_required', provider is 'copilot' or null.",
               "properties": {
                 "provider": {
                   "type": "string"
-                },
-                "providers": {
-                  "items": {
-                    "type": "object"
-                  },
-                  "type": "array"
                 },
                 "status": {
                   "type": "string"
@@ -1308,7 +1286,6 @@
               },
               "required": [
                 "provider",
-                "providers",
                 "status"
               ],
               "type": "object"

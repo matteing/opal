@@ -1,12 +1,16 @@
 /**
  * Deep recursive key transforms between snake_case and camelCase.
+ *
+ * Applied at the transport boundary so all SDK code operates in camelCase
+ * while the Elixir server communicates in snake_case.
  */
 
+/** Recursively convert all object keys from snake_case to camelCase. */
 export function snakeToCamel(obj: unknown): unknown {
   if (Array.isArray(obj)) return obj.map(snakeToCamel);
   if (obj !== null && typeof obj === "object") {
     const out: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
+    for (const [key, val] of Object.entries(obj)) {
       out[snakeToCamelKey(key)] = snakeToCamel(val);
     }
     return out;
@@ -14,11 +18,12 @@ export function snakeToCamel(obj: unknown): unknown {
   return obj;
 }
 
+/** Recursively convert all object keys from camelCase to snake_case. */
 export function camelToSnake(obj: unknown): unknown {
   if (Array.isArray(obj)) return obj.map(camelToSnake);
   if (obj !== null && typeof obj === "object") {
     const out: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
+    for (const [key, val] of Object.entries(obj)) {
       out[camelToSnakeKey(key)] = camelToSnake(val);
     }
     return out;

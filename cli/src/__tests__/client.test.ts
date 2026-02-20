@@ -165,7 +165,7 @@ describe("OpalClient", () => {
   it("routes agent/event notifications with camelCase type", async () => {
     const client = new OpalClient();
     const events: unknown[] = [];
-    client.onEvent((e) => events.push(e));
+    client.on("agentEvent", (e) => events.push(e));
 
     mockProc.stdout.push(
       JSON.stringify({
@@ -179,9 +179,9 @@ describe("OpalClient", () => {
     expect((events[0] as Record<string, unknown>).type).toBe("agentStart");
   });
 
-  it("handles server requests with onServerRequest handler", async () => {
+  it("handles server requests with onConfirm handler", async () => {
     const handler = vi.fn().mockResolvedValue({ action: "allow" });
-    const _client = new OpalClient({ onServerRequest: handler });
+    const _client = new OpalClient({ onConfirm: handler as never });
     const writes: string[] = [];
     mockProc.stdin.write = function (chunk: unknown, ...args: unknown[]) {
       writes.push(String(chunk));
@@ -200,10 +200,7 @@ describe("OpalClient", () => {
     );
     await new Promise((r) => setTimeout(r, 10));
 
-    expect(handler).toHaveBeenCalledWith(
-      "client/confirm",
-      expect.objectContaining({ sessionId: "s1" }),
-    );
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "s1" }));
     const response = JSON.parse(writes[writes.length - 1].replace("\n", ""));
     expect(response.id).toBe(99);
     expect(response.result.action).toBe("allow");
@@ -211,7 +208,7 @@ describe("OpalClient", () => {
 
   it("sends error response when server request handler throws", async () => {
     const handler = vi.fn().mockRejectedValue(new Error("denied"));
-    const _client = new OpalClient({ onServerRequest: handler });
+    const _client = new OpalClient({ onConfirm: handler as never });
     const writes: string[] = [];
     mockProc.stdin.write = function (chunk: unknown, ...args: unknown[]) {
       writes.push(String(chunk));
@@ -299,7 +296,7 @@ describe("OpalClient", () => {
   it("onNotification receives raw notifications", async () => {
     const client = new OpalClient();
     const notifications: [string, Record<string, unknown>][] = [];
-    client.onNotification((method, params) => notifications.push([method, params]));
+    client.on("notification", (method, params) => notifications.push([method, params]));
 
     mockProc.stdout.push(
       JSON.stringify({

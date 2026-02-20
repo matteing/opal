@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import path from "node:path";
-import { formatTokens, toRootRelativePath, buildContextLoadedItems } from "../lib/formatting.js";
+import { formatTokens, toRootRelativePath } from "../lib/formatting.js";
 
 describe("formatTokens", () => {
   it("returns '0' for undefined", () => {
@@ -41,27 +41,5 @@ describe("toRootRelativePath", () => {
 
   it("keeps relative paths unchanged", () => {
     expect(toRootRelativePath("docs/guide.md", path.resolve("repo-root"))).toBe("docs/guide.md");
-  });
-});
-
-describe("buildContextLoadedItems", () => {
-  it("batches skills and keeps comma-separated output", () => {
-    const root = path.resolve("repo-root");
-    const file = path.join(root, "AGENTS.md");
-
-    const items = buildContextLoadedItems(
-      {
-        files: [file],
-        skills: ["ci-preflight", "debugging", "docs"],
-        mcpServers: ["github-mcp-server"],
-      },
-      root,
-    );
-
-    expect(items).toEqual([
-      "AGENTS.md",
-      "skill: ci-preflight, debugging, docs",
-      "mcp: github-mcp-server",
-    ]);
   });
 });

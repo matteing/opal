@@ -99,7 +99,7 @@ defmodule Opal.RPC.Protocol do
       params: [
         %{
           name: "model",
-          type: {:object, %{"provider" => :string, "id" => :string}},
+          type: {:object, %{"provider" => :string, "id" => :string, "thinking_level" => :string}},
           required: false,
           description: "Model to use. Defaults to config default."
         },
@@ -114,12 +114,6 @@ defmodule Opal.RPC.Protocol do
           type: :string,
           required: false,
           description: "Working directory. Defaults to server cwd."
-        },
-        %{
-          name: "tools",
-          type: {:array, :string},
-          required: false,
-          description: "Tool names to enable."
         },
         %{
           name: "mcp_servers",
@@ -187,11 +181,10 @@ defmodule Opal.RPC.Protocol do
             {:object,
              %{
                "status" => :string,
-               "provider" => :string,
-               "providers" => {:array, :object}
+               "provider" => :string
              }},
           description:
-            "Auth probe result: status is 'ready' or 'setup_required', provider is auto-selected ID or null, providers lists all known options with readiness."
+            "Auth probe result: status is 'ready' or 'setup_required', provider is 'copilot' or null."
         }
       ]
     },
@@ -286,17 +279,8 @@ defmodule Opal.RPC.Protocol do
     %{
       method: "models/list",
       direction: :client_to_server,
-      description:
-        "List available LLM models. Copilot models are always included. Pass providers to also list direct provider models.",
-      params: [
-        %{
-          name: "providers",
-          type: {:array, :string},
-          required: false,
-          description:
-            "Optional list of direct providers to include (e.g. [\"anthropic\", \"openai\"])."
-        }
-      ],
+      description: "List available LLM models from Copilot.",
+      params: [],
       result: [
         %{
           name: "models",
@@ -347,13 +331,13 @@ defmodule Opal.RPC.Protocol do
     %{
       method: "auth/status",
       direction: :client_to_server,
-      description: "Probe all credential sources and return auth readiness.",
+      description: "Probe Copilot credentials and return auth readiness.",
       params: [],
       result: [
         %{
           name: "authenticated",
           type: :boolean,
-          description: "True if any provider has credentials."
+          description: "True if Copilot credentials are available."
         },
         %{
           name: "auth",
@@ -361,10 +345,10 @@ defmodule Opal.RPC.Protocol do
             {:object,
              %{
                "status" => :string,
-               "provider" => :string,
-               "providers" => {:array, :object}
+               "provider" => :string
              }},
-          description: "Full probe result with provider list and readiness."
+          description:
+            "Probe result: status is 'ready' or 'setup_required', provider is 'copilot' or null."
         }
       ]
     },
@@ -404,28 +388,6 @@ defmodule Opal.RPC.Protocol do
           type: :boolean,
           description: "True once the user has authorized."
         }
-      ]
-    },
-    %{
-      method: "auth/set_key",
-      direction: :client_to_server,
-      description: "Save an API key for a provider. Takes effect immediately.",
-      params: [
-        %{
-          name: "provider",
-          type: :string,
-          required: true,
-          description: "Provider ID (e.g. 'anthropic', 'openai')."
-        },
-        %{
-          name: "api_key",
-          type: :string,
-          required: true,
-          description: "The API key to save."
-        }
-      ],
-      result: [
-        %{name: "ok", type: :boolean, description: "True if the key was saved."}
       ]
     },
     %{
@@ -771,6 +733,15 @@ defmodule Opal.RPC.Protocol do
           description:
             "Tool execution result object. Includes ok plus tool-specific payload fields."
         }
+      ]
+    },
+    %{
+      type: "tool_output",
+      description: "Streaming output chunk from a running tool.",
+      fields: [
+        %{name: "tool", type: :string, description: "Tool name."},
+        %{name: "call_id", type: :string, description: "Unique call identifier."},
+        %{name: "chunk", type: :string, description: "Output chunk."}
       ]
     },
     %{

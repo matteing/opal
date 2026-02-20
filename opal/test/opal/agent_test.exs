@@ -838,6 +838,13 @@ defmodule Opal.AgentTest do
       assert_receive {:opal_event, ^sid, {:agent_start}}, 1000
     end
 
+    test "agent broadcasts {:message_applied, text} before {:agent_start}" do
+      %{pid: pid, session_id: sid} = start_agent()
+      Agent.prompt(pid, "Hello")
+      assert_receive {:opal_event, ^sid, {:message_applied, "Hello"}}, 1000
+      assert_receive {:opal_event, ^sid, {:agent_start}}, 1000
+    end
+
     test "agent broadcasts {:message_delta, %{delta: text}} events" do
       %{pid: pid, session_id: sid} = start_agent()
       Agent.prompt(pid, "Hello")

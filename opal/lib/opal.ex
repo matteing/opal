@@ -19,8 +19,8 @@ defmodule Opal do
 
   # -- Types ------------------------------------------------------------------
 
-  @typedoc "Model specification: struct, `\"provider:id\"` string, or `{provider, id}` tuple."
-  @type model_spec :: Model.t() | String.t() | {atom(), String.t()}
+  @typedoc "Model specification: struct, `\"provider:id\"` string, `{provider, id}` tuple, or `{provider, id, thinking_level}` triple."
+  @type model_spec :: Model.t() | String.t() | {atom(), String.t()} | {atom(), String.t(), atom()}
 
   @typedoc "Options for `start_session/1`. All keys optional; defaults from `Opal.Config`."
   @type session_opts :: %{
@@ -31,8 +31,6 @@ defmodule Opal do
           optional(:provider) => module(),
           optional(:session) => boolean(),
           optional(:session_id) => String.t(),
-          optional(:thinking_level) => atom(),
-          optional(:tool_names) => [String.t()],
           optional(:disabled_tools) => [String.t()]
         }
 
@@ -223,9 +221,8 @@ defmodule Opal do
 
   @spec resolve_model(session_opts(), Config.t()) :: Model.t()
   defp resolve_model(opts, cfg) do
-    thinking = if level = opts[:thinking_level], do: [thinking_level: level], else: []
     base = opts[:model] || saved_model() || cfg.default_model
-    Model.coerce(base, thinking)
+    Model.coerce(base)
   end
 
   @spec saved_model() :: String.t() | nil
@@ -241,11 +238,6 @@ defmodule Opal do
   defp resolve_provider(_opts, cfg), do: cfg.provider
 
   @spec resolve_disabled_tools(session_opts(), [module()]) :: [String.t()]
-  defp resolve_disabled_tools(%{tool_names: names}, tools) when is_list(names) do
-    enabled = MapSet.new(names)
-    tools |> Enum.map(& &1.name()) |> Enum.reject(&MapSet.member?(enabled, &1))
-  end
-
   defp resolve_disabled_tools(%{disabled_tools: names}, _tools) when is_list(names), do: names
   defp resolve_disabled_tools(_opts, _tools), do: []
 

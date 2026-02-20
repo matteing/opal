@@ -155,7 +155,7 @@ defmodule Opal.Agent.ToolRunner do
     Logger.debug("Tool start session=#{state.session_id} tool=#{tc.name}")
     Emitter.broadcast(state, {:tool_execution_start, tc.name, tc.call_id, tc.arguments, meta})
 
-    emit = fn chunk -> Emitter.broadcast(state, {:tool_output, tc.name, chunk}) end
+    emit = fn chunk -> Emitter.broadcast(state, {:tool_output, tc.name, tc.call_id, chunk}) end
     ctx = Map.merge(state.tool_context, %{emit: emit, call_id: tc.call_id})
 
     task =

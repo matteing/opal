@@ -110,24 +110,6 @@ defmodule Opal.RPC.ServerDispatchTest do
                "non-reasoning model #{model.id} should have empty thinking_levels"
       end
     end
-
-    test "models from direct providers include thinking metadata" do
-      assert {:ok, %{models: models}} =
-               Server.dispatch("models/list", %{"providers" => ["anthropic"]})
-
-      anthropic = Enum.filter(models, &(&1.provider == "anthropic"))
-      assert length(anthropic) > 0
-
-      for model <- anthropic do
-        assert Map.has_key?(model, :supports_thinking)
-        assert Map.has_key?(model, :thinking_levels)
-      end
-    end
-
-    test "returns invalid_params for unknown providers in list" do
-      assert {:error, -32602, "Unknown provider in providers list", _} =
-               Server.dispatch("models/list", %{"providers" => ["definitely_not_a_provider"]})
-    end
   end
 
   describe "handle/2 model/set missing params" do
@@ -144,14 +126,14 @@ defmodule Opal.RPC.ServerDispatchTest do
 
   describe "handle/2 thinking/set with nonexistent session" do
     test "returns session not found error" do
-      assert {:error, -32602, "Session not found", "No session with id: nonexistent"} =
+      assert {:error, -32602, "Session not found", _} =
                Server.dispatch("thinking/set", %{"session_id" => "nonexistent", "level" => "high"})
     end
   end
 
   describe "handle/2 model/set with nonexistent session" do
     test "returns session not found error" do
-      assert {:error, -32602, "Session not found", "No session with id: nonexistent"} =
+      assert {:error, -32602, "Session not found", _} =
                Server.dispatch("model/set", %{
                  "session_id" => "nonexistent",
                  "model_id" => "gpt-5",
@@ -218,12 +200,11 @@ defmodule Opal.RPC.ServerDispatchTest do
   end
 
   describe "handle/2 session/start with feature toggles" do
-    test "accepts boot-time feature and tool configuration" do
+    test "accepts boot-time feature configuration" do
       assert {:ok, %{session_id: sid}} =
                Server.dispatch("session/start", %{
                  "working_dir" => File.cwd!(),
-                 "features" => %{"sub_agents" => false},
-                 "tools" => ["read_file"]
+                 "features" => %{"sub_agents" => false}
                })
 
       on_exit(fn ->
@@ -233,11 +214,10 @@ defmodule Opal.RPC.ServerDispatchTest do
         end
       end)
 
-      assert {:ok, %{features: features, tools: tools}} =
+      assert {:ok, %{features: features}} =
                Server.dispatch("opal/config/get", %{"session_id" => sid})
 
       refute features.sub_agents
-      assert tools.enabled == ["read_file"]
     end
   end
 
@@ -283,25 +263,6 @@ defmodule Opal.RPC.ServerDispatchTest do
     end
   end
 
-  describe "handle/2 auth/set_key" do
-    test "sets provider API key" do
-      assert {:ok, %{ok: true}} =
-               Server.dispatch("auth/set_key", %{
-                 "provider" => "test_provider",
-                 "api_key" => "test-key-123"
-               })
-    end
-
-    test "returns error for missing params" do
-      assert {:error, -32602, _, nil} = Server.dispatch("auth/set_key", %{})
-    end
-
-    test "returns error for empty api_key" do
-      assert {:error, -32602, _, nil} =
-               Server.dispatch("auth/set_key", %{"provider" => "test", "api_key" => ""})
-    end
-  end
-
   describe "handle/2 auth/poll" do
     test "returns error for missing params" do
       assert {:error, -32602, _, nil} = Server.dispatch("auth/poll", %{})
@@ -310,7 +271,7 @@ defmodule Opal.RPC.ServerDispatchTest do
 
   describe "handle/2 session/start validation" do
     test "returns error for invalid model params" do
-      assert {:error, -32602, "model must be {provider, id} with non-empty strings", _} =
+      assert {:error, -32602, "model must have a non-empty id string", _} =
                Server.dispatch("session/start", %{
                  "working_dir" => File.cwd!(),
                  "model" => %{"provider" => "", "id" => ""}
@@ -322,14 +283,6 @@ defmodule Opal.RPC.ServerDispatchTest do
                Server.dispatch("session/start", %{
                  "working_dir" => File.cwd!(),
                  "features" => "not_a_map"
-               })
-    end
-
-    test "returns error for invalid tools type" do
-      assert {:error, -32602, "tools must be an array of strings", _} =
-               Server.dispatch("session/start", %{
-                 "working_dir" => File.cwd!(),
-                 "tools" => "not_an_array"
                })
     end
 

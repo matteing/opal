@@ -1,468 +1,477 @@
-import { OpalClient, type OpalClientOptions, type RpcMessageEntry } from "./client.js";
+/**
+ * Session — the primary interface for interacting with the Opal agent.
+ *
+ * Created via `createSession()`, a Session owns the full lifecycle:
+ * transport → RPC connection → typed client → domain operations.
+ *
+ * @example
+ * ```ts
+ * import { createSession } from "./sdk/index.js";
+ *
+ * const session = await createSession({ workingDir: "." });
+ *
+ * for await (const event of session.prompt("List all files")) {
+ *   if (event.type === "messageDelta") process.stdout.write(event.delta);
+ * }
+ *
+ * session.close();
+ * ```
+ */
+
+import type { Transport } from "./transport/transport.js";
+import { StdioTransport } from "./transport/stdio.js";
+import { RpcConnection } from "./rpc/connection.js";
+import type { RpcObserver } from "./rpc/connection.js";
+import { OpalClient } from "./client.js";
+import { AgentStream } from "./stream.js";
 import type {
-  AgentEvent,
   SessionStartParams,
   SessionStartResult,
-  SessionHistoryResult,
   AgentStateResult,
+  SessionHistoryResult,
   ModelsListResult,
   ModelSetResult,
   OpalConfigGetResult,
   OpalConfigSetParams,
   OpalConfigSetResult,
+  OpalVersionResult,
   SettingsGetResult,
   SettingsSaveResult,
-  ConfirmRequest,
-  InputRequest,
-  ClientAsk_userParams,
   AuthStatusResult,
   AuthLoginResult,
   AuthPollResult,
-  AuthSet_keyResult,
-} from "./protocol.js";
+  AgentEvent,
+} from "../sdk/protocol.js";
 
-// --- Event callback types ---
+// ── Options ──────────────────────────────────────────────────────────
 
-type EventMap = {
-  agentStart: [];
-  agentEnd: [
-    usage?: {
-      promptTokens: number;
-      completionTokens: number;
-      totalTokens: number;
-      contextWindow: number;
-    },
-  ];
-  agentAbort: [];
-  messageStart: [];
-  messageDelta: [delta: string];
-  thinkingStart: [];
-  thinkingDelta: [delta: string];
-  toolExecutionStart: [tool: string, callId: string, args: Record<string, unknown>, meta: string];
-  toolExecutionEnd: [
-    tool: string,
-    callId: string,
-    result: { ok: boolean; output?: unknown; error?: string },
-  ];
-  subAgentEvent: [parentCallId: string, subSessionId: string, inner: Record<string, unknown>];
-  turnEnd: [message: string];
-  usageUpdate: [
-    usage: {
-      promptTokens: number;
-      completionTokens: number;
-      totalTokens: number;
-      contextWindow: number;
-    },
-  ];
-  statusUpdate: [message: string];
-  messageQueued: [text: string];
-  messageApplied: [text: string];
-  error: [reason: string];
-  contextDiscovered: [files: string[]];
-  skillLoaded: [name: string, description: string];
-  agentRecovered: [];
-};
+export interface SessionOptions {
+  /** Working directory for agent file operations. Default: process.cwd() */
+  workingDir?: string;
+  /** Resume an existing session by ID. */
+  sessionId?: string;
+  // TODO: this kinda bothers me
+  /** Persist this session to disk. Default: true when not specified. */
+  persist?: boolean;
+  /** System prompt override. */
+  systemPrompt?: string;
+  /** Model selection — string ID shorthand or full spec. */
+  model?: string | { id: string; provider?: string; thinkingLevel?: string };
+  // TODO: default distribution just shouldn't have these.
+  // I don't think I'll ever use any of these toggles.
+  /** Feature toggles. */
+  features?: Partial<{
+    skills: boolean;
+    subAgents: boolean;
+    mcp: boolean;
+    debug: boolean;
+  }>;
+  // TODO: this bothers me too?
+  /** MCP server configurations. */
+  mcpServers?: Record<string, unknown>[];
 
-type EventName = keyof EventMap;
+  /** Callbacks for server-initiated interactions and diagnostics. */
+  callbacks?: {
+    onConfirm?: (request: {
+      sessionId: string;
+      title: string;
+      message: string;
+      actions: string[];
+    }) => Promise<string>;
+    onAskUser?: (request: { question: string; choices?: string[] }) => Promise<string>;
+    onRpcMessage?: (entry: {
+      id: number;
+      direction: "outgoing" | "incoming";
+      timestamp: number;
+      raw: unknown;
+      method?: string;
+      kind: string;
+    }) => void;
+    onStderr?: (data: string) => void;
+  };
 
-// --- Session options ---
-
-export interface SessionOptions extends SessionStartParams {
-  /** Handler for confirmation requests. If not set, uses autoConfirm. */
-  onConfirm?: (req: ConfirmRequest) => Promise<string>;
-  /** Handler for input requests. */
-  onInput?: (req: InputRequest) => Promise<string>;
-  /** Handler for ask_user tool requests. */
-  onAskUser?: (req: { question: string; choices?: string[] }) => Promise<string>;
   /** Auto-confirm all tool executions (for non-interactive SDK use). */
   autoConfirm?: boolean;
-  /** Pipe server stderr to process.stderr for debugging. */
+
+  /** Server process configuration. */
+  server?: {
+    path?: string;
+    args?: string[];
+    cwd?: string;
+  };
+
+  /** Erlang distribution config for remote debugging. */
+  distribution?: { name: string; cookie?: string };
+
+  /** Echo raw stderr from the server process to the host stderr. */
   verbose?: boolean;
-  /** Called with server stderr chunks (useful for startup diagnostics). */
-  onStderr?: (data: string) => void;
-  /** Called with every JSON-RPC message (for debug panel). */
-  onRpcMessage?: (entry: RpcMessageEntry) => void;
-  /** Start Erlang distribution with this short name. */
-  sname?: string;
-  /** Erlang distribution cookie (random if omitted). */
-  cookie?: string;
 }
 
-// --- Session ---
+// ── Session ──────────────────────────────────────────────────────────
 
 export class Session {
-  readonly sessionId: string;
-  readonly sessionDir: string;
-  readonly contextFiles: string[];
-  readonly availableSkills: string[];
-  readonly mcpServers: string[];
-  readonly nodeName: string;
+  /** Unique session identifier. */
+  readonly id: string;
+  /** Filesystem path to session data. */
+  readonly dir: string;
+  /** Discovered context files (AGENTS.md, etc). */
+  readonly contextFiles: readonly string[];
+  /** Available skill names. */
+  readonly skills: readonly string[];
+  /** Connected MCP server names. */
+  readonly mcpServers: readonly string[];
+  /** Auth status from session startup. */
   readonly auth: SessionStartResult["auth"];
-  private client: OpalClient;
-  private listeners = new Map<EventName, Set<(...args: unknown[]) => void>>();
 
-  private constructor(client: OpalClient, result: SessionStartResult) {
-    this.client = client;
-    this.sessionId = result.sessionId;
-    this.sessionDir = result.sessionDir;
+  readonly #client: OpalClient;
+  readonly #transport: Transport;
+  readonly #rpc: RpcConnection;
+  #activeStream: AgentStream | null = null;
+
+  /** @internal Use {@link createSession} instead. */
+  private constructor(
+    client: OpalClient,
+    transport: Transport,
+    rpc: RpcConnection,
+    result: SessionStartResult,
+  ) {
+    this.#client = client;
+    this.#transport = transport;
+    this.#rpc = rpc;
+
+    this.id = result.sessionId;
+    this.dir = result.sessionDir;
     this.contextFiles = result.contextFiles;
-    this.availableSkills = result.availableSkills;
+    this.skills = result.availableSkills;
     this.mcpServers = result.mcpServers;
-    this.nodeName = result.nodeName;
     this.auth = result.auth;
+  }
 
-    client.onEvent((event) => this.dispatchEvent(event));
+  // ── Prompting ──────────────────────────────────────────────────
+
+  /**
+   * Send a message to the agent. Starts a new run if idle, queues if busy.
+   *
+   * This is the low-level primitive — events flow through global `onEvent`
+   * listeners. Use {@link prompt} for a stream-based convenience wrapper.
+   *
+   * @returns `queued: true` if the agent was busy (message steered),
+   *          `queued: false` if a new run was started.
+   */
+  async send(text: string): Promise<{ queued: boolean }> {
+    const result = await this.#client.request("agent/prompt", {
+      sessionId: this.id,
+      text,
+    });
+    return { queued: result.queued };
   }
 
   /**
-   * Start a new session.
+   * Send a prompt and stream back events.
+   *
+   * Convenience wrapper around {@link send} — the returned
+   * {@link AgentStream} is an `AsyncIterable<AgentEvent>`.
+   * The event subscription is automatically cleaned up when the iterator
+   * completes, or when the consumer breaks out of a `for await` loop.
    */
-  static async start(opts: SessionOptions = {}, clientOpts?: OpalClientOptions): Promise<Session> {
-    const {
-      onConfirm,
-      onInput,
-      onAskUser,
-      autoConfirm,
-      verbose,
-      onStderr,
-      onRpcMessage,
-      sname: _sname,
-      cookie: _cookie,
-      ...startParams
-    } = opts;
+  prompt(text: string): AgentStream {
+    const stream = new AgentStream(() => this.abort());
 
-    const client = new OpalClient({
-      ...clientOpts,
-      onServerRequest: async (method, params) => {
-        if (method === "client/confirm") {
-          const req = params as unknown as ConfirmRequest;
-          if (onConfirm) {
-            const action = await onConfirm(req);
-            return { action };
-          }
-          if (autoConfirm) {
-            return { action: "allow" };
-          }
-          return { action: "deny" };
-        }
-        if (method === "client/input") {
-          const req = params as unknown as InputRequest;
-          if (onInput) {
-            const text = await onInput(req);
-            return { text };
-          }
-          throw new Error("No input handler registered");
-        }
-        if (method === "client/ask_user") {
-          const req = params as unknown as ClientAsk_userParams;
-          if (onAskUser) {
-            const answer = await onAskUser({ question: req.question, choices: req.choices });
-            return { answer };
-          }
-          throw new Error("No ask_user handler registered");
-        }
-        throw new Error(`Unknown server request: ${method}`);
-      },
+    // Subscribe to events, routing to this stream.
+    const sub = this.#client.onEvent((event) => {
+      stream.push(event);
     });
 
-    if (verbose) {
-      client.on("stderr", (data: string) => process.stderr.write(data));
-    }
+    // Fire the request; errors flow into the stream.
+    this.send(text).catch((err: unknown) =>
+      stream.throw(err instanceof Error ? err : new Error(String(err))),
+    );
 
-    if (onStderr) {
-      client.on("stderr", onStderr);
-    }
+    // Track active stream for cleanup.
+    this.#activeStream = stream;
 
-    if (onRpcMessage) {
-      client.on("rpc:message", onRpcMessage);
-    }
-
-    const result = await client.request("session/start", startParams as SessionStartParams);
-    return new Session(client, result);
-  }
-
-  /**
-   * Send a prompt and iterate over streaming events.
-   */
-  async *prompt(text: string): AsyncIterable<AgentEvent> {
-    const events: AgentEvent[] = [];
-    let done = false;
-    let resolve: (() => void) | null = null;
-
-    const handler = (event: AgentEvent) => {
-      events.push(event);
-      if (event.type === "agentEnd" || event.type === "agentAbort" || event.type === "error") {
-        done = true;
-      }
-      resolve?.();
+    // Wrap the async iterator so the event subscription is disposed when
+    // the stream finishes — whether by natural completion, `break`, or
+    // `return` inside a `for await` loop.
+    const origIterator = stream[Symbol.asyncIterator].bind(stream);
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- intentional capture for cleanup closure
+    const session = this;
+    stream[Symbol.asyncIterator] = function () {
+      const iter = origIterator();
+      const origReturn = iter.return?.bind(iter);
+      return {
+        next: iter.next.bind(iter),
+        async return(value?: unknown) {
+          sub.dispose();
+          if (session.#activeStream === stream) session.#activeStream = null;
+          return origReturn ? origReturn(value) : { done: true as const, value: undefined };
+        },
+        throw: iter.throw?.bind(iter),
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      } as AsyncIterator<AgentEvent>;
     };
 
-    this.client.onEvent(handler);
-
-    await this.client.request("agent/prompt", {
-      sessionId: this.sessionId,
-      text,
-    });
-
-    try {
-      while (true) {
-        while (events.length > 0) {
-          const event = events.shift()!;
-          yield event;
-          if (event.type === "agentEnd" || event.type === "agentAbort") return;
-          if (event.type === "error") return;
-        }
-        if (done) return;
-        await new Promise<void>((r) => {
-          resolve = r;
-        });
-      }
-    } finally {
-      this.client.removeListener("agent/event", handler);
-    }
+    return stream;
   }
 
-  /**
-   * Send a prompt without consuming the event stream.
-   *
-   * Use this for queued messages (steers) where events are already being
-   * consumed by an earlier `prompt()` call. Returns `{ queued }` indicating
-   * whether the message was queued or started immediately.
-   */
-  async sendPrompt(text: string): Promise<{ queued: boolean }> {
-    return (await this.client.request("agent/prompt", {
-      sessionId: this.sessionId,
-      text,
-    })) as { queued: boolean };
-  }
-
-  /**
-   * Abort the current agent run.
-   */
+  /** Abort the current agent run. */
   async abort(): Promise<void> {
-    await this.client.request("agent/abort", {
-      sessionId: this.sessionId,
-    });
+    await this.#client.request("agent/abort", { sessionId: this.id });
   }
 
-  /**
-   * Get the current agent state.
-   */
-  async getState(): Promise<AgentStateResult> {
-    return this.client.request("agent/state", {
-      sessionId: this.sessionId,
-    });
+  // ── History & State ──────────────────────────────────────────
+
+  /** Get the conversation history. */
+  async history(): Promise<SessionHistoryResult> {
+    return this.#client.request("session/history", { sessionId: this.id });
   }
 
-  /**
-   * Get the message history for the session (root to current leaf).
-   * Used to restore the UI when resuming a session.
-   */
-  async getHistory(): Promise<SessionHistoryResult> {
-    return this.client.request("session/history", {
-      sessionId: this.sessionId,
-    });
-  }
-
-  /**
-   * Compact older messages.
-   */
+  /** Compact old messages, keeping `keepRecent` most recent. Default: 10. */
   async compact(keepRecent?: number): Promise<void> {
-    await this.client.request("session/compact", {
-      sessionId: this.sessionId,
+    await this.#client.request("session/compact", {
+      sessionId: this.id,
       keepRecent,
     });
   }
 
-  /**
-   * List available models.
-   */
-  async listModels(): Promise<ModelsListResult> {
-    return this.client.request("models/list", {});
-  }
-
-  /**
-   * Change the model for this session.
-   */
-  async setModel(modelId: string, thinkingLevel?: string): Promise<ModelSetResult> {
-    return this.client.request("model/set", {
-      sessionId: this.sessionId,
-      modelId,
-      ...(thinkingLevel ? { thinkingLevel } : {}),
+  /** Branch the conversation from a specific message. */
+  async branch(entryId: string): Promise<void> {
+    await this.#client.request("session/branch", {
+      sessionId: this.id,
+      entryId,
     });
   }
 
-  /**
-   * Change the reasoning effort level for the current model.
-   */
-  async setThinkingLevel(level: string): Promise<{ thinkingLevel: string }> {
-    return this.client.request("thinking/set", {
-      sessionId: this.sessionId,
+  /** Get the current agent state. */
+  async state(): Promise<AgentStateResult> {
+    return this.#client.request("agent/state", { sessionId: this.id });
+  }
+
+  // ── Models ───────────────────────────────────────────────────
+
+  /** List available models. */
+  async models(): Promise<ModelsListResult> {
+    return this.#client.request("models/list", {});
+  }
+
+  /** Switch the model for this session. */
+  async setModel(
+    model: string | { id: string; provider?: string; thinkingLevel?: string },
+  ): Promise<ModelSetResult> {
+    const spec = typeof model === "string" ? { id: model } : model;
+    return this.#client.request("model/set", {
+      sessionId: this.id,
+      modelId: spec.id,
+      ...(spec.thinkingLevel ? { thinkingLevel: spec.thinkingLevel } : {}),
+    });
+  }
+
+  /** Change thinking/reasoning effort level. */
+  async setThinking(level: string): Promise<void> {
+    await this.#client.request("thinking/set", {
+      sessionId: this.id,
       level,
     });
   }
 
-  /**
-   * Get persistent user settings.
-   */
-  async getSettings(): Promise<SettingsGetResult> {
-    return this.client.request("settings/get", {});
-  }
+  // ── Configuration (namespaced) ────────────────────────────────
+
+  /** Configuration operations — settings and runtime config. */
+  readonly config = {
+    /** Read persisted settings. */
+    getSettings: async (): Promise<SettingsGetResult> => {
+      return this.#client.request("settings/get");
+    },
+    /** Save persisted settings. */
+    saveSettings: async (settings: Record<string, unknown>): Promise<SettingsSaveResult> => {
+      return this.#client.request("settings/save", { settings });
+    },
+    /** Get runtime config for this session. */
+    getRuntime: async (): Promise<OpalConfigGetResult> => {
+      return this.#client.request("opal/config/get", { sessionId: this.id });
+    },
+    /** Patch runtime config for this session. */
+    setRuntime: async (
+      patch: Omit<OpalConfigSetParams, "sessionId">,
+    ): Promise<OpalConfigSetResult> => {
+      return this.#client.request("opal/config/set", {
+        sessionId: this.id,
+        ...patch,
+      });
+    },
+  };
+
+  // ── Auth (namespaced) ─────────────────────────────────────────
+
+  /** Authentication operations — login, poll, and API-key management. */
+  readonly auth_ = {
+    /** Check current auth status. */
+    status: async (): Promise<AuthStatusResult> => {
+      return this.#client.request("auth/status");
+    },
+    /** Start a device-code login flow. */
+    login: async (): Promise<AuthLoginResult> => {
+      return this.#client.request("auth/login");
+    },
+    /** Poll for device-code login completion. */
+    poll: async (deviceCode: string, interval: number): Promise<AuthPollResult> => {
+      return this.#client.request("auth/poll", { deviceCode, interval });
+    },
+  };
+
+  // ── Events ────────────────────────────────────────────────────
 
   /**
-   * Save persistent user settings (merged with existing).
+   * Subscribe to all agent events emitted by the server.
+   *
+   * Unlike `prompt()` which scopes events to a single agent run,
+   * this provides a session-wide subscription suitable for hooks
+   * and global event processing.
+   *
+   * @returns A disposable handle — call `.dispose()` to unsubscribe.
    */
-  async saveSettings(settings: Record<string, unknown>): Promise<SettingsSaveResult> {
-    return this.client.request("settings/save", { settings });
+  onEvent(handler: (event: AgentEvent) => void): { dispose: () => void } {
+    return this.#client.onEvent(handler);
   }
 
-  /**
-   * Get runtime Opal feature/tool configuration for this session.
-   */
-  async getOpalConfig(): Promise<OpalConfigGetResult> {
-    return this.client.request("opal/config/get", { sessionId: this.sessionId });
-  }
+  // ── Lifecycle ─────────────────────────────────────────────────
 
-  /**
-   * Update runtime Opal feature/tool configuration for this session.
-   */
-  async setOpalConfig(
-    params: Omit<OpalConfigSetParams, "sessionId">,
-  ): Promise<OpalConfigSetResult> {
-    return this.client.request("opal/config/set", {
-      sessionId: this.sessionId,
-      ...params,
-    });
-  }
-
-  /**
-   * Start or stop Erlang distribution for remote debugging.
-   * Returns the distribution state (node + cookie) or null.
-   */
-  async setDistribution(
-    config: { name: string; cookie?: string } | null,
-  ): Promise<{ node: string; cookie: string } | null> {
-    // distribution field is handled server-side but not in the generated schema
-    const result = (await this.client.request("opal/config/set", {
-      sessionId: this.sessionId,
-      distribution: config,
-    } as unknown as OpalConfigSetParams)) as unknown as Record<string, unknown>;
-    return (result.distribution as { node: string; cookie: string } | null) ?? null;
-  }
-
-  /**
-   * Check whether the server has a valid auth token.
-   */
-  async authStatus(): Promise<AuthStatusResult> {
-    return this.client.request("auth/status", {});
-  }
-
-  /**
-   * Start the device-code OAuth login flow.
-   */
-  async authLogin(): Promise<AuthLoginResult> {
-    return this.client.request("auth/login", {});
-  }
-
-  /**
-   * Poll for device-code authorization. Blocks until user authorizes or error.
-   */
-  async authPoll(deviceCode: string, interval: number): Promise<AuthPollResult> {
-    return this.client.request("auth/poll", {
-      deviceCode,
-      interval,
-    });
-  }
-
-  /**
-   * Save an API key for a provider. Takes effect immediately (no restart).
-   */
-  async authSetKey(provider: string, apiKey: string): Promise<AuthSet_keyResult> {
-    return this.client.request("auth/set_key", { provider, apiKey });
-  }
-
-  /**
-   * Register a typed event callback.
-   */
-  on<E extends EventName>(event: E, handler: (...args: EventMap[E]) => void): void {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-    this.listeners.get(event)!.add(handler as (...args: unknown[]) => void);
-  }
-
-  /**
-   * Liveness check. Resolves if the server responds within the timeout.
-   */
+  /** Liveness check. Rejects if the server doesn't respond in time. */
   async ping(timeoutMs?: number): Promise<void> {
-    await this.client.ping(timeoutMs);
+    await this.#client.ping(timeoutMs);
   }
 
-  /**
-   * Close the session and kill the server.
-   */
+  /** Get server version info. */
+  async version(): Promise<OpalVersionResult> {
+    return this.#client.request("opal/version");
+  }
+
+  /** Close the session and terminate the server process. */
   close(): void {
-    this.client.close();
+    this.#client.close();
+    this.#rpc.close();
+    this.#transport.close();
   }
 
-  // --- Private ---
+  /** Enables `using session = await createSession()` cleanup. */
+  [Symbol.dispose](): void {
+    this.close();
+  }
+}
 
-  private dispatchEvent(event: AgentEvent): void {
-    const handlers = this.listeners.get(event.type as EventName);
-    if (!handlers) return;
+// ── Factory ──────────────────────────────────────────────────────────
 
-    for (const handler of handlers) {
-      switch (event.type) {
-        case "agentStart":
-        case "agentAbort":
-        case "messageStart":
-        case "thinkingStart":
-          handler();
-          break;
-        case "agentEnd":
-          handler(event.usage);
-          break;
-        case "messageDelta":
-        case "thinkingDelta":
-          handler(event.delta);
-          break;
-        case "toolExecutionStart":
-          handler(event.tool, event.callId, event.args, event.meta);
-          break;
-        case "toolExecutionEnd":
-          handler(event.tool, event.callId, event.result);
-          break;
-        case "subAgentEvent":
-          handler(event.parentCallId, event.subSessionId, event.inner);
-          break;
-        case "turnEnd":
-          handler(event.message);
-          break;
-        case "usageUpdate":
-          handler(event.usage);
-          break;
-        case "statusUpdate":
-          handler(event.message);
-          break;
-        case "error":
-          handler(event.reason);
-          break;
-        case "contextDiscovered":
-          handler(event.files);
-          break;
-        case "skillLoaded":
-          handler(event.name, event.description);
-          break;
-        case "agentRecovered":
-          handler();
-          break;
-        case "messageQueued":
-          handler(event.text);
-          break;
-        case "messageApplied":
-          handler(event.text);
-          break;
+/**
+ * Create a connected session, ready to receive prompts.
+ *
+ * Handles the full bootstrap sequence: transport → RPC → client → session/start.
+ *
+ * @example
+ * ```ts
+ * const session = await createSession({ workingDir: "." });
+ * const stream = session.prompt("Hello!");
+ * for await (const ev of stream) { ... }
+ * session.close();
+ * ```
+ */
+export async function createSession(opts: SessionOptions = {}): Promise<Session> {
+  // 1. Build transport
+  const transport = new StdioTransport({
+    serverPath: opts.server?.path,
+    args: opts.server?.args,
+    cwd: opts.server?.cwd,
+    onStderr: (data: string) => {
+      if (opts.verbose) process.stderr.write(data);
+      opts.callbacks?.onStderr?.(data);
+    },
+  });
+
+  // 2. Build RPC connection with optional observer
+  const observer: RpcObserver | undefined = opts.callbacks?.onRpcMessage
+    ? {
+        onOutgoing: (msg: unknown) =>
+          opts.callbacks!.onRpcMessage!({
+            id: 0,
+            direction: "outgoing",
+            timestamp: Date.now(),
+            raw: msg,
+            method: (msg as Record<string, unknown>).method as string | undefined,
+            kind: "request",
+          }),
+        onIncoming: (msg: unknown) => {
+          const m = msg as Record<string, unknown>;
+          const hasMethod = typeof m.method === "string";
+          const hasId = "id" in m;
+          opts.callbacks!.onRpcMessage!({
+            id: 0,
+            direction: "incoming",
+            timestamp: Date.now(),
+            raw: msg,
+            method: hasMethod ? (m.method as string) : undefined,
+            kind: hasMethod ? (hasId ? "request" : "notification") : m.error ? "error" : "response",
+          });
+        },
       }
+    : undefined;
+
+  const rpc = new RpcConnection(transport, observer);
+
+  // 3. Build client and register server→client callback handlers
+  const client = new OpalClient(rpc);
+  const { callbacks } = opts;
+
+  client.addServerMethod("client/ask_user", async (params) => {
+    if (callbacks?.onAskUser) {
+      const answer = await callbacks.onAskUser({
+        question: params.question,
+        choices: params.choices,
+      });
+      return { answer };
     }
-  }
+    throw new Error("No ask_user handler registered");
+  });
+
+  // 4. Start the session
+  const startParams: SessionStartParams = {
+    workingDir: opts.workingDir,
+    systemPrompt: opts.systemPrompt,
+    ...(opts.persist !== undefined ? { session: opts.persist } : {}),
+    ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
+    ...(opts.features
+      ? {
+          features: {
+            skills: false,
+            subAgents: false,
+            mcp: false,
+            debug: false,
+            ...opts.features,
+          },
+        }
+      : {}),
+    ...(opts.mcpServers ? { mcpServers: opts.mcpServers } : {}),
+    ...(opts.model
+      ? {
+          model:
+            typeof opts.model === "string"
+              ? { id: opts.model, provider: "copilot", thinkingLevel: "off" }
+              : {
+                  id: opts.model.id,
+                  provider: opts.model.provider ?? "copilot",
+                  thinkingLevel: opts.model.thinkingLevel ?? "off",
+                },
+        }
+      : {}),
+  };
+
+  const result = await client.request("session/start", startParams);
+
+  // Session constructor is private but accessible within this module.
+  return new (Session as unknown as new (
+    client: OpalClient,
+    transport: Transport,
+    rpc: RpcConnection,
+    result: SessionStartResult,
+  ) => Session)(client, transport, rpc, result);
 }

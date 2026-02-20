@@ -51,15 +51,6 @@ describe("Integration failures", () => {
       await expect(pending).rejects.toThrow("Authorization expired");
       session.close();
     });
-
-    it("authSetKey with invalid key returns error", async () => {
-      const session = await startSession();
-      const pending = session.authSetKey("anthropic", "bad-key");
-      await tick();
-      respondError(proc, 2, -32000, "Invalid API key");
-      await expect(pending).rejects.toThrow("Invalid API key");
-      session.close();
-    });
   });
 
   // --- Model switching ---

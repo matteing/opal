@@ -110,18 +110,8 @@ describe("CLI Commands", () => {
       const { runVersion } = await import("../commands/version.js");
       await runVersion();
 
-      const logs = consoleLogSpy.mock.calls.map((c) => String(c[0]));
-      expect(logs.some((l) => l.includes("opal"))).toBe(true);
-    });
-  });
-
-  describe("runAuthStatus", () => {
-    it("prints authenticated status", async () => {
-      const { runAuthStatus } = await import("../commands/auth.js");
-      await runAuthStatus();
-
-      const logs = consoleLogSpy.mock.calls.map((c) => String(c[0]));
-      expect(logs.some((l) => l.includes("Authenticated"))).toBe(true);
+      const logs = consoleLogSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+      expect(logs.some((l: string) => l.includes("opal"))).toBe(true);
     });
   });
 
@@ -130,9 +120,9 @@ describe("CLI Commands", () => {
       const { runSessionList } = await import("../commands/session.js");
       await runSessionList();
 
-      const logs = consoleLogSpy.mock.calls.map((c) => String(c[0]));
-      expect(logs.some((l) => l.includes("abc123"))).toBe(true);
-      expect(logs.some((l) => l.includes("def456"))).toBe(true);
+      const logs = consoleLogSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+      expect(logs.some((l: string) => l.includes("abc123"))).toBe(true);
+      expect(logs.some((l: string) => l.includes("def456"))).toBe(true);
     });
   });
 
@@ -141,17 +131,17 @@ describe("CLI Commands", () => {
       const { runSessionShow } = await import("../commands/session.js");
       await runSessionShow("abc123");
 
-      const logs = consoleLogSpy.mock.calls.map((c) => String(c[0]));
-      expect(logs.some((l) => l.includes("abc123"))).toBe(true);
-      expect(logs.some((l) => l.includes("Test session"))).toBe(true);
+      const logs = consoleLogSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+      expect(logs.some((l: string) => l.includes("abc123"))).toBe(true);
+      expect(logs.some((l: string) => l.includes("Test session"))).toBe(true);
     });
 
     it("prints error for unknown session", async () => {
       const { runSessionShow } = await import("../commands/session.js");
       await runSessionShow("unknown-id");
 
-      const errors = consoleErrorSpy.mock.calls.map((c) => String(c[0]));
-      expect(errors.some((l) => l.includes("not found"))).toBe(true);
+      const errors = consoleErrorSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+      expect(errors.some((l: string) => l.includes("not found"))).toBe(true);
     });
   });
 
@@ -160,9 +150,9 @@ describe("CLI Commands", () => {
       const { runSessionDelete } = await import("../commands/session.js");
       await runSessionDelete("abc123");
 
-      const logs = consoleLogSpy.mock.calls.map((c) => String(c[0]));
-      expect(logs.some((l) => l.includes("Deleted"))).toBe(true);
-      expect(logs.some((l) => l.includes("abc123"))).toBe(true);
+      const logs = consoleLogSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+      expect(logs.some((l: string) => l.includes("Deleted"))).toBe(true);
+      expect(logs.some((l: string) => l.includes("abc123"))).toBe(true);
     });
   });
 
@@ -171,9 +161,9 @@ describe("CLI Commands", () => {
       const { runDoctor } = await import("../commands/doctor.js");
       await runDoctor();
 
-      const output = consoleLogSpy.mock.calls.map((c) => String(c[0]));
+      const output = consoleLogSpy.mock.calls.map((c: unknown[]) => String(c[0]));
       // Should check server connection and version at minimum
-      expect(output.some((l) => l.includes("✓"))).toBe(true);
+      expect(output.some((l: string) => l.includes("✓"))).toBe(true);
     });
   });
 });

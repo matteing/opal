@@ -4,9 +4,17 @@
  * `opal session delete <id>` — Delete a saved session.
  */
 import { OpalClient } from "../sdk/client.js";
+import { RpcConnection } from "../sdk/rpc/connection.js";
+import { StdioTransport } from "../sdk/transport/stdio.js";
+
+function connectClient(): OpalClient {
+  const transport = new StdioTransport();
+  const rpc = new RpcConnection(transport);
+  return new OpalClient(rpc);
+}
 
 export async function runSessionList(): Promise<void> {
-  const client = new OpalClient();
+  const client = connectClient();
 
   try {
     await client.ping(5000);
@@ -38,7 +46,7 @@ export async function runSessionList(): Promise<void> {
 }
 
 export async function runSessionShow(sessionId: string): Promise<void> {
-  const client = new OpalClient();
+  const client = connectClient();
 
   try {
     await client.ping(5000);
@@ -71,7 +79,7 @@ export async function runSessionShow(sessionId: string): Promise<void> {
 }
 
 export async function runSessionDelete(sessionId: string): Promise<void> {
-  const client = new OpalClient();
+  const client = connectClient();
 
   try {
     await client.ping(5000);

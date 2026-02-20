@@ -380,16 +380,6 @@ describe("Session", () => {
     session.close();
   });
 
-  it("authSetKey() sends auth/set_key", async () => {
-    const session = await startSession();
-    const p = session.authSetKey("anthropic", "sk-test");
-    await new Promise((r) => setTimeout(r, 10));
-    respondToRequest(mockProc, 2, { ok: true });
-    const result = await p;
-    expect(result.ok).toBe(true);
-    session.close();
-  });
-
   it("getSettings() sends settings/get", async () => {
     const session = await startSession();
     const p = session.getSettings();
