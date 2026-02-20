@@ -1,5 +1,8 @@
 import Config
 
+# Logger must use stderr — stdout is reserved for JSON-RPC over stdio.
+config :logger, :default_handler, config: %{type: :standard_error}
+
 config :opal,
   # data_dir: "~/.opal",          # nil = platform default (Unix: ~/.opal, Windows: %APPDATA%/opal)
   # shell: :sh,                   # nil = auto-detect per platform

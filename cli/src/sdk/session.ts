@@ -502,17 +502,21 @@ export async function createSession(opts: SessionOptions = {}): Promise<Session>
       : {}),
   };
 
-  const result = await client.request("session/start", startParams);
+  const result = await client.request("session/start", startParams, 30_000);
 
   // Start Erlang distribution if requested (for remote debugging via `--expose`).
   // Non-fatal: if distribution fails (e.g. epmd not running), the session still works.
   let distributionNode: string | null = null;
   if (opts.distribution) {
     try {
-      const configResult = await client.request("opal/config/set", {
-        sessionId: result.sessionId,
-        distribution: opts.distribution,
-      });
+      const configResult = await client.request(
+        "opal/config/set",
+        {
+          sessionId: result.sessionId,
+          distribution: opts.distribution,
+        },
+        10_000,
+      );
       distributionNode = configResult.distribution?.node ?? null;
     } catch {
       // Distribution unavailable — continue without it.

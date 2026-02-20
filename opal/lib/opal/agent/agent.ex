@@ -554,7 +554,7 @@ defmodule Opal.Agent do
     |> apply_enabled_tools(Map.get(attrs, :enabled_tools))
   end
 
-  defp apply_features(state, features) when map_size(features) == 0, do: state
+  defp apply_features(state, features) when is_nil(features) or map_size(features) == 0, do: state
 
   defp apply_features(state, features) do
     Enum.reduce(@feature_keys, state, fn key, acc ->

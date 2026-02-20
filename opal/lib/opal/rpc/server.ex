@@ -122,10 +122,11 @@ defmodule Opal.RPC.Server do
           write(state, RPC.encode_error(id, code, message, data))
           state
       end
-    rescue
-      e ->
-        Logger.error("RPC dispatch crashed: #{Exception.message(e)}")
-        send_error(state, id, :internal_error, "Internal error", Exception.message(e))
+    catch
+      kind, reason ->
+        msg = Exception.format_banner(kind, reason)
+        Logger.error("RPC dispatch crashed: #{msg}")
+        send_error(state, id, :internal_error, "Internal error", msg)
     end
   end
 
