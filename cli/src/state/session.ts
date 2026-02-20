@@ -21,6 +21,12 @@ import type { CliStateSlice } from "./cli.js";
 
 // ── Slice state + actions ────────────────────────────────────────
 
+/** Pending ask_user request from the agent. */
+export interface AskUserRequest {
+  readonly question: string;
+  readonly choices?: readonly string[];
+}
+
 export interface SessionSlice {
   session: Session | null;
   sessionStatus: SessionStatus;
@@ -32,12 +38,17 @@ export interface SessionSlice {
   availableSkills: readonly string[];
   distributionNode: string | null;
 
+  /** Pending ask_user request — non-null while waiting for user response. */
+  askUserRequest: AskUserRequest | null;
+
   /** Create a session and wire up events. */
   connect: (opts: SessionOptions) => void;
   /** Close the session and clean up. */
   disconnect: () => void;
   /** Send a message — prompts if idle, steers if running. */
   sendMessage: (text: string) => void;
+  /** Resolve a pending ask_user request with the user's answer. */
+  resolveAskUser: (answer: string) => void;
 }
 
 // ── Merged store type for cross-slice access ─────────────────────
@@ -62,6 +73,9 @@ export const createSessionSlice: StateCreator<StoreSlices, [], [], SessionSlice>
   // Batching: coalesce high-frequency events (32ms window)
   let pendingEvents: AgentEvent[] = [];
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  // Active ask_user request resolver pair.
+  let askUserPending: { resolve: (answer: string) => void; reject: (error: Error) => void } | null =
+    null;
 
   function flush() {
     flushTimer = null;
@@ -92,6 +106,11 @@ export const createSessionSlice: StateCreator<StoreSlices, [], [], SessionSlice>
     if (flushTimer !== null) clearTimeout(flushTimer);
     flushTimer = null;
     pendingEvents = [];
+    if (askUserPending) {
+      askUserPending.reject(new Error("Session closed"));
+      askUserPending = null;
+    }
+    set({ askUserRequest: null });
   }
 
   return {
@@ -104,14 +123,38 @@ export const createSessionSlice: StateCreator<StoreSlices, [], [], SessionSlice>
     contextFiles: [],
     availableSkills: [],
     distributionNode: null,
+    askUserRequest: null,
 
     connect: (opts) => {
-      set({ sessionStatus: "connecting", sessionError: null, workingDir: opts.workingDir ?? "" });
+      set({
+        sessionStatus: "connecting",
+        sessionError: null,
+        workingDir: opts.workingDir ?? "",
+        askUserRequest: null,
+      });
 
       void createSession({
         ...opts,
         callbacks: {
           ...opts.callbacks,
+          onAskUser: (request) => {
+            if (opts.callbacks?.onAskUser) {
+              return opts.callbacks.onAskUser(request);
+            }
+            return new Promise<string>((resolve, reject) => {
+              if (askUserPending) {
+                reject(new Error("ask_user request already pending"));
+                return;
+              }
+              askUserPending = { resolve, reject };
+              set({
+                askUserRequest: {
+                  question: request.question,
+                  choices: request.choices,
+                },
+              });
+            });
+          },
           onRpcMessage: (entry) => get().pushRpcMessage(entry),
           onStderr: (data) => get().pushStderr(data),
         },
@@ -191,6 +234,7 @@ export const createSessionSlice: StateCreator<StoreSlices, [], [], SessionSlice>
         contextFiles: [],
         availableSkills: [],
         distributionNode: null,
+        askUserRequest: null,
       });
     },
 
@@ -199,6 +243,13 @@ export const createSessionSlice: StateCreator<StoreSlices, [], [], SessionSlice>
       if (!session) return;
 
       void session.send(text);
+    },
+
+    resolveAskUser: (answer) => {
+      const pending = askUserPending;
+      askUserPending = null;
+      set({ askUserRequest: null });
+      pending?.resolve(answer);
     },
   };
 };

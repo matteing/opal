@@ -3,7 +3,6 @@ import { Box, Text } from "ink";
 import { PALETTE } from "../lib/palette.js";
 import { useViewport } from "../hooks/use-viewport.js";
 import { useOpalStore } from "../state/store.js";
-import type { RpcLogEntry } from "../state/types.js";
 
 // ── Colour helpers ───────────────────────────────────────────────
 
@@ -21,10 +20,6 @@ export const StartingView: FC = () => {
   const [elapsed, setElapsed] = useState(0);
   const startTime = useRef(Date.now());
   const sessionError = useOpalStore((s) => s.sessionError);
-  const rpcEntries = useOpalStore((s) => s.rpcEntries);
-  const stderrLines = useOpalStore((s) => s.stderrLines);
-
-  const errors = useMemo(() => rpcEntries.filter((e) => e.kind === "error"), [rpcEntries]);
 
   React.useEffect(() => {
     const id = setInterval(() => {
@@ -45,8 +40,6 @@ export const StartingView: FC = () => {
     [phase],
   );
 
-  const hasDiagnostics = sessionError || errors.length > 0 || stderrLines.length > 0;
-
   return (
     <Box
       flexDirection="column"
@@ -66,7 +59,7 @@ export const StartingView: FC = () => {
           ),
         )}
       </Text>
-      {elapsed >= 5 && !hasDiagnostics && (
+      {elapsed >= 5 && !sessionError && (
         <Box marginTop={1}>
           <Text dimColor>{elapsed}s — waiting for server…</Text>
         </Box>
@@ -76,31 +69,6 @@ export const StartingView: FC = () => {
           <Text color="red">✖ {sessionError}</Text>
         </Box>
       )}
-      {errors.length > 0 && (
-        <Box flexDirection="column" marginTop={sessionError ? 0 : 1}>
-          {errors.map((entry: RpcLogEntry) => (
-            <Text key={entry.id} color="red" dimColor>
-              {formatRpcError(entry)}
-            </Text>
-          ))}
-        </Box>
-      )}
-      {stderrLines.length > 0 && (
-        <Box flexDirection="column" marginTop={hasDiagnostics ? 0 : 1}>
-          {stderrLines.slice(-5).map((line, i) => (
-            <Text key={i} dimColor>
-              {line.text}
-            </Text>
-          ))}
-        </Box>
-      )}
     </Box>
   );
 };
-
-function formatRpcError(entry: RpcLogEntry): string {
-  const raw = entry.raw as Record<string, unknown> | undefined;
-  const error = raw?.error as Record<string, unknown> | undefined;
-  const message = error?.message;
-  return typeof message === "string" ? message : JSON.stringify(raw);
-}

@@ -74,6 +74,13 @@ export type AuthStatusResult = {
   authenticated: boolean;
 };
 
+export type CliHistoryAddParams = {
+  /** Command text to add. */
+  command: string;
+};
+
+export type CliHistoryAddResult = Record<string, never>;
+
 export type CliHistoryGetParams = Record<string, never>;
 
 export type CliHistoryGetResult = {
@@ -557,6 +564,7 @@ export const Methods = {
   AUTH_LOGIN: "auth/login" as const,
   AUTH_POLL: "auth/poll" as const,
   AUTH_STATUS: "auth/status" as const,
+  CLI_HISTORY_ADD: "cli/history/add" as const,
   CLI_HISTORY_GET: "cli/history/get" as const,
   CLI_STATE_GET: "cli/state/get" as const,
   CLI_STATE_SET: "cli/state/set" as const,
@@ -619,6 +627,10 @@ export interface MethodTypes {
   "auth/login": { params: AuthLoginParams; result: AuthLoginResult };
   "auth/poll": { params: AuthPollParams; result: AuthPollResult };
   "auth/status": { params: AuthStatusParams; result: AuthStatusResult };
+  "cli/history/add": {
+    params: CliHistoryAddParams;
+    result: CliHistoryAddResult;
+  };
   "cli/history/get": {
     params: CliHistoryGetParams;
     result: CliHistoryGetResult;
