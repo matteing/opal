@@ -1,11 +1,12 @@
 import React, { type FC } from "react";
 import { Box } from "ink";
-import { useActiveAgent } from "../state/selectors.js";
+import { useOpalStore } from "../state/index.js";
+import { selectFocusedAgent } from "../state/selectors.js";
 import { TimelineEntry } from "./timeline-entry.js";
 
 /** Renders the full timeline for the currently focused agent. */
-export const Timeline: FC = () => {
-  const { entries } = useActiveAgent();
+const TimelineComponent: FC = () => {
+  const entries = useOpalStore((s) => selectFocusedAgent(s).entries);
   const lastIndex = entries.length - 1;
 
   return (
@@ -16,3 +17,5 @@ export const Timeline: FC = () => {
     </Box>
   );
 };
+
+export const Timeline = React.memo(TimelineComponent);

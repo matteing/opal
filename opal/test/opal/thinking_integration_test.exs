@@ -573,7 +573,7 @@ defmodule Opal.ThinkingIntegrationTest do
     test "thinking level propagates through parse/2" do
       model = Model.parse("anthropic:claude-sonnet-4-5", thinking_level: :medium)
       assert model.thinking_level == :medium
-      assert model.provider == :anthropic
+      assert model.provider == :copilot
     end
 
     test "thinking level propagates through coerce/2" do

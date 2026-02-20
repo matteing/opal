@@ -31,7 +31,10 @@ defmodule Opal.Tool.WriteFileTest do
   describe "execute/2 success" do
     test "writes content to a new file", %{tmp_dir: tmp_dir} do
       ctx = %{working_dir: tmp_dir}
-      assert {:ok, msg} = Write.execute(%{"path" => "new.txt", "content" => "hello"}, ctx)
+
+      assert {:ok, msg, %{diff: _}} =
+               Write.execute(%{"path" => "new.txt", "content" => "hello"}, ctx)
+
       assert msg =~ "File written"
       assert File.read!(Path.join(tmp_dir, "new.txt")) == "hello"
     end
@@ -39,7 +42,7 @@ defmodule Opal.Tool.WriteFileTest do
     test "creates parent directories if they don't exist", %{tmp_dir: tmp_dir} do
       ctx = %{working_dir: tmp_dir}
 
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Write.execute(%{"path" => "a/b/c/deep.txt", "content" => "deep"}, ctx)
 
       assert File.read!(Path.join(tmp_dir, "a/b/c/deep.txt")) == "deep"
@@ -49,20 +52,22 @@ defmodule Opal.Tool.WriteFileTest do
       ctx = %{working_dir: tmp_dir}
       File.write!(Path.join(tmp_dir, "exist.txt"), "old")
 
-      assert {:ok, _} = Write.execute(%{"path" => "exist.txt", "content" => "new"}, ctx)
+      assert {:ok, _, %{diff: _}} =
+               Write.execute(%{"path" => "exist.txt", "content" => "new"}, ctx)
+
       assert File.read!(Path.join(tmp_dir, "exist.txt")) == "new"
     end
 
     test "returns success message with file path", %{tmp_dir: tmp_dir} do
       ctx = %{working_dir: tmp_dir}
-      {:ok, msg} = Write.execute(%{"path" => "out.txt", "content" => "data"}, ctx)
+      {:ok, msg, %{diff: _}} = Write.execute(%{"path" => "out.txt", "content" => "data"}, ctx)
       assert msg =~ "File written"
       assert msg =~ "out.txt"
     end
 
     test "handles empty content", %{tmp_dir: tmp_dir} do
       ctx = %{working_dir: tmp_dir}
-      assert {:ok, _} = Write.execute(%{"path" => "empty.txt", "content" => ""}, ctx)
+      assert {:ok, _, %{diff: _}} = Write.execute(%{"path" => "empty.txt", "content" => ""}, ctx)
       assert File.read!(Path.join(tmp_dir, "empty.txt")) == ""
     end
 
@@ -74,7 +79,7 @@ defmodule Opal.Tool.WriteFileTest do
 
       ctx = %{working_dir: working_dir, config: Config.new(%{data_dir: data_dir})}
 
-      assert {:ok, _msg} = Write.execute(%{"path" => path, "content" => "plan"}, ctx)
+      assert {:ok, _msg, %{diff: _}} = Write.execute(%{"path" => path, "content" => "plan"}, ctx)
       assert File.read!(path) == "plan"
     end
   end
@@ -121,7 +126,8 @@ defmodule Opal.Tool.WriteFileTest do
       path = Path.join(tmp_dir, "bom.txt")
       File.write!(path, bom <> "old content")
 
-      assert {:ok, _} = Write.execute(%{"path" => "bom.txt", "content" => "new content"}, ctx)
+      assert {:ok, _, %{diff: _}} =
+               Write.execute(%{"path" => "bom.txt", "content" => "new content"}, ctx)
 
       result = File.read!(path)
       assert <<0xEF, 0xBB, 0xBF, rest::binary>> = result
@@ -131,7 +137,8 @@ defmodule Opal.Tool.WriteFileTest do
     test "does not add BOM to new files", %{tmp_dir: tmp_dir} do
       ctx = %{working_dir: tmp_dir}
 
-      assert {:ok, _} = Write.execute(%{"path" => "fresh.txt", "content" => "hello"}, ctx)
+      assert {:ok, _, %{diff: _}} =
+               Write.execute(%{"path" => "fresh.txt", "content" => "hello"}, ctx)
 
       result = File.read!(Path.join(tmp_dir, "fresh.txt"))
       refute match?(<<0xEF, 0xBB, 0xBF, _::binary>>, result)
@@ -146,7 +153,7 @@ defmodule Opal.Tool.WriteFileTest do
       File.write!(path, "old\r\nlines\r\nhere")
 
       # LLM sends LF-only content (always)
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Write.execute(%{"path" => "crlf.txt", "content" => "new\nlines\nhere"}, ctx)
 
       result = File.read!(path)
@@ -156,7 +163,7 @@ defmodule Opal.Tool.WriteFileTest do
     test "does not add CRLF to new files", %{tmp_dir: tmp_dir} do
       ctx = %{working_dir: tmp_dir}
 
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Write.execute(%{"path" => "lf.txt", "content" => "line1\nline2"}, ctx)
 
       result = File.read!(Path.join(tmp_dir, "lf.txt"))

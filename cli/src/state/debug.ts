@@ -39,12 +39,7 @@ export interface DebugSlice {
 
 let nextRpcId = 0;
 
-export const createDebugSlice: StateCreator<
-  DebugSlice,
-  [],
-  [],
-  DebugSlice
-> = (set) => ({
+export const createDebugSlice: StateCreator<DebugSlice, [], [], DebugSlice> = (set) => ({
   rpcEntries: [],
   stderrLines: [],
   debugVisible: false,
@@ -74,12 +69,9 @@ export const createDebugSlice: StateCreator<
     }));
   },
 
-  toggleDebug: () =>
-    set((state) => ({ debugVisible: !state.debugVisible })),
+  toggleDebug: () => set((state) => ({ debugVisible: !state.debugVisible })),
 
-  toggleToolOutput: () =>
-    set((state) => ({ showToolOutput: !state.showToolOutput })),
+  toggleToolOutput: () => set((state) => ({ showToolOutput: !state.showToolOutput })),
 
-  clearDebug: () =>
-    set({ rpcEntries: [], stderrLines: [] }),
+  clearDebug: () => set({ rpcEntries: [], stderrLines: [] }),
 });

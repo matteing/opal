@@ -76,6 +76,11 @@ defmodule Opal.Agent.State do
           current_tool_calls: [map()],
           # Chain-of-thought reasoning text (nil = model didn't emit thinking).
           current_thinking: String.t() | nil,
+          # Whether {:message_start} has been broadcast in the current
+          # streaming cycle.  Prevents duplicate empty chat entries when
+          # the provider emits multiple :text_start events per response
+          # (e.g. Claude thinking chunks that carry role: "assistant").
+          message_started: boolean(),
           # Partial XML tag buffers for cross-chunk extraction (e.g. status, title).
           # Keyed by tag name atom; each value is the buffered partial text.
           tag_buffers: %{atom() => String.t()},
@@ -179,6 +184,7 @@ defmodule Opal.Agent.State do
     current_text: "",
     current_tool_calls: [],
     current_thinking: nil,
+    message_started: false,
     tag_buffers: %{},
 
     # Stream transport

@@ -172,10 +172,10 @@ describe("SDK2 Session", () => {
     const session = await startSession();
     const p = session.state();
     await new Promise((r) => setTimeout(r, 10));
-    respondNext({ state: "idle", messages: [] });
+    respondNext({ status: "idle", messages: [] });
     const result = await p;
     expect(result).toBeDefined();
-    expect(result.state).toBe("idle");
+    expect(result.status).toBe("idle");
     session.close();
   });
 

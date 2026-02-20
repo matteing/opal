@@ -48,15 +48,12 @@ import { createModelsSlice, type ModelsSlice } from "./models.js";
 import { createAuthSlice, type AuthSlice } from "./auth.js";
 import { createDebugSlice, type DebugSlice } from "./debug.js";
 import { createSessionSlice, type SessionSlice } from "./session.js";
+import { createCliStateSlice, type CliStateSlice } from "./cli.js";
 
 // ── Combined store type ──────────────────────────────────────────
 
 export interface OpalStore
-  extends SessionSlice,
-    TimelineSlice,
-    ModelsSlice,
-    AuthSlice,
-    DebugSlice {}
+  extends SessionSlice, TimelineSlice, ModelsSlice, AuthSlice, DebugSlice, CliStateSlice {}
 
 // ── Store creation ───────────────────────────────────────────────
 
@@ -79,4 +76,5 @@ export const useOpalStore = create<OpalStore>()((...a) => ({
   ...createModelsSlice(...a),
   ...createAuthSlice(...a),
   ...createDebugSlice(...a),
+  ...createCliStateSlice(...a),
 }));

@@ -11,6 +11,7 @@ import React, { useMemo, type FC } from "react";
 import { Box, Text, useStdout } from "ink";
 import type { RpcLogEntry, StderrEntry } from "../state/types.js";
 import { colors } from "../lib/palette.js";
+import { truncate } from "../lib/formatting.js";
 
 // ── Layout constants ─────────────────────────────────────────
 
@@ -27,10 +28,6 @@ function formatTime(ts: number): string {
   const s = String(d.getSeconds()).padStart(2, "0");
   const ms = String(d.getMilliseconds()).padStart(3, "0");
   return `${h}:${m}:${s}.${ms}`;
-}
-
-function truncate(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max - 1) + "…" : s;
 }
 
 function kindStyle(kind: string): { badge: string; color: string } {
@@ -60,7 +57,7 @@ function summarizeRpc(entry: RpcLogEntry, maxLen: number): string {
       delete rest.type;
       delete rest.session_id;
       const extra = Object.keys(rest).length > 0 ? ` ${JSON.stringify(rest)}` : "";
-      return truncate(`${String(params.type)}${extra}`, maxLen);
+      return truncate(`${String(params.type as string)}${extra}`, maxLen);
     }
   }
 
@@ -84,13 +81,9 @@ type UnifiedEntry =
 
 // ── Row components ───────────────────────────────────────────
 
-const RpcRow: FC<{ entry: RpcLogEntry; bodyWidth: number }> = ({
-  entry,
-  bodyWidth,
-}) => {
+const RpcRow: FC<{ entry: RpcLogEntry; bodyWidth: number }> = ({ entry, bodyWidth }) => {
   const arrow = entry.direction === "outgoing" ? "→" : "←";
-  const arrowColor =
-    entry.direction === "outgoing" ? colors.rpcOutgoing : colors.rpcIncoming;
+  const arrowColor = entry.direction === "outgoing" ? colors.rpcOutgoing : colors.rpcIncoming;
   const { badge, color } = kindStyle(entry.kind);
   const method = entry.method ?? "";
 
@@ -134,10 +127,7 @@ export interface DebugPanelProps {
   onClear?: () => void;
 }
 
-export const DebugPanel: FC<DebugPanelProps> = ({
-  rpcEntries,
-  stderrLines,
-}) => {
+export const DebugPanel: FC<DebugPanelProps> = ({ rpcEntries, stderrLines }) => {
   const { stdout } = useStdout();
   const termHeight = stdout?.rows ?? 24;
   const termWidth = stdout?.columns ?? 80;
@@ -151,12 +141,8 @@ export const DebugPanel: FC<DebugPanelProps> = ({
 
   const unified = useMemo<UnifiedEntry[]>(() => {
     const all: UnifiedEntry[] = [
-      ...rpcEntries.map(
-        (e) => ({ type: "rpc" as const, ts: e.timestamp, entry: e }),
-      ),
-      ...stderrLines.map(
-        (e) => ({ type: "stderr" as const, ts: e.timestamp, entry: e }),
-      ),
+      ...rpcEntries.map((e) => ({ type: "rpc" as const, ts: e.timestamp, entry: e })),
+      ...stderrLines.map((e) => ({ type: "stderr" as const, ts: e.timestamp, entry: e })),
     ];
     all.sort((a, b) => a.ts - b.ts);
     return all;
@@ -177,7 +163,7 @@ export const DebugPanel: FC<DebugPanelProps> = ({
       {/* Header */}
       <Box paddingX={1} justifyContent="space-between">
         <Box gap={1}>
-          <Text bold color={colors.accent}>
+          <Text bold color={colors.primary}>
             ◇ Debug
           </Text>
         </Box>
@@ -195,12 +181,7 @@ export const DebugPanel: FC<DebugPanelProps> = ({
       </Box>
 
       {/* Body */}
-      <Box
-        flexDirection="column"
-        height={bodyHeight}
-        overflow="hidden"
-        paddingX={1}
-      >
+      <Box flexDirection="column" height={bodyHeight} overflow="hidden" paddingX={1}>
         {visible.length === 0 ? (
           <Box justifyContent="center">
             <Text dimColor italic>

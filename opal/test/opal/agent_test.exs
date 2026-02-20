@@ -799,7 +799,7 @@ defmodule Opal.AgentTest do
     test "agent has correct model from config" do
       %{pid: pid} = start_agent()
       state = Agent.get_state(pid)
-      assert state.model.provider == :test
+      assert state.model.provider == :copilot
       assert state.model.id == "test-model"
     end
 

@@ -64,9 +64,7 @@ export class StdioTransport implements Transport {
       if (this.#state === "closed") return;
       this.#state = "closed";
       const reason =
-        code !== 0
-          ? new Error(`opal-server exited (code=${code}, signal=${signal})`)
-          : undefined;
+        code !== 0 ? new Error(`opal-server exited (code=${code}, signal=${signal})`) : undefined;
       this.#fireClose(reason);
     });
 

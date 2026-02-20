@@ -328,6 +328,7 @@ defmodule Opal.Tool.SubAgent do
     """
   end
 
+  defp format_tool_result({:ok, output, _meta}), do: FileIO.truncate(output, 500)
   defp format_tool_result({:ok, output}), do: FileIO.truncate(output, 500)
 
   defp format_tool_result({:error, reason}),

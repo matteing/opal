@@ -8,6 +8,7 @@ defmodule Opal.Tool.WriteFile do
 
   @behaviour Opal.Tool
 
+  alias Opal.Diff
   alias Opal.FileIO
   alias Opal.Tool.Args, as: ToolArgs
 
@@ -43,7 +44,8 @@ defmodule Opal.Tool.WriteFile do
   end
 
   @impl true
-  @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
+  @spec execute(map(), map()) ::
+          {:ok, String.t(), map()} | {:error, String.t()}
   def execute(args, %{working_dir: working_dir} = context) when is_map(args) do
     with {:ok, opts} <-
            ToolArgs.validate(args, @args_schema,
@@ -53,12 +55,24 @@ defmodule Opal.Tool.WriteFile do
            FileIO.resolve_path(opts[:path], working_dir,
              allow_bases: FileIO.allowed_bases(context)
            ) do
+      # Capture old content before writing
+      old_content =
+        case File.read(resolved) do
+          {:ok, data} -> data
+          _ -> nil
+        end
+
       resolved |> Path.dirname() |> File.mkdir_p!()
       content = match_existing_encoding(resolved, opts[:content])
 
       case File.write(resolved, content) do
-        :ok -> {:ok, "File written: #{resolved}"}
-        {:error, reason} -> {:error, "Failed to write file: #{reason}"}
+        :ok ->
+          rel_path = Path.relative_to(resolved, working_dir)
+          diff = Diff.compute(old_content, content, rel_path)
+          {:ok, "File written: #{resolved}", %{diff: diff}}
+
+        {:error, reason} ->
+          {:error, "Failed to write file: #{reason}"}
       end
     end
   end

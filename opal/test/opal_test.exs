@@ -119,7 +119,7 @@ defmodule OpalTest do
       {:ok, pid} = start_test_session()
       state = Opal.Agent.get_state(pid)
 
-      assert state.model.provider == :test
+      assert state.model.provider == :copilot
       assert state.model.id == "test-model"
       assert state.system_prompt == "Test prompt"
       Opal.stop_session(pid)

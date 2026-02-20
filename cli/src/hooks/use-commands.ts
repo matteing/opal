@@ -143,9 +143,7 @@ export function useCommands(registry: CommandRegistry): UseCommandsReturn {
 
   const helpText = useMemo(() => {
     const maxUsage = Math.max(...commands.map((c) => c.usage.length), 0);
-    const lines = commands.map(
-      (c) => `  ${c.usage.padEnd(maxUsage + 2)} — ${c.description}`,
-    );
+    const lines = commands.map((c) => `  ${c.usage.padEnd(maxUsage + 2)} — ${c.description}`);
     return `**Commands:**\n${lines.join("\n")}`;
   }, [commands]);
 
@@ -153,50 +151,47 @@ export function useCommands(registry: CommandRegistry): UseCommandsReturn {
     return input.trimStart().startsWith("/");
   }, []);
 
-  const run = useCallback(
-    (input: string): CommandResult | Promise<CommandResult> => {
-      const { cmd, arg } = parseInput(input);
+  const run = useCallback((input: string): CommandResult | Promise<CommandResult> => {
+    const { cmd, arg } = parseInput(input);
 
-      if (!cmd) {
-        return { ok: false, message: "Empty command." };
+    if (!cmd) {
+      return { ok: false, message: "Empty command." };
+    }
+
+    const def = registryRef.current[cmd];
+    if (!def) {
+      return {
+        ok: false,
+        message: `Unknown command: \`/${cmd}\`. Type \`/help\` for available commands.`,
+      };
+    }
+
+    try {
+      const result = def.execute({ arg });
+
+      // Sync path
+      if (typeof result === "string") {
+        return { ok: true, message: result };
+      }
+      if (result == null) {
+        return { ok: true };
       }
 
-      const def = registryRef.current[cmd];
-      if (!def) {
-        return {
-          ok: false,
-          message: `Unknown command: \`/${cmd}\`. Type \`/help\` for available commands.`,
-        };
-      }
-
-      try {
-        const result = def.execute({ arg });
-
-        // Sync path
-        if (typeof result === "string") {
-          return { ok: true, message: result };
-        }
-        if (result == null) {
-          return { ok: true };
-        }
-
-        // Async path
-        return result.then(
-          (msg) => (msg ? { ok: true, message: msg } : { ok: true }),
-          (err: unknown) => ({
-            ok: false,
-            message: `Error: ${err instanceof Error ? err.message : String(err)}`,
-          }),
-        );
-      } catch (err: unknown) {
-        return {
+      // Async path
+      return result.then(
+        (msg) => (msg ? { ok: true, message: msg } : { ok: true }),
+        (err: unknown) => ({
           ok: false,
           message: `Error: ${err instanceof Error ? err.message : String(err)}`,
-        };
-      }
-    },
-    [],
-  );
+        }),
+      );
+    } catch (err: unknown) {
+      return {
+        ok: false,
+        message: `Error: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }, []);
 
   return { run, isCommand, commands, helpText };
 }

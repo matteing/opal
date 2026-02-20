@@ -1,12 +1,12 @@
 import os from "node:os";
 import path from "node:path";
-import React, { useState, useEffect, useMemo, type FC } from "react";
+import React, { useState, useEffect, useMemo, useCallback, memo, type FC } from "react";
 import { Box, Text, useStdout } from "ink";
-import TextInput from "ink-text-input";
-import { colors } from "../lib/palette.js";
+import { StableTextInput } from "./stable-text-input.js";
+import { colors, PRIMARY_SHADES } from "../lib/palette.js";
 import { formatTokens } from "../lib/formatting.js";
 import { useOpalStore } from "../state/store.js";
-import { useActiveAgent } from "../state/selectors.js";
+import { selectFocusedAgent } from "../state/selectors.js";
 import { ThinkingIndicator } from "./thinking.js";
 import { CommandPalette } from "./command-palette.js";
 import type { CommandInfo } from "../hooks/use-commands.js";
@@ -29,59 +29,7 @@ function shortenPath(dir: string): string {
   return dir;
 }
 
-// Thinking color shades — from dim gray through to full #cc5490
-const THINKING_SHADES = [
-  "#3a3a3a",
-  "#3c3039",
-  "#3f2d38",
-  "#422b39",
-  "#452a3a",
-  "#492a3c",
-  "#4d2a3d",
-  "#512b3e",
-  "#562c40",
-  "#5a2d42",
-  "#5f2e45",
-  "#632f48",
-  "#6b3050",
-  "#713254",
-  "#773458",
-  "#7e365c",
-  "#8a3860",
-  "#923a64",
-  "#9a3c68",
-  "#a13e6c",
-  "#a84070",
-  "#b04478",
-  "#b84880",
-  "#c24e88",
-  "#cc5490",
-  "#c24e88",
-  "#b84880",
-  "#b04478",
-  "#a84070",
-  "#a13e6c",
-  "#9a3c68",
-  "#923a64",
-  "#8a3860",
-  "#7e365c",
-  "#773458",
-  "#713254",
-  "#6b3050",
-  "#632f48",
-  "#5f2e45",
-  "#5a2d42",
-  "#562c40",
-  "#512b3e",
-  "#4d2a3d",
-  "#492a3c",
-  "#452a3a",
-  "#422b39",
-  "#3f2d38",
-  "#3c3039",
-  "#3a3a3a",
-];
-const SHIMMER_WIDTH = THINKING_SHADES.length;
+const SHIMMER_WIDTH = PRIMARY_SHADES.length;
 
 /** A horizontal line with a sweeping shimmer ray in the thinking color. */
 const ShimmerBorder: FC<{ width: number }> = ({ width }) => {
@@ -96,7 +44,7 @@ const ShimmerBorder: FC<{ width: number }> = ({ width }) => {
 
   const chars = Array.from({ length: width }, (_, i) => {
     const dist = i - offset + SHIMMER_WIDTH;
-    const shade = dist >= 0 && dist < SHIMMER_WIDTH ? THINKING_SHADES[dist] : "#3a3a3a";
+    const shade = dist >= 0 && dist < SHIMMER_WIDTH ? PRIMARY_SHADES[dist] : "#3a3a3a";
     return (
       <Text key={i} color={shade}>
         ─
@@ -106,6 +54,41 @@ const ShimmerBorder: FC<{ width: number }> = ({ width }) => {
 
   return <Text>{chars}</Text>;
 };
+
+// ── Isolated prompt input ────────────────────────────────────────
+// Memo boundary: ShimmerBorder ticks 25fps and InputBar's status
+// section changes during streaming. Neither should force the text
+// input to re-render and risk dropping keystrokes.
+
+interface PromptInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: (value: string) => void;
+  onUpArrow?: () => void;
+  onDownArrow?: () => void;
+  focus: boolean;
+  placeholder: string;
+}
+
+const PromptInput: FC<PromptInputProps> = memo(
+  ({ value, onChange, onSubmit, onUpArrow, onDownArrow, focus, placeholder }) => (
+    <Box paddingX={1}>
+      <Text color={colors.primary}>{"⏣"} </Text>
+      <StableTextInput
+        value={value}
+        onChange={onChange}
+        onSubmit={onSubmit}
+        onUpArrow={onUpArrow}
+        onDownArrow={onDownArrow}
+        focus={focus}
+        placeholder={placeholder}
+        showCursor
+      />
+    </Box>
+  ),
+);
+
+// ── Main InputBar ────────────────────────────────────────────────
 
 interface Props {
   onSubmit?: (value: string) => void;
@@ -128,10 +111,18 @@ export const InputBar: FC<Props> = ({
   hotkeys = [],
 }) => {
   const [value, setValue] = useState("");
-  const { isRunning, statusMessage } = useActiveAgent();
+  // Stash the current input when first pressing up, so we can restore it on down.
+  const savedInputRef = React.useRef<string | null>(null);
+  // Fine-grained selectors: subscribe to primitives, not the whole AgentView.
+  // This prevents re-renders when only entries change (every streamed token).
+  const isRunning = useOpalStore((s) => selectFocusedAgent(s).isRunning);
+  const statusMessage = useOpalStore((s) => selectFocusedAgent(s).statusMessage);
   const currentModel = useOpalStore((s) => s.currentModel);
   const tokenUsage = useOpalStore((s) => s.tokenUsage);
   const workingDir = useOpalStore((s) => s.workingDir);
+  const getPreviousCommand = useOpalStore((s) => s.getPreviousCommand);
+  const getNextCommand = useOpalStore((s) => s.getNextCommand);
+  const resetHistoryNavigation = useOpalStore((s) => s.resetHistoryNavigation);
   const shortDir = useMemo(() => (workingDir ? shortenPath(workingDir) : null), [workingDir]);
 
   const tokenDisplay =
@@ -149,11 +140,36 @@ export const InputBar: FC<Props> = ({
   const { stdout } = useStdout();
   const termWidth = stdout?.columns ?? 80;
 
-  const handleSubmit = (text: string) => {
-    if (!text.trim()) return;
-    onSubmit?.(text);
-    setValue("");
-  };
+  const handleSubmit = useCallback(
+    (text: string) => {
+      if (!text.trim()) return;
+      savedInputRef.current = null;
+      resetHistoryNavigation();
+      onSubmit?.(text);
+      setValue("");
+    },
+    [onSubmit, resetHistoryNavigation],
+  );
+
+  const handleUpArrow = useCallback(() => {
+    // Save current input on first press so we can restore it
+    if (savedInputRef.current === null) {
+      savedInputRef.current = value;
+    }
+    const cmd = getPreviousCommand();
+    if (cmd !== null) setValue(cmd);
+  }, [value, getPreviousCommand]);
+
+  const handleDownArrow = useCallback(() => {
+    const cmd = getNextCommand();
+    if (cmd !== null) {
+      setValue(cmd);
+    } else if (savedInputRef.current !== null) {
+      // Restore the original input when we go past the end
+      setValue(savedInputRef.current);
+      savedInputRef.current = null;
+    }
+  }, [getNextCommand]);
 
   const showPalette = value.trimStart().startsWith("/") && commands.length > 0;
 
@@ -165,17 +181,15 @@ export const InputBar: FC<Props> = ({
       ) : (
         <Text color={colors.border}>{"─".repeat(termWidth)}</Text>
       )}
-      <Box paddingX={1}>
-        <Text color={colors.accent}>{"⏣"} </Text>
-        <TextInput
-          value={value}
-          onChange={setValue}
-          onSubmit={handleSubmit}
-          focus={focus}
-          placeholder={placeholder}
-          showCursor
-        />
-      </Box>
+      <PromptInput
+        value={value}
+        onChange={setValue}
+        onSubmit={handleSubmit}
+        onUpArrow={handleUpArrow}
+        onDownArrow={handleDownArrow}
+        focus={focus}
+        placeholder={placeholder}
+      />
       {isRunning ? (
         <ShimmerBorder width={termWidth} />
       ) : (

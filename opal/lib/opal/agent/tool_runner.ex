@@ -12,7 +12,7 @@ defmodule Opal.Agent.ToolRunner do
   # ── Types ──────────────────────────────────────────────────────────
 
   @typedoc "Outcome of a single tool execution."
-  @type result :: {:ok, term()} | {:error, String.t()}
+  @type result :: {:ok, term()} | {:ok, term(), map()} | {:error, String.t()}
 
   # ── Batch Lifecycle ────────────────────────────────────────────────
 
@@ -173,6 +173,7 @@ defmodule Opal.Agent.ToolRunner do
       state.tool_results
       |> Enum.reverse()
       |> Enum.map(fn
+        {tc, {:ok, output, _meta}} -> Opal.Message.tool_result(tc.call_id, to_text(output))
         {tc, {:ok, output}} -> Opal.Message.tool_result(tc.call_id, to_text(output))
         {tc, {:error, reason}} -> Opal.Message.tool_result(tc.call_id, to_text(reason), true)
       end)

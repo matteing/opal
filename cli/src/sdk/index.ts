@@ -50,26 +50,15 @@ export {
 } from "./errors.js";
 
 // ── Low-level (advanced usage) ──────────────────────────────────────
-export {
-  OpalClient,
-  type ServerMethodHandler,
-  type AgentEventHandler,
-} from "./client.js";
+export { OpalClient, type ServerMethodHandler, type AgentEventHandler } from "./client.js";
 export {
   RpcConnection,
   type RpcObserver,
   type MethodHandler,
   type NotificationHandler,
 } from "./rpc/connection.js";
-export {
-  type Transport,
-  type TransportState,
-  type Disposable,
-} from "./transport/transport.js";
-export {
-  StdioTransport,
-  type StdioTransportOptions,
-} from "./transport/stdio.js";
+export { type Transport, type TransportState, type Disposable } from "./transport/transport.js";
+export { StdioTransport, type StdioTransportOptions } from "./transport/stdio.js";
 export { createMemoryTransport } from "./transport/memory.js";
 export { resolveServer, type ServerResolution } from "./resolve.js";
 export { snakeToCamel, camelToSnake } from "./transforms.js";

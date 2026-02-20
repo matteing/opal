@@ -10,6 +10,7 @@
 import React, { type FC } from "react";
 import { Box, Text } from "ink";
 import { colors } from "../lib/palette.js";
+import { truncate } from "../lib/formatting.js";
 
 interface Props {
   messages: readonly string[];
@@ -20,7 +21,7 @@ const QueuedEntry: FC<{ text: string }> = ({ text }) => (
   <Box paddingLeft={2}>
     <Text color={colors.muted}>{"\u25cb"} </Text>
     <Text color={colors.muted} dimColor>
-      {text.length > 72 ? text.slice(0, 69) + "..." : text}
+      {truncate(text, 72)}
     </Text>
   </Box>
 );

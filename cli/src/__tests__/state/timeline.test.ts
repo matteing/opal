@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { applyEvent, ROOT_AGENT_ID } from "../../state/timeline.js";
+import type { TimelineSnapshot } from "../../state/timeline.js";
 import type { AgentView } from "../../state/types.js";
 import { ev } from "./helpers.js";
 
 // Fresh initial state for each test
-function initial() {
+function initial(): TimelineSnapshot {
   const root: AgentView = {
     id: ROOT_AGENT_ID,
     parentCallId: null,
@@ -29,7 +30,7 @@ function initial() {
 
 /** Shorthand: root agent from state. */
 function root(state: ReturnType<typeof initial>) {
-  return state.agents[ROOT_AGENT_ID]!;
+  return state.agents[ROOT_AGENT_ID];
 }
 
 /** Apply a sequence of events and return final state. */
@@ -81,12 +82,7 @@ describe("applyEvent — lifecycle", () => {
       contextWindow: 128_000,
       currentContextTokens: 1200,
     };
-    const state = apply(
-      ev.agentStart(),
-      ev.agentEnd(usage),
-      ev.agentStart(),
-      ev.agentEnd(),
-    );
+    const state = apply(ev.agentStart(), ev.agentEnd(usage), ev.agentStart(), ev.agentEnd());
     expect(state.tokenUsage).toEqual(usage);
   });
 
@@ -127,10 +123,7 @@ describe("applyEvent — messages", () => {
   });
 
   it("messageApplied adds a user message and dequeues", () => {
-    const state = apply(
-      ev.messageQueued("fix tests"),
-      ev.messageApplied("fix tests"),
-    );
+    const state = apply(ev.messageQueued("fix tests"), ev.messageApplied("fix tests"));
     const entries = root(state).entries;
     expect(entries).toHaveLength(1);
     expect(entries[0]).toEqual({
@@ -141,18 +134,12 @@ describe("applyEvent — messages", () => {
   });
 
   it("messageApplied with no matching queue leaves queue unchanged", () => {
-    const state = apply(
-      ev.messageQueued("other"),
-      ev.messageApplied("fix tests"),
-    );
+    const state = apply(ev.messageQueued("other"), ev.messageApplied("fix tests"));
     expect(state.queuedMessages).toEqual(["other"]);
   });
 
   it("messageQueued appends to the queue", () => {
-    const state = apply(
-      ev.messageQueued("first"),
-      ev.messageQueued("second"),
-    );
+    const state = apply(ev.messageQueued("first"), ev.messageQueued("second"));
     expect(state.queuedMessages).toEqual(["first", "second"]);
   });
 });
@@ -261,7 +248,7 @@ describe("applyEvent — sub-agents", () => {
     );
 
     expect(state.agents).toHaveProperty("sub1");
-    const sub = state.agents.sub1!;
+    const sub = state.agents.sub1;
     expect(sub.label).toBe("researcher");
     expect(sub.model).toBe("gpt-4");
     expect(sub.isRunning).toBe(true);
@@ -282,7 +269,7 @@ describe("applyEvent — sub-agents", () => {
       ev.subAgentEvent("sub1", "c1", { type: "messageDelta", delta: "Hi" }),
     );
 
-    const sub = state.agents.sub1!;
+    const sub = state.agents.sub1;
     expect(sub.entries).toHaveLength(1);
     expect(sub.entries[0]).toEqual({
       kind: "message",
@@ -321,18 +308,21 @@ describe("applyEvent — sub-agents", () => {
         meta: "",
       }),
     );
-    expect(state.agents.sub1!.toolCount).toBe(1);
+    expect(state.agents.sub1.toolCount).toBe(1);
   });
 
   it("agent_end auto-pops focus if sub-agent was focused", () => {
     let state = initial();
     state = applyEvent(state, ev.agentStart());
-    state = applyEvent(state, ev.subAgentEvent("sub1", "c1", {
-      type: "sub_agent_start",
-      label: "worker",
-      model: "gpt-4",
-      tools: [],
-    }));
+    state = applyEvent(
+      state,
+      ev.subAgentEvent("sub1", "c1", {
+        type: "sub_agent_start",
+        label: "worker",
+        model: "gpt-4",
+        tools: [],
+      }),
+    );
     // Simulate focus on sub-agent
     state = { ...state, focusStack: [ROOT_AGENT_ID, "sub1"] };
     state = applyEvent(state, ev.subAgentEvent("sub1", "c1", { type: "agent_end" }));

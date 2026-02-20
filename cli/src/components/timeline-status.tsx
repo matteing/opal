@@ -39,8 +39,7 @@ interface SkillProps {
 export const TimelineSkill: FC<SkillProps> = ({ skill }) => (
   <Box marginBottom={1}>
     <Text>
-      <Text color={colors.success}>●</Text>{" "}
-      <Text dimColor>Loaded skill: {skill.name}</Text>
+      <Text color={colors.success}>●</Text> <Text dimColor>Loaded skill: {skill.name}</Text>
     </Text>
   </Box>
 );

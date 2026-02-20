@@ -135,9 +135,11 @@ defmodule Opal.Agent.Stream do
 
   # ── Text ──
 
+  def handle_stream_event({:text_start, _info}, %{message_started: true} = state), do: state
+
   def handle_stream_event({:text_start, _info}, state) do
     Emitter.broadcast(state, {:message_start})
-    state
+    %{state | message_started: true}
   end
 
   def handle_stream_event({:text_delta, delta}, state) do

@@ -3,11 +3,17 @@ import React from "react";
 import { App, AppProps } from "../app.js";
 import { TuiArgs } from "../bin.js";
 
+function parseExpose(expose: string): { name: string; cookie?: string } {
+  const [name, cookie] = expose.split("#", 2);
+  return cookie ? { name, cookie } : { name };
+}
+
 export async function launchTui(args: TuiArgs): Promise<void> {
   const opts: AppProps = {
     // Generate a session ID if not provided, so we can always show the resume hint on exit.
     sessionId: args.session ?? crypto.randomUUID(),
     workingDir: args.workingDir,
+    ...(args.expose ? { distribution: parseExpose(args.expose) } : {}),
   };
 
   // Off to the races, bitch

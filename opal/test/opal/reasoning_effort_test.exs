@@ -253,7 +253,7 @@ defmodule Opal.ReasoningEffortTest do
       models = Opal.Provider.Registry.list_provider(:anthropic)
       assert length(models) > 0
 
-      claude = Enum.find(models, &(&1.id == "claude-opus-4-6"))
+      claude = Enum.find(models, &(&1.id == "claude-opus-4.6"))
       assert claude.supports_thinking == true
       # Opus 4.6+ supports adaptive thinking with "max" effort
       assert claude.thinking_levels == ["low", "medium", "high", "max"]
@@ -303,8 +303,9 @@ defmodule Opal.ReasoningEffortTest do
 
     test "direct provider model with thinking" do
       model = Model.parse("anthropic:claude-sonnet-4-5", thinking_level: :medium)
-      assert model.provider == :anthropic
-      assert model.id == "claude-sonnet-4-5"
+      assert model.provider == :copilot
+      # whole string becomes the ID
+      assert model.id == "anthropic:claude-sonnet-4-5"
       assert model.thinking_level == :medium
     end
 

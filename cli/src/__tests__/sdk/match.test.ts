@@ -24,7 +24,8 @@ describe("isEventType", () => {
 
 describe("matchEvent", () => {
   it("calls the correct handler for the event type", () => {
-    const allHandlers = Object.fromEntries(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const allHandlers: Record<string, any> = Object.fromEntries(
       [
         "agentAbort",
         "agentEnd",
@@ -51,7 +52,8 @@ describe("matchEvent", () => {
       "type" in e && e.type === "messageDelta" ? (e as { delta: string }).delta : "";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(matchEvent(delta, allHandlers as any)).toBe("hello");
-    allHandlers.agentStart = () => "started";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (allHandlers as any).agentStart = () => "started";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(matchEvent(start, allHandlers as any)).toBe("started");
   });

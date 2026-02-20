@@ -63,10 +63,7 @@ export class ConnectionError extends OpalError {
   readonly stderr: string;
 
   constructor(exitCode: number | null, signal: string | null, stderr: string) {
-    super(
-      "CONNECTION_LOST",
-      `opal-server exited (code=${exitCode}, signal=${signal})`,
-    );
+    super("CONNECTION_LOST", `opal-server exited (code=${exitCode}, signal=${signal})`);
     this.name = "ConnectionError";
     this.exitCode = exitCode;
     this.signal = signal;
@@ -95,12 +92,7 @@ export class RpcError extends OpalError {
   readonly rpcCode: number;
   readonly data?: unknown;
 
-  constructor(
-    method: string,
-    rpcCode: number,
-    message: string,
-    data?: unknown,
-  ) {
+  constructor(method: string, rpcCode: number, message: string, data?: unknown) {
     super("SERVER_ERROR", message);
     this.name = "RpcError";
     this.method = method;

@@ -15,6 +15,7 @@ import type {
   OpalConfigSetParams,
   OpalConfigSetResult,
 } from "../sdk/protocol.js";
+import { OverlayPanel, Indicator } from "./overlay-panel.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -36,6 +37,11 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
 };
 
 const FEATURE_KEYS: FeatureKey[] = ["subAgents", "skills", "mcp", "debug"];
+
+const SECTIONS: { key: Section; heading: string }[] = [
+  { key: "features", heading: "Features" },
+  { key: "tools", heading: "Tools" },
+];
 
 // ── Props ────────────────────────────────────────────────────
 
@@ -72,11 +78,7 @@ function buildItems(config: OpalConfigGetResult): MenuItem[] {
 
 // ── Component ────────────────────────────────────────────────
 
-export const ConfigPanel: FC<ConfigPanelProps> = ({
-  getConfig,
-  setConfig,
-  onDismiss,
-}) => {
+export const ConfigPanel: FC<ConfigPanelProps> = ({ getConfig, setConfig, onDismiss }) => {
   const [config, setLocalConfig] = useState<OpalConfigGetResult | null>(null);
   const [selected, setSelected] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -99,9 +101,11 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
       if (item.section === "features") {
         const features = { ...config.features, [item.key]: newEnabled };
         setLocalConfig({ ...config, features });
-        void setConfig({ features }).then(setLocalConfig).catch(() => {
-          setLocalConfig(config);
-        });
+        void setConfig({ features })
+          .then(setLocalConfig)
+          .catch(() => {
+            setLocalConfig(config);
+          });
       } else {
         const enabled = newEnabled
           ? [...config.tools.enabled, item.key]
@@ -110,9 +114,11 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
           ? config.tools.disabled.filter((t) => t !== item.key)
           : [...config.tools.disabled, item.key];
         setLocalConfig({ ...config, tools: { ...config.tools, enabled, disabled } });
-        void setConfig({ tools: enabled }).then(setLocalConfig).catch(() => {
-          setLocalConfig(config);
-        });
+        void setConfig({ tools: enabled })
+          .then(setLocalConfig)
+          .catch(() => {
+            setLocalConfig(config);
+          });
       }
     },
     [config, setConfig],
@@ -137,100 +143,52 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
 
   if (!config && !error) {
     return (
-      <Box borderStyle="round" borderColor={colors.accent} paddingX={2} paddingY={1}>
+      <OverlayPanel>
         <Text dimColor italic>
           Loading configuration…
         </Text>
-      </Box>
+      </OverlayPanel>
     );
   }
 
   if (error) {
     return (
-      <Box
-        flexDirection="column"
-        borderStyle="round"
-        borderColor={colors.error}
-        paddingX={2}
-        paddingY={1}
-      >
+      <OverlayPanel borderColor={colors.error}>
         <Text color={colors.error}>Failed to load config: {error}</Text>
         <Text dimColor>esc to close</Text>
-      </Box>
+      </OverlayPanel>
     );
   }
 
-  const featureStart = items.findIndex((i) => i.section === "features");
-  const toolStart = items.findIndex((i) => i.section === "tools");
-
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor={colors.accent}
-      paddingX={2}
-      paddingY={1}
-    >
-      <Text bold color={colors.accent}>
-        Opal Configuration
-      </Text>
-      <Text dimColor>↑↓ navigate · space toggle · esc close</Text>
-
-      {featureStart >= 0 && (
-        <Box flexDirection="column" marginTop={1}>
-          <Text bold dimColor>
-            Features
-          </Text>
-          {items
-            .filter((i) => i.section === "features")
-            .map((item, fi) => {
-              const idx = featureStart + fi;
-              const isSelected = idx === selected;
-              return (
-                <Text key={item.key}>
-                  <Text color={isSelected ? colors.accent : undefined}>
-                    {isSelected ? "❯" : " "}
-                  </Text>{" "}
-                  <Text color={item.enabled ? colors.success : colors.error}>
-                    {item.enabled ? "✓" : "✗"}
-                  </Text>{" "}
-                  <Text bold={isSelected} color={isSelected ? colors.accent : undefined}>
-                    {item.label}
-                  </Text>
-                  <Text dimColor> {item.enabled ? "on" : "off"}</Text>
-                </Text>
-              );
-            })}
-        </Box>
-      )}
-
-      {toolStart >= 0 && (
-        <Box flexDirection="column" marginTop={1}>
-          <Text bold dimColor>
-            Tools
-          </Text>
-          {items
-            .filter((i) => i.section === "tools")
-            .map((item, ti) => {
-              const idx = toolStart + ti;
-              const isSelected = idx === selected;
-              return (
-                <Text key={item.key}>
-                  <Text color={isSelected ? colors.accent : undefined}>
-                    {isSelected ? "❯" : " "}
-                  </Text>{" "}
-                  <Text color={item.enabled ? colors.success : colors.error}>
-                    {item.enabled ? "✓" : "✗"}
-                  </Text>{" "}
-                  <Text bold={isSelected} color={isSelected ? colors.accent : undefined}>
-                    {item.label}
-                  </Text>
-                  <Text dimColor> {item.enabled ? "on" : "off"}</Text>
-                </Text>
-              );
-            })}
-        </Box>
-      )}
-    </Box>
+    <OverlayPanel title="Opal Configuration" hint="↑↓ navigate · space toggle · esc close">
+      {SECTIONS.map(({ key, heading }) => {
+        const start = items.findIndex((i) => i.section === key);
+        if (start < 0) return null;
+        return (
+          <Box key={key} flexDirection="column" marginTop={1}>
+            <Text bold dimColor>
+              {heading}
+            </Text>
+            {items
+              .filter((i) => i.section === key)
+              .map((item, idx) => (
+                <ConfigRow key={item.key} item={item} selected={start + idx === selected} />
+              ))}
+          </Box>
+        );
+      })}
+    </OverlayPanel>
   );
 };
+
+const ConfigRow: FC<{ item: MenuItem; selected: boolean }> = ({ item, selected }) => (
+  <Text>
+    <Indicator active={selected} />{" "}
+    <Text color={item.enabled ? colors.success : colors.error}>{item.enabled ? "✓" : "✗"}</Text>{" "}
+    <Text bold={selected} color={selected ? colors.primary : undefined}>
+      {item.label}
+    </Text>
+    <Text dimColor> {item.enabled ? "on" : "off"}</Text>
+  </Text>
+);

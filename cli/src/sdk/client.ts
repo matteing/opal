@@ -46,9 +46,7 @@ export class OpalClient {
       if (method === "agent/event") {
         const raw = params as Record<string, unknown>;
         const wireType = raw.type as string;
-        const camelType = wireType.replace(/_([a-z])/g, (_, c: string) =>
-          c.toUpperCase(),
-        );
+        const camelType = wireType.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
         const event = { ...raw, type: camelType } as unknown as AgentEvent;
         for (const handler of this.#eventHandlers) {
           handler(event);
@@ -71,9 +69,7 @@ export class OpalClient {
   ): Promise<MethodTypes[M]["result"]> {
     if (this.#rpc.closed) throw new ClientClosedError();
     const [params, timeoutMs] = args;
-    return this.#rpc.request(method, params ?? {}, timeoutMs) as Promise<
-      MethodTypes[M]["result"]
-    >;
+    return this.#rpc.request(method, params ?? {}, timeoutMs) as Promise<MethodTypes[M]["result"]>;
   }
 
   /** Register a handler for incoming agent events. Returns cleanup handle. */
@@ -87,18 +83,12 @@ export class OpalClient {
     method: M,
     handler: ServerMethodHandler<M>,
   ): Disposable {
-    return this.#rpc.addMethod(method, (params) =>
-      handler(params as MethodTypes[M]["params"]),
-    );
+    return this.#rpc.addMethod(method, (params) => handler(params as MethodTypes[M]["params"]));
   }
 
   /** Liveness check — resolves if the server responds within the timeout. */
   async ping(timeoutMs = 5000): Promise<void> {
-    await this.request(
-      "opal/ping",
-      {} as MethodTypes["opal/ping"]["params"],
-      timeoutMs,
-    );
+    await this.request("opal/ping", {} as MethodTypes["opal/ping"]["params"], timeoutMs);
   }
 
   /** Whether the client is closed. */

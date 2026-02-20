@@ -42,9 +42,11 @@ export type { ModelsSlice } from "./models.js";
 export type { AuthSlice } from "./auth.js";
 export type { DebugSlice } from "./debug.js";
 export type { SessionSlice } from "./session.js";
+export type { CliStateSlice } from "./cli.js";
 
 // Constants
 export { ROOT_AGENT_ID } from "./timeline.js";
 
 // Pure reducer (for testing without React/Zustand)
 export { applyEvent } from "./timeline.js";
+export type { TimelineSnapshot } from "./timeline.js";

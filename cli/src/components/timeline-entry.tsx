@@ -12,7 +12,7 @@ interface Props {
 }
 
 /** Renders a single timeline entry by dispatching on `kind`. */
-export const TimelineEntry: FC<Props> = ({ entry, isLast = false }) => {
+const TimelineEntryComponent: FC<Props> = ({ entry, isLast = false }) => {
   const workingDir = useOpalStore((s) => s.workingDir);
   const showToolOutput = useOpalStore((s) => s.showToolOutput);
   const agents = useOpalStore((s) => s.agents);
@@ -21,7 +21,6 @@ export const TimelineEntry: FC<Props> = ({ entry, isLast = false }) => {
     case "message":
       return <TimelineMessage message={entry.message} isStreaming={isLast} />;
     case "tool": {
-      // Find sub-agent metadata for sub_agent tool calls
       const subAgent =
         entry.tool.tool === "sub_agent"
           ? Object.values(agents).find((a) => a.parentCallId === entry.tool.callId)
@@ -44,3 +43,9 @@ export const TimelineEntry: FC<Props> = ({ entry, isLast = false }) => {
       return <TimelineStatusItem text={entry.text} level={entry.level} />;
   }
 };
+
+export const TimelineEntry = React.memo(TimelineEntryComponent, (prev, next) => {
+  // Compare entry by reference — timeline slice creates new objects only when changed
+  // Compare isLast by value
+  return prev.entry === next.entry && prev.isLast === next.isLast;
+});

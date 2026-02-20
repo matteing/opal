@@ -63,7 +63,10 @@ interface ParsedCombo {
 const MODIFIER_NAMES = new Set(["ctrl", "meta", "shift"]);
 
 function parseCombo(combo: string): ParsedCombo {
-  const parts = combo.toLowerCase().split("+").map((s) => s.trim());
+  const parts = combo
+    .toLowerCase()
+    .split("+")
+    .map((s) => s.trim());
   return {
     ctrl: parts.includes("ctrl"),
     meta: parts.includes("meta"),
@@ -89,11 +92,7 @@ const KEY_ALIASES: Record<string, (key: Key) => boolean> = {
   pagedown: (k) => k.pageDown,
 };
 
-function matches(
-  input: string,
-  inkKey: Key,
-  parsed: ParsedCombo,
-): boolean {
+function matches(input: string, inkKey: Key, parsed: ParsedCombo): boolean {
   if (parsed.ctrl !== inkKey.ctrl) return false;
   if (parsed.meta !== inkKey.meta) return false;
   if (parsed.shift !== inkKey.shift) return false;

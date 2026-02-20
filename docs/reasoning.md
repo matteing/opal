@@ -6,13 +6,12 @@ Opal supports configuring reasoning effort (extended thinking) for models that s
 
 | Level | Description |
 |-------|-------------|
-| `off` | No extended thinking (default) |
 | `low` | Minimal reasoning — fast, economical |
 | `medium` | Balanced reasoning and speed |
-| `high` | Thorough reasoning — slower, more tokens |
+| `high` | Thorough reasoning — slower, more tokens (default for thinking-capable models) |
 | `max` | Unconstrained reasoning (Opus 4.6+ only) |
 
-Supported levels are discovered per-model via LLMDB. Not all models support reasoning — the `models/list` RPC returns `supports_thinking` and `thinking_levels` for each model. Most thinking-capable models expose `["low", "medium", "high"]`; Opus 4.6+ models also include `"max"`.
+Thinking-capable models (Claude, GPT-5, o3, o4) default to `high`. Models that don't support reasoning (e.g. GPT-4o, GPT-4.1) always run without it. The `off` level is not user-selectable for thinking-capable models — reasoning is always enabled at `low` or above.
 
 ## How It Works Across Providers
 
@@ -66,16 +65,50 @@ end
 | Model Family | API Path | Reasoning Sent? | Thinking Event Parsed |
 |-------------|----------|----------------|-----------------------|
 | GPT-5, GPT-5.1, GPT-5.2, GPT-5.3, `oswe*` | Responses API | ✅ `reasoning.effort` | `response.reasoning_summary_text.delta` → `{:thinking_delta, text}` |
-| Claude Sonnet 4, Opus 4.x, Haiku 4.5, o3/o4 | Chat Completions | ✅ `reasoning_effort` (thinking-capable IDs) | `choices[].delta.reasoning_content` → `{:thinking_delta, text}` |
+| Claude Sonnet 4, Opus 4.x, Haiku 4.5, o3/o4 | Chat Completions | ✅ `reasoning_effort` (thinking-capable IDs) | `choices[].delta.reasoning_text` → `{:thinking_delta, text}` (summary) |
 | GPT-4o, GPT-4.1 | Chat Completions | ❌ Not sent | N/A |
 
 Thinking output is parsed from SSE into Opal's semantic events:
 
-| SSE Data | Opal Event |
-|----------|------------|
-| `{"choices": [{"delta": {"reasoning_content": "..."}}]}` | `{:thinking_delta, text}` |
-| `{"type": "response.output_item.added", "item": {"type": "reasoning"}}` | `{:thinking_start, %{item_id: id}}` |
-| `{"type": "response.reasoning_summary_text.delta", "delta": "..."}` | `{:thinking_delta, text}` |
+| SSE Data | Opal Event | Notes |
+|----------|------------|-------|
+| `{"choices": [{"delta": {"reasoning_text": "..."}}]}` | `{:thinking_delta, text}` | Copilot proxy for Claude — human-readable summary |
+| `{"choices": [{"delta": {"reasoning_content": "..."}}]}` | `{:thinking_delta, text}` | Standard Chat Completions (Anthropic direct) |
+| `{"choices": [{"delta": {"reasoning_opaque": "..."}}]}` | *(ignored)* | Encrypted round-trip data; not displayable |
+| `{"type": "response.output_item.added", "item": {"type": "reasoning"}}` | `{:thinking_start, %{item_id: id}}` | Responses API |
+| `{"type": "response.reasoning_summary_text.delta", "delta": "..."}` | `{:thinking_delta, text}` | Responses API |
+
+### Copilot API Thinking Format (Chat Completions)
+
+The Copilot proxy wraps Claude's extended thinking in a non-standard Chat Completions SSE format that differs from both Anthropic's native API and OpenAI's `reasoning_content` convention. Each thinking chunk includes **three keys**:
+
+```json
+{
+  "choices": [{
+    "delta": {
+      "role": "assistant",
+      "content": "",
+      "reasoning_text": "Let me analyze this step by step..."
+    }
+  }]
+}
+```
+
+| Key | Purpose |
+|-----|---------|
+| `reasoning_text` | Human-readable thinking text (displayed in UI) |
+| `reasoning_opaque` | Encrypted blob for round-tripping to the API (not displayable) |
+| `content` | Always `""` during thinking chunks |
+
+Every thinking chunk also carries `role: "assistant"` and `content: ""`. Without special handling, the `role_start` parser would emit a spurious `{:text_start}` on **every** thinking chunk, creating dozens of empty assistant message entries. The parser guards against this by checking for `reasoning_text`, `reasoning_content`, and `reasoning_opaque` keys before emitting `text_start`. As a second safety net, `stream.ex` deduplicates `{:message_start}` broadcasts via the `message_started` flag (reset each streaming cycle in `begin_stream/2`).
+
+After the thinking phase, an opaque-only chunk signals the end of reasoning:
+
+```json
+{"choices": [{"delta": {"role": "assistant", "content": "", "reasoning_opaque": "1b9UghY8..."}}]}
+```
+
+Then normal text content follows with non-empty `content` values.
 
 ### LLM Provider (Direct)
 
@@ -216,9 +249,10 @@ Provider SSE → parse_stream_event/1 → {:thinking_start, %{}}
 - `lib/opal/provider/model.ex` — `thinking_level` field and validation (`:off | :low | :medium | :high | :max`)
 - `lib/opal/provider/registry.ex` — Per-model `thinking_levels` from LLMDB, `supports_max_thinking?/1`
 - `lib/opal/message.ex` — `thinking` field on Message struct
-- `lib/opal/provider/provider.ex` — Shared `parse_chat_event/1`, `convert_messages_openai/2`, `reasoning_effort/1`
+- `lib/opal/provider/provider.ex` — Shared `parse_chat_event/1`, `convert_messages_openai/2`, `reasoning_effort/1`. Parses `reasoning_text` and `reasoning_content` as `{:thinking_delta, text}`.
 - `lib/opal/provider/copilot.ex` — `maybe_add_reasoning/3`, `thinking_capable?/1`, Responses API conversion
-- `lib/opal/agent/stream.ex` — Thinking accumulation and auto-start detection
+- `lib/opal/agent/stream.ex` — Thinking accumulation, auto-start detection, and `message_started` dedup guard
+- `lib/opal/agent/state.ex` — `message_started` boolean prevents duplicate `{:message_start}` broadcasts per streaming cycle
 - `lib/opal/agent/agent.ex` — `current_thinking` state, SSE stream handling, `finalize_response`
 - `lib/opal/session/session.ex` — Thinking persistence on messages in the session store (DETS)
 - `lib/opal/rpc/server.ex` — `thinking/set` and `model/set` with `thinking_level`

@@ -34,10 +34,7 @@ import type { AgentEvent } from "../sdk/protocol.js";
 export type AgentEventType = AgentEvent["type"];
 
 /** Extract a specific event interface by its type string. */
-export type EventOfType<T extends AgentEventType> = Extract<
-  AgentEvent,
-  { type: T }
->;
+export type EventOfType<T extends AgentEventType> = Extract<AgentEvent, { type: T }>;
 
 /** A visitor requiring a handler for every event type. */
 export type AgentEventVisitor<R> = {
@@ -54,26 +51,16 @@ export type PartialVisitor<R> = Partial<AgentEventVisitor<R>> & {
  *
  * Dispatches to the handler matching `event.type` and returns its result.
  */
-export function matchEvent<R>(
-  event: AgentEvent,
-  visitor: AgentEventVisitor<R>,
-): R {
-  const handler = (visitor as Record<string, (event: AgentEvent) => R>)[
-    event.type
-  ];
+export function matchEvent<R>(event: AgentEvent, visitor: AgentEventVisitor<R>): R {
+  const handler = (visitor as Record<string, (event: AgentEvent) => R>)[event.type];
   return handler(event);
 }
 
 /**
  * Partial event matcher — unhandled types fall through to the `_` default.
  */
-export function matchEventPartial<R>(
-  event: AgentEvent,
-  visitor: PartialVisitor<R>,
-): R {
-  const handler = (visitor as Record<string, ((event: AgentEvent) => R) | undefined>)[
-    event.type
-  ];
+export function matchEventPartial<R>(event: AgentEvent, visitor: PartialVisitor<R>): R {
+  const handler = (visitor as Record<string, ((event: AgentEvent) => R) | undefined>)[event.type];
   return handler ? handler(event) : visitor._(event);
 }
 

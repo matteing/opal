@@ -386,11 +386,17 @@ defmodule Opal.Inspect do
 
   defp format_event({:tool_execution_start, tool, _args}), do: {"tool_start", "#{tool}"}
 
+  defp format_event({:tool_execution_end, tool, _call_id, {:ok, out, _meta}}),
+    do: {"tool_end", "#{tool} ok #{out |> to_preview() |> String.slice(0, 60)}"}
+
   defp format_event({:tool_execution_end, tool, _call_id, {:ok, out}}),
     do: {"tool_end", "#{tool} ok #{out |> to_preview() |> String.slice(0, 60)}"}
 
   defp format_event({:tool_execution_end, tool, _call_id, {:error, e}}),
     do: {"tool_end", "#{tool} error #{inspect(e) |> String.slice(0, 60)}"}
+
+  defp format_event({:tool_execution_end, tool, {:ok, out, _meta}}),
+    do: {"tool_end", "#{tool} ok #{out |> to_preview() |> String.slice(0, 60)}"}
 
   defp format_event({:tool_execution_end, tool, {:ok, out}}),
     do: {"tool_end", "#{tool} ok #{out |> to_preview() |> String.slice(0, 60)}"}

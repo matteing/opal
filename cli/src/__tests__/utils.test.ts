@@ -31,11 +31,11 @@ describe("copyToClipboard", () => {
   it("returns true on success", () => {
     const result = copyToClipboard("test text");
     expect(result).toBe(true);
-    expect(clipboard.writeSync).toHaveBeenCalledWith("test text");
+    expect(vi.mocked(clipboard).writeSync).toHaveBeenCalledWith("test text");
   });
 
   it("returns false when clipboard fails", () => {
-    vi.mocked(clipboard.writeSync).mockImplementation(() => {
+    vi.mocked(clipboard).writeSync.mockImplementation(() => {
       throw new Error("clipboard unavailable");
     });
     const result = copyToClipboard("test text");

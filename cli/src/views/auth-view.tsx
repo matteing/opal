@@ -16,11 +16,7 @@ export const AuthView: FC = () => {
     case "deviceCode":
     case "polling":
       return (
-        <DeviceCodeView
-          code={deviceCode}
-          uri={verificationUri}
-          polling={status === "polling"}
-        />
+        <DeviceCodeView code={deviceCode} uri={verificationUri} polling={status === "polling"} />
       );
 
     case "error":
@@ -46,16 +42,17 @@ const NeedsAuthView: FC = () => {
 
   return (
     <Box flexDirection="column" padding={1} gap={1}>
-      <Text bold color={colors.title}>
+      <Text bold color={colors.primary}>
         ✦ Welcome to Opal
       </Text>
       <Box flexDirection="column" marginLeft={2} gap={1}>
-        <Text>
-          GitHub Copilot sign-in is required to continue.
-        </Text>
+        <Text>GitHub Copilot sign-in is required to continue.</Text>
         <Text dimColor>
-          Press <Text bold color={colors.accentAlt}>Enter</Text> to open your
-          browser and sign in with your GitHub account.
+          Press{" "}
+          <Text bold color={colors.primary}>
+            Enter
+          </Text>{" "}
+          to open your browser and sign in with your GitHub account.
         </Text>
       </Box>
     </Box>
@@ -81,7 +78,7 @@ const DeviceCodeView: FC<{
 
   return (
     <Box flexDirection="column" padding={1} gap={1}>
-      <Text bold color={colors.title}>
+      <Text bold color={colors.primary}>
         ✦ Welcome to Opal
       </Text>
       <Box flexDirection="column" marginLeft={2} gap={1}>
@@ -93,13 +90,14 @@ const DeviceCodeView: FC<{
           {opened && <Text dimColor> ✓ copied</Text>}
         </Text>
         {polling ? (
-          <Text dimColor>
-            Waiting for authorization — paste the code in your browser…
-          </Text>
+          <Text dimColor>Waiting for authorization — paste the code in your browser…</Text>
         ) : (
           <Text dimColor>
-            Press <Text bold color={colors.accentAlt}>Enter</Text> to copy the
-            code to your clipboard and open the browser
+            Press{" "}
+            <Text bold color={colors.primary}>
+              Enter
+            </Text>{" "}
+            to copy the code to your clipboard and open the browser
           </Text>
         )}
       </Box>
@@ -119,14 +117,18 @@ const AuthErrorView: FC<{ message: string | null }> = ({ message }) => {
 
   return (
     <Box flexDirection="column" padding={1} gap={1}>
-      <Text bold color={colors.title}>
+      <Text bold color={colors.primary}>
         ✦ Welcome to Opal
       </Text>
       <Box flexDirection="column" marginLeft={2} gap={1}>
         <Text color={colors.error}>✖ Authentication failed</Text>
         {message && <Text dimColor>{message}</Text>}
         <Text dimColor>
-          Press <Text bold color={colors.accentAlt}>Enter</Text> to try again
+          Press{" "}
+          <Text bold color={colors.primary}>
+            Enter
+          </Text>{" "}
+          to try again
         </Text>
       </Box>
     </Box>

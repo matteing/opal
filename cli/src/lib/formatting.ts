@@ -20,3 +20,8 @@ export function toRootRelativePath(filePath: string, rootDir?: string): string {
 
   return relative.split(path.sep).join("/");
 }
+
+/** Truncate a string to `maxLength`, appending `…` if clipped. */
+export function truncate(text: string, maxLength: number): string {
+  return text.length > maxLength ? text.slice(0, maxLength - 1) + "…" : text;
+}

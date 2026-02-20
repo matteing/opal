@@ -18,6 +18,12 @@ defmodule Opal.Agent.StreamTest do
     test "text_start broadcasts message_start" do
       state = base_state()
       new_state = Stream.handle_stream_event({:text_start, %{}}, state)
+      assert new_state.message_started == true
+    end
+
+    test "text_start deduplicates — only fires once per cycle" do
+      state = %{base_state() | message_started: true}
+      new_state = Stream.handle_stream_event({:text_start, %{}}, state)
       assert new_state == state
     end
 
@@ -127,6 +133,320 @@ defmodule Opal.Agent.StreamTest do
     test "tool_call_delta with unrecognized format is a no-op" do
       state = apply_event(base_state(), {:tool_call_delta, 12345})
       assert state.current_tool_calls == []
+    end
+
+    test "tool_call_done parses accumulated JSON when no pre-parsed arguments" do
+      state =
+        base_state()
+        |> apply_event({:tool_call_start, %{call_id: "c1", call_index: 0, name: "read_file"}})
+        |> apply_event({:tool_call_delta, %{call_index: 0, delta: "{\"path\": \"/"}})
+        |> apply_event({:tool_call_delta, %{call_index: 0, delta: "tmp/test.txt\"}"}})
+        |> apply_event({:tool_call_done, %{call_id: "c1"}})
+
+      tc = hd(state.current_tool_calls)
+      assert tc.arguments == %{"path" => "/tmp/test.txt"}
+    end
+
+    test "tool_call_done with pre-parsed arguments takes precedence over JSON" do
+      state =
+        base_state()
+        |> apply_event({:tool_call_start, %{call_id: "c1", call_index: 0, name: "shell"}})
+        |> apply_event({:tool_call_delta, %{call_index: 0, delta: "garbage"}})
+        |> apply_event(
+          {:tool_call_done, %{call_id: "c1", arguments: %{"command" => "echo hello"}}}
+        )
+
+      tc = hd(state.current_tool_calls)
+      assert tc.arguments == %{"command" => "echo hello"}
+    end
+
+    test "tool_call_done without matching slot appends a new finalized entry" do
+      state =
+        apply_event(
+          base_state(),
+          {:tool_call_done, %{call_id: "orphan", name: "grep", arguments: %{"pattern" => "TODO"}}}
+        )
+
+      assert length(state.current_tool_calls) == 1
+      tc = hd(state.current_tool_calls)
+      assert tc.call_id == "orphan"
+      assert tc.name == "grep"
+      assert tc.arguments == %{"pattern" => "TODO"}
+    end
+
+    test "upsert merges metadata into existing slot on duplicate start" do
+      state =
+        base_state()
+        |> apply_event({:tool_call_start, %{call_id: "c1", call_index: 0}})
+        |> apply_event({:tool_call_start, %{call_id: "c1", call_index: 0, name: "shell"}})
+
+      assert length(state.current_tool_calls) == 1
+      tc = hd(state.current_tool_calls)
+      assert tc.call_id == "c1"
+      assert tc.name == "shell"
+    end
+
+    test "delta creates slot when no start was received" do
+      state =
+        base_state()
+        |> apply_event({:tool_call_delta, %{call_index: 0, delta: "{\"a\":1}"}})
+
+      assert length(state.current_tool_calls) == 1
+      tc = hd(state.current_tool_calls)
+      assert tc.arguments_json == "{\"a\":1}"
+      assert tc.call_index == 0
+    end
+
+    test "parallel tool calls with only call_index (no call_id)" do
+      state =
+        base_state()
+        |> apply_event({:tool_call_start, %{call_index: 0, name: "read_file"}})
+        |> apply_event({:tool_call_start, %{call_index: 1, name: "grep"}})
+        |> apply_event({:tool_call_delta, %{call_index: 0, delta: "{\"path\":\"a.txt\"}"}})
+        |> apply_event({:tool_call_delta, %{call_index: 1, delta: "{\"pattern\":\"foo\"}"}})
+        |> apply_event({:tool_call_done, %{call_index: 1}})
+        |> apply_event({:tool_call_done, %{call_index: 0}})
+
+      read = Enum.find(state.current_tool_calls, &(&1.name == "read_file"))
+      grep = Enum.find(state.current_tool_calls, &(&1.name == "grep"))
+
+      assert read.arguments == %{"path" => "a.txt"}
+      assert grep.arguments == %{"pattern" => "foo"}
+    end
+
+    test "tool_call_done with malformed JSON falls back to empty map" do
+      state =
+        base_state()
+        |> apply_event({:tool_call_start, %{call_id: "c1", call_index: 0, name: "shell"}})
+        |> apply_event({:tool_call_delta, %{call_index: 0, delta: "{broken"}})
+        |> apply_event({:tool_call_done, %{call_id: "c1"}})
+
+      tc = hd(state.current_tool_calls)
+      # malformed JSON should not crash — falls back to safe decode result
+      assert is_map(tc.arguments)
+    end
+  end
+
+  describe "SSE → stream pipeline — tool calls end-to-end" do
+    test "realistic single tool call from SSE chunks" do
+      # Simulate the exact SSE sequence from the Copilot API
+      sse_chunks = [
+        %{
+          "choices" => [
+            %{"delta" => %{"role" => "assistant", "content" => nil}, "finish_reason" => nil}
+          ]
+        },
+        %{
+          "choices" => [
+            %{
+              "delta" => %{
+                "tool_calls" => [
+                  %{
+                    "index" => 0,
+                    "id" => "call_abc123",
+                    "function" => %{"name" => "read_file", "arguments" => ""}
+                  }
+                ]
+              },
+              "finish_reason" => nil
+            }
+          ]
+        },
+        %{
+          "choices" => [
+            %{
+              "delta" => %{
+                "tool_calls" => [%{"index" => 0, "function" => %{"arguments" => "{\"path"}}]
+              },
+              "finish_reason" => nil
+            }
+          ]
+        },
+        %{
+          "choices" => [
+            %{
+              "delta" => %{
+                "tool_calls" => [
+                  %{"index" => 0, "function" => %{"arguments" => "\":\"/tmp/file.txt\"}"}}
+                ]
+              },
+              "finish_reason" => nil
+            }
+          ]
+        },
+        %{
+          "choices" => [%{"delta" => %{}, "finish_reason" => "tool_calls"}]
+        }
+      ]
+
+      # Parse all SSE chunks and fold through stream handler
+      state =
+        Enum.reduce(sse_chunks, base_state(), fn chunk, acc ->
+          chunk
+          |> Opal.Provider.parse_chat_event()
+          |> Enum.reduce(acc, &Stream.handle_stream_event/2)
+        end)
+
+      assert state.message_started == true
+      assert length(state.current_tool_calls) == 1
+
+      tc = hd(state.current_tool_calls)
+      assert tc.call_id == "call_abc123"
+      assert tc.name == "read_file"
+      assert tc.arguments_json == "{\"path\":\"/tmp/file.txt\"}"
+    end
+
+    test "parallel tool calls from interleaved SSE chunks" do
+      sse_chunks = [
+        # Start both tool calls
+        %{
+          "choices" => [
+            %{
+              "delta" => %{
+                "tool_calls" => [
+                  %{
+                    "index" => 0,
+                    "id" => "call_read",
+                    "function" => %{"name" => "read_file", "arguments" => ""}
+                  },
+                  %{
+                    "index" => 1,
+                    "id" => "call_grep",
+                    "function" => %{"name" => "grep", "arguments" => ""}
+                  }
+                ]
+              },
+              "finish_reason" => nil
+            }
+          ]
+        },
+        # Interleaved argument deltas
+        %{
+          "choices" => [
+            %{
+              "delta" => %{
+                "tool_calls" => [
+                  %{"index" => 0, "function" => %{"arguments" => ~s({"path":"src/)}}
+                ]
+              },
+              "finish_reason" => nil
+            }
+          ]
+        },
+        %{
+          "choices" => [
+            %{
+              "delta" => %{
+                "tool_calls" => [
+                  %{"index" => 1, "function" => %{"arguments" => ~s({"pattern":"TODO)}}
+                ]
+              },
+              "finish_reason" => nil
+            }
+          ]
+        },
+        %{
+          "choices" => [
+            %{
+              "delta" => %{
+                "tool_calls" => [
+                  %{"index" => 0, "function" => %{"arguments" => ~s(main.ex"})}}
+                ]
+              },
+              "finish_reason" => nil
+            }
+          ]
+        },
+        %{
+          "choices" => [
+            %{
+              "delta" => %{
+                "tool_calls" => [
+                  %{"index" => 1, "function" => %{"arguments" => ~s("})}}
+                ]
+              },
+              "finish_reason" => nil
+            }
+          ]
+        },
+        # Finish
+        %{
+          "choices" => [%{"delta" => %{}, "finish_reason" => "tool_calls"}]
+        }
+      ]
+
+      state =
+        Enum.reduce(sse_chunks, base_state(), fn chunk, acc ->
+          chunk
+          |> Opal.Provider.parse_chat_event()
+          |> Enum.reduce(acc, &Stream.handle_stream_event/2)
+        end)
+
+      assert length(state.current_tool_calls) == 2
+
+      read = Enum.find(state.current_tool_calls, &(&1.name == "read_file"))
+      grep = Enum.find(state.current_tool_calls, &(&1.name == "grep"))
+
+      assert read.call_id == "call_read"
+      assert read.arguments_json == ~s({"path":"src/main.ex"})
+
+      assert grep.call_id == "call_grep"
+      assert grep.arguments_json == ~s({"pattern":"TODO"})
+    end
+
+    test "thinking followed by tool call in same response" do
+      sse_chunks = [
+        # Thinking chunk (with role + empty content — the Copilot API quirk)
+        %{
+          "choices" => [
+            %{
+              "delta" => %{
+                "role" => "assistant",
+                "content" => "",
+                "reasoning_text" => "Let me check the file..."
+              },
+              "finish_reason" => nil
+            }
+          ]
+        },
+        # Tool call
+        %{
+          "choices" => [
+            %{
+              "delta" => %{
+                "tool_calls" => [
+                  %{
+                    "index" => 0,
+                    "id" => "call_1",
+                    "function" => %{"name" => "read_file", "arguments" => "{\"path\":\"a.txt\"}"}
+                  }
+                ]
+              },
+              "finish_reason" => nil
+            }
+          ]
+        },
+        %{
+          "choices" => [%{"delta" => %{}, "finish_reason" => "tool_calls"}]
+        }
+      ]
+
+      state =
+        Enum.reduce(sse_chunks, base_state(), fn chunk, acc ->
+          chunk
+          |> Opal.Provider.parse_chat_event()
+          |> Enum.reduce(acc, &Stream.handle_stream_event/2)
+        end)
+
+      # Thinking was captured
+      assert state.current_thinking == "Let me check the file..."
+      # Tool call was captured (no spurious message_start from thinking chunk)
+      assert length(state.current_tool_calls) == 1
+      tc = hd(state.current_tool_calls)
+      assert tc.name == "read_file"
+      assert tc.arguments_json == "{\"path\":\"a.txt\"}"
+      # No spurious message_started from the thinking chunk's role/content
+      refute state.message_started
     end
   end
 

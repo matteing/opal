@@ -289,12 +289,7 @@ defmodule Opal.Provider.Copilot do
     do:
       Map.put(body, :reasoning, %{effort: Opal.Provider.reasoning_effort(level), summary: "auto"})
 
-  defp thinking_capable?(id) do
-    Enum.any?(
-      ~w(gpt-5 claude-sonnet-4 claude-opus-4 claude-haiku-4.5 o3 o4),
-      &String.starts_with?(id, &1)
-    )
-  end
+  defp thinking_capable?(id), do: Opal.Provider.Model.thinking_capable?(id)
 
   # ── Helpers ────────────────────────────────────────────────────────
 

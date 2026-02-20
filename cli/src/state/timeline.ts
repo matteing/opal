@@ -19,13 +19,7 @@ import type {
   ToolExecutionStartEvent,
   ToolExecutionEndEvent,
 } from "../sdk/protocol.js";
-import type {
-  TimelineEntry,
-  ToolCall,
-  AgentView,
-  TokenUsage,
-  StatusLevel,
-} from "./types.js";
+import type { TimelineEntry, ToolCall, AgentView, TokenUsage, StatusLevel } from "./types.js";
 
 // ── Constants ────────────────────────────────────────────────────
 
@@ -75,7 +69,7 @@ function rootAgent(): AgentView {
 
 // ── Snapshot (internal reducer state) ────────────────────────────
 
-interface TimelineSnapshot {
+export interface TimelineSnapshot {
   agents: Readonly<Record<string, AgentView>>;
   focusStack: readonly string[];
   tokenUsage: TokenUsage | null;
@@ -93,10 +87,7 @@ const TIMELINE_INITIAL: TimelineSnapshot = {
 
 // ── Pure helpers ─────────────────────────────────────────────────
 
-function appendMessageDelta(
-  entries: readonly TimelineEntry[],
-  delta: string,
-): TimelineEntry[] {
+function appendMessageDelta(entries: readonly TimelineEntry[], delta: string): TimelineEntry[] {
   const last = entries[entries.length - 1];
   if (last?.kind === "message" && last.message.role === "assistant") {
     const updated = entries.slice();
@@ -106,16 +97,10 @@ function appendMessageDelta(
     };
     return updated;
   }
-  return [
-    ...entries,
-    { kind: "message", message: { role: "assistant", content: delta } },
-  ];
+  return [...entries, { kind: "message", message: { role: "assistant", content: delta } }];
 }
 
-function appendThinkingDelta(
-  entries: readonly TimelineEntry[],
-  delta: string,
-): TimelineEntry[] {
+function appendThinkingDelta(entries: readonly TimelineEntry[], delta: string): TimelineEntry[] {
   const last = entries[entries.length - 1];
   if (last?.kind === "thinking") {
     const updated = entries.slice();
@@ -130,9 +115,7 @@ function updateToolEntry(
   callId: string,
   patch: Partial<ToolCall> | ((tool: ToolCall) => Partial<ToolCall>),
 ): TimelineEntry[] {
-  const idx = entries.findIndex(
-    (e) => e.kind === "tool" && e.tool.callId === callId,
-  );
+  const idx = entries.findIndex((e) => e.kind === "tool" && e.tool.callId === callId);
   if (idx < 0) return entries as TimelineEntry[];
   const entry = entries[idx] as { kind: "tool"; tool: ToolCall };
   const resolved = typeof patch === "function" ? patch(entry.tool) : patch;
@@ -161,7 +144,18 @@ function reduceView(view: ViewFields, event: Record<string, unknown>): ViewField
     case "agentAbort":
       return { ...view, thinking: null, statusMessage: null, isRunning: false };
 
-    case "messageStart":
+    case "messageStart": {
+      // Deduplicate: if the last entry is already an empty assistant message,
+      // don't add another (guards against providers that emit multiple
+      // text_start events per response).
+      const last = view.entries[view.entries.length - 1];
+      if (
+        last?.kind === "message" &&
+        last.message.role === "assistant" &&
+        last.message.content === ""
+      ) {
+        return view;
+      }
       return {
         ...view,
         entries: [
@@ -169,6 +163,7 @@ function reduceView(view: ViewFields, event: Record<string, unknown>): ViewField
           { kind: "message", message: { role: "assistant", content: "" } },
         ],
       };
+    }
 
     case "messageDelta":
       return {
@@ -271,10 +266,7 @@ function reduceAgentView(
 // ── Top-level event reducer ──────────────────────────────────────
 
 /** Apply a single agent event to the timeline state. Exported for testing. */
-export function applyEvent(
-  state: TimelineSnapshot,
-  event: AgentEvent,
-): TimelineSnapshot {
+export function applyEvent(state: TimelineSnapshot, event: AgentEvent): TimelineSnapshot {
   switch (event.type) {
     // ── View events → root agent ──────────────────────────────
     case "agentStart":
@@ -298,7 +290,7 @@ export function applyEvent(
     // ── Lifecycle events ──────────────────────────────────────
     case "agentAbort": {
       // Clear all sub-agents, reset focus, update root
-      const root = state.agents[ROOT_AGENT_ID]!;
+      const root = state.agents[ROOT_AGENT_ID];
       return {
         ...state,
         agents: {
@@ -315,7 +307,7 @@ export function applyEvent(
 
     case "agentEnd": {
       // Clear all sub-agents, reset focus, update root + token usage
-      const root = state.agents[ROOT_AGENT_ID]!;
+      const root = state.agents[ROOT_AGENT_ID];
       return {
         ...state,
         agents: {
@@ -344,12 +336,9 @@ export function applyEvent(
       const idx = state.queuedMessages.indexOf(event.text);
       const nextQueued =
         idx >= 0
-          ? [
-              ...state.queuedMessages.slice(0, idx),
-              ...state.queuedMessages.slice(idx + 1),
-            ]
+          ? [...state.queuedMessages.slice(0, idx), ...state.queuedMessages.slice(idx + 1)]
           : state.queuedMessages;
-      const root = state.agents[ROOT_AGENT_ID]!;
+      const root = state.agents[ROOT_AGENT_ID];
       return {
         ...state,
         queuedMessages: nextQueued,
@@ -380,9 +369,7 @@ export function applyEvent(
       // The inner event's `type` value arrives in snake_case from the wire
       // (snakeToCamel only transforms keys, not values). Convert it so
       // reduceView's camelCase switch statements match.
-      const camelType = innerType?.replace(/_([a-z])/g, (_, c: string) =>
-        c.toUpperCase(),
-      );
+      const camelType = innerType?.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 
       // Birth: create a new agent in the map
       if (camelType === "subAgentStart") {
@@ -414,9 +401,7 @@ export function applyEvent(
         delete nextAgents[subSessionId];
         const focusedId = state.focusStack[state.focusStack.length - 1];
         const nextFocus =
-          focusedId === subSessionId
-            ? state.focusStack.slice(0, -1)
-            : state.focusStack;
+          focusedId === subSessionId ? state.focusStack.slice(0, -1) : state.focusStack;
         return { ...state, agents: nextAgents, focusStack: nextFocus };
       }
 
@@ -426,10 +411,7 @@ export function applyEvent(
       const updated: AgentView = {
         ...existing,
         ...view,
-        toolCount:
-          camelType === "toolExecutionStart"
-            ? existing.toolCount + 1
-            : existing.toolCount,
+        toolCount: camelType === "toolExecutionStart" ? existing.toolCount + 1 : existing.toolCount,
       };
       return {
         ...state,
@@ -439,7 +421,7 @@ export function applyEvent(
 
     // ── Skills & context → root agent ─────────────────────────
     case "skillLoaded": {
-      const root = state.agents[ROOT_AGENT_ID]!;
+      const root = state.agents[ROOT_AGENT_ID];
       return {
         ...state,
         agents: {
@@ -456,17 +438,14 @@ export function applyEvent(
     }
 
     case "contextDiscovered": {
-      const root = state.agents[ROOT_AGENT_ID]!;
+      const root = state.agents[ROOT_AGENT_ID];
       return {
         ...state,
         agents: {
           ...state.agents,
           [ROOT_AGENT_ID]: {
             ...root,
-            entries: [
-              ...root.entries,
-              { kind: "context", context: { files: event.files } },
-            ],
+            entries: [...root.entries, { kind: "context", context: { files: event.files } }],
           },
         },
       };
@@ -474,7 +453,7 @@ export function applyEvent(
 
     // ── Recovery & errors ─────────────────────────────────────
     case "agentRecovered": {
-      const root = state.agents[ROOT_AGENT_ID]!;
+      const root = state.agents[ROOT_AGENT_ID];
       return {
         ...state,
         timelineError: null,
@@ -520,12 +499,7 @@ export function applyEvent(
 
 // ── Slice creator ────────────────────────────────────────────────
 
-export const createTimelineSlice: StateCreator<
-  TimelineSlice,
-  [],
-  [],
-  TimelineSlice
-> = (set) => ({
+export const createTimelineSlice: StateCreator<TimelineSlice, [], [], TimelineSlice> = (set) => ({
   ...TIMELINE_INITIAL,
 
   applyEvents: (events) =>

@@ -4,14 +4,14 @@ import { createTimelineSlice, type TimelineSlice, ROOT_AGENT_ID } from "../../st
 import { createDebugSlice, type DebugSlice } from "../../state/debug.js";
 import { createModelsSlice, type ModelsSlice } from "../../state/models.js";
 import { createAuthSlice, type AuthSlice } from "../../state/auth.js";
-import type { OpalStore } from "../../state/store.js";
+import { createCliStateSlice, type CliStateSlice } from "../../state/cli.js";
 import { ev } from "./helpers.js";
 
 /**
  * Integration test — compose slices into one store
  * (without the session slice which needs real I/O).
  */
-type TestStore = TimelineSlice & DebugSlice & ModelsSlice & AuthSlice;
+type TestStore = TimelineSlice & DebugSlice & ModelsSlice & AuthSlice & CliStateSlice;
 
 function makeComposedStore() {
   return create<TestStore>()((...a) => ({
@@ -19,12 +19,13 @@ function makeComposedStore() {
     ...createDebugSlice(...a),
     ...createModelsSlice(...a),
     ...createAuthSlice(...a),
+    ...createCliStateSlice(...a),
   }));
 }
 
 /** Shorthand: root agent entries. */
 function rootEntries(store: ReturnType<typeof makeComposedStore>) {
-  return store.getState().agents[ROOT_AGENT_ID]!.entries;
+  return store.getState().agents[ROOT_AGENT_ID].entries;
 }
 
 describe("Composed store", () => {
@@ -34,7 +35,7 @@ describe("Composed store", () => {
 
     // Timeline
     expect(s.agents).toHaveProperty(ROOT_AGENT_ID);
-    expect(s.agents[ROOT_AGENT_ID]!.isRunning).toBe(false);
+    expect(s.agents[ROOT_AGENT_ID].isRunning).toBe(false);
     // Debug
     expect(s.rpcEntries).toEqual([]);
     expect(s.debugVisible).toBe(false);
@@ -55,12 +56,9 @@ describe("Composed store", () => {
       kind: "request",
     });
 
-    store.getState().applyEvents([
-      ev.agentStart(),
-      ev.messageStart(),
-      ev.messageDelta("Hi"),
-      ev.agentEnd(),
-    ]);
+    store
+      .getState()
+      .applyEvents([ev.agentStart(), ev.messageStart(), ev.messageDelta("Hi"), ev.agentEnd()]);
 
     // RPC entries preserved after timeline mutation
     expect(store.getState().rpcEntries).toHaveLength(1);
@@ -77,12 +75,9 @@ describe("Composed store", () => {
       raw: {},
       kind: "notification",
     });
-    store.getState().applyEvents([
-      ev.agentStart(),
-      ev.messageStart(),
-      ev.messageDelta("data"),
-      ev.agentEnd(),
-    ]);
+    store
+      .getState()
+      .applyEvents([ev.agentStart(), ev.messageStart(), ev.messageDelta("data"), ev.agentEnd()]);
     store.getState().toggleDebug();
 
     store.getState().resetTimeline();
@@ -98,18 +93,15 @@ describe("Composed store", () => {
 
     store.subscribe((state) => {
       snapshots.push({
-        entries: state.agents[ROOT_AGENT_ID]!.entries.length,
+        entries: state.agents[ROOT_AGENT_ID].entries.length,
         rpc: state.rpcEntries.length,
       });
     });
 
     // Timeline mutation
-    store.getState().applyEvents([
-      ev.agentStart(),
-      ev.messageStart(),
-      ev.messageDelta("Hi"),
-      ev.agentEnd(),
-    ]);
+    store
+      .getState()
+      .applyEvents([ev.agentStart(), ev.messageStart(), ev.messageDelta("Hi"), ev.agentEnd()]);
 
     // Debug mutation
     store.getState().pushRpcMessage({

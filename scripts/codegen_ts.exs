@@ -143,6 +143,11 @@ defmodule Codegen.TS do
     |> Enum.sort_by(& &1.type)
   end
 
+  defp json_schema_to_type(%{"nullable" => true} = schema) do
+    inner = json_schema_to_type(Map.delete(schema, "nullable"))
+    {:nullable, inner}
+  end
+
   defp json_schema_to_type(%{"type" => "string", "const" => val}), do: {:literal, val}
   defp json_schema_to_type(%{"type" => "string"}), do: :string
   defp json_schema_to_type(%{"type" => "boolean"}), do: :boolean
@@ -292,6 +297,8 @@ defmodule Codegen.TS do
   defp type_to_ts({:literal, val}), do: "\"#{val}\""
 
   defp type_to_ts({:array, inner}), do: "#{type_to_ts(inner)}[]"
+
+  defp type_to_ts({:nullable, inner}), do: "#{type_to_ts(inner)} | null"
 
   defp type_to_ts({:object, fields, required}) when is_map(fields) do
     entries =

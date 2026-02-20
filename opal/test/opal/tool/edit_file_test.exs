@@ -32,7 +32,7 @@ defmodule Opal.Tool.EditFileTest do
     test "replaces one line by hash", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc")
 
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -48,7 +48,7 @@ defmodule Opal.Tool.EditFileTest do
     test "replaces first line", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc")
 
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -64,7 +64,7 @@ defmodule Opal.Tool.EditFileTest do
     test "replaces last line", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc")
 
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -82,7 +82,7 @@ defmodule Opal.Tool.EditFileTest do
     test "replaces a range of lines", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc\nddd\neee")
 
-      assert {:ok, result} =
+      assert {:ok, result, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -103,7 +103,7 @@ defmodule Opal.Tool.EditFileTest do
     test "replaces with multi-line content", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc")
 
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -122,7 +122,7 @@ defmodule Opal.Tool.EditFileTest do
     test "accepts legacy 'end' parameter as fallback", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc\nddd\neee")
 
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -140,7 +140,7 @@ defmodule Opal.Tool.EditFileTest do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc\nddd\neee")
 
       # 'through' points to line 2, 'end' points to line 4 — 'through' wins
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -161,7 +161,7 @@ defmodule Opal.Tool.EditFileTest do
     test "echoes replaced lines with hashline tags", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc\nddd")
 
-      assert {:ok, result} =
+      assert {:ok, result, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -183,7 +183,7 @@ defmodule Opal.Tool.EditFileTest do
     test "echoes single replaced line", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc")
 
-      assert {:ok, result} =
+      assert {:ok, result, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -200,7 +200,7 @@ defmodule Opal.Tool.EditFileTest do
     test "echoes anchor line for insert operations", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc")
 
-      assert {:ok, result} =
+      assert {:ok, result, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -220,7 +220,7 @@ defmodule Opal.Tool.EditFileTest do
     test "deletes lines when new_string is omitted", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc\nddd")
 
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -238,7 +238,7 @@ defmodule Opal.Tool.EditFileTest do
     test "inserts content after a line", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc")
 
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -255,7 +255,7 @@ defmodule Opal.Tool.EditFileTest do
     test "inserts after last line", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb")
 
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -274,7 +274,7 @@ defmodule Opal.Tool.EditFileTest do
     test "inserts content before a line", %{path: path} do
       anchors = write_and_anchors(path, "aaa\nbbb\nccc")
 
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -364,7 +364,7 @@ defmodule Opal.Tool.EditFileTest do
         |> Enum.with_index(1)
         |> Enum.map(fn {line, num} -> {num, Hashline.line_hash(line)} end)
 
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,
@@ -392,7 +392,7 @@ defmodule Opal.Tool.EditFileTest do
         |> Enum.with_index(1)
         |> Enum.map(fn {line, num} -> {num, Hashline.line_hash(line)} end)
 
-      assert {:ok, _} =
+      assert {:ok, _, %{diff: _}} =
                Edit.execute(
                  %{
                    "path" => path,

@@ -133,6 +133,176 @@ defmodule Opal.Provider.SharedHelpersTest do
                 %{call_id: "call_xyz", call_index: 0, delta: "{\"prompt\":\"write tests\"}"}}
              ] = Provider.parse_chat_event(event)
     end
+
+    test "parallel tool calls in a single SSE chunk" do
+      event = %{
+        "choices" => [
+          %{
+            "delta" => %{
+              "tool_calls" => [
+                %{"index" => 0, "id" => "call_1", "function" => %{"name" => "read_file"}},
+                %{"index" => 1, "id" => "call_2", "function" => %{"name" => "grep"}}
+              ]
+            },
+            "finish_reason" => nil
+          }
+        ]
+      }
+
+      events = Provider.parse_chat_event(event)
+
+      starts = Enum.filter(events, fn {type, _} -> type == :tool_call_start end)
+      assert length(starts) == 2
+
+      assert Enum.any?(starts, fn {:tool_call_start, m} ->
+               m.call_id == "call_1" and m.name == "read_file"
+             end)
+
+      assert Enum.any?(starts, fn {:tool_call_start, m} ->
+               m.call_id == "call_2" and m.name == "grep"
+             end)
+    end
+
+    test "tool_call with empty arguments emits only start" do
+      event = %{
+        "choices" => [
+          %{
+            "delta" => %{
+              "tool_calls" => [
+                %{"id" => "call_1", "function" => %{"name" => "shell", "arguments" => ""}}
+              ]
+            },
+            "finish_reason" => nil
+          }
+        ]
+      }
+
+      events = Provider.parse_chat_event(event)
+      assert [{:tool_call_start, %{call_id: "call_1", name: "shell"}}] = events
+    end
+
+    test "tool_call with no id and no name emits only delta" do
+      event = %{
+        "choices" => [
+          %{
+            "delta" => %{
+              "tool_calls" => [
+                %{"index" => 0, "function" => %{"arguments" => "partial"}}
+              ]
+            },
+            "finish_reason" => nil
+          }
+        ]
+      }
+
+      assert [{:tool_call_delta, %{call_index: 0, delta: "partial"}}] =
+               Provider.parse_chat_event(event)
+    end
+
+    test "tool_call with nil function fields" do
+      event = %{
+        "choices" => [
+          %{
+            "delta" => %{
+              "tool_calls" => [
+                %{"id" => "call_1", "function" => %{"name" => nil, "arguments" => nil}}
+              ]
+            },
+            "finish_reason" => nil
+          }
+        ]
+      }
+
+      events = Provider.parse_chat_event(event)
+      assert [{:tool_call_start, %{call_id: "call_1"}}] = events
+    end
+
+    test "tool_calls finish reason" do
+      event = %{
+        "choices" => [%{"delta" => %{}, "finish_reason" => "tool_calls"}]
+      }
+
+      assert [{:response_done, %{stop_reason: :tool_calls}}] = Provider.parse_chat_event(event)
+    end
+  end
+
+  describe "parse_chat_event/1 — realistic tool call sequence" do
+    test "full single tool call streaming sequence" do
+      # Chunk 1: role announcement
+      chunk1 = %{
+        "choices" => [
+          %{"delta" => %{"role" => "assistant", "content" => nil}, "finish_reason" => nil}
+        ]
+      }
+
+      # Chunk 2: tool call start with id + name
+      chunk2 = %{
+        "choices" => [
+          %{
+            "delta" => %{
+              "tool_calls" => [
+                %{"index" => 0, "id" => "call_abc", "function" => %{"name" => "read_file"}}
+              ]
+            },
+            "finish_reason" => nil
+          }
+        ]
+      }
+
+      # Chunk 3-4: argument fragments
+      chunk3 = %{
+        "choices" => [
+          %{
+            "delta" => %{
+              "tool_calls" => [%{"index" => 0, "function" => %{"arguments" => "{\"path\":"}}]
+            },
+            "finish_reason" => nil
+          }
+        ]
+      }
+
+      chunk4 = %{
+        "choices" => [
+          %{
+            "delta" => %{
+              "tool_calls" => [
+                %{"index" => 0, "function" => %{"arguments" => "\"/tmp/test.txt\"}"}}
+              ]
+            },
+            "finish_reason" => nil
+          }
+        ]
+      }
+
+      # Chunk 5: finish
+      chunk5 = %{
+        "choices" => [%{"delta" => %{}, "finish_reason" => "tool_calls"}]
+      }
+
+      all_events =
+        Enum.flat_map([chunk1, chunk2, chunk3, chunk4, chunk5], &Provider.parse_chat_event/1)
+
+      assert {:text_start, %{}} in all_events
+
+      assert Enum.any?(all_events, fn
+               {:tool_call_start, %{call_id: "call_abc", name: "read_file"}} -> true
+               _ -> false
+             end)
+
+      assert Enum.any?(all_events, fn
+               {:response_done, %{stop_reason: :tool_calls}} -> true
+               _ -> false
+             end)
+
+      deltas =
+        Enum.filter(all_events, fn
+          {:tool_call_delta, _} -> true
+          _ -> false
+        end)
+
+      combined = Enum.map_join(deltas, fn {:tool_call_delta, %{delta: d}} -> d end)
+      assert combined == "{\"path\":\"/tmp/test.txt\"}"
+    end
   end
 
   describe "parse_chat_event/1 — finish reasons" do

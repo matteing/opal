@@ -28,10 +28,7 @@ export interface JsonRpcErrorData {
   data?: unknown;
 }
 
-export type JsonRpcMessage =
-  | JsonRpcRequest
-  | JsonRpcNotification
-  | JsonRpcResponse;
+export type JsonRpcMessage = JsonRpcRequest | JsonRpcNotification | JsonRpcResponse;
 
 /** Standard JSON-RPC 2.0 error codes. */
 export const ErrorCodes = {

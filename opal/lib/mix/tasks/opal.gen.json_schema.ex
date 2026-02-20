@@ -126,8 +126,22 @@ defmodule Mix.Tasks.Opal.Gen.JsonSchema do
   defp parse_type(:number), do: %{"type" => "number"}
   defp parse_type(:object), do: %{"type" => "object"}
 
+  defp parse_type({:nullable, inner}) do
+    Map.put(parse_type(inner), "nullable", true)
+  end
+
   defp parse_type({:array, inner}),
     do: %{"type" => "array", "items" => parse_type(inner)}
+
+  defp parse_type({:object, fields, required_set}) when is_map(fields) do
+    properties = Map.new(fields, fn {name, type} -> {name, parse_type(type)} end)
+
+    required =
+      fields |> Map.keys() |> Enum.filter(&MapSet.member?(required_set, &1)) |> Enum.sort()
+
+    schema = %{"type" => "object", "properties" => properties}
+    if required == [], do: schema, else: Map.put(schema, "required", required)
+  end
 
   defp parse_type({:object, fields}) when is_map(fields) do
     properties = Map.new(fields, fn {name, type} -> {name, parse_type(type)} end)

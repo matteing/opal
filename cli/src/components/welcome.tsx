@@ -72,7 +72,7 @@ function computeStaticColors(finalPhase: number): { grid: string[][]; title: str
       ch === " " ? "" : desaturate(opalColor(row, col, finalPhase), sat),
     ),
   );
-  return { grid, title: desaturate(colors.title, sat) };
+  return { grid, title: desaturate(colors.primary, sat) };
 }
 
 // ── Gem renderer ─────────────────────────────────────────────────
@@ -116,6 +116,7 @@ export interface WelcomeProps {
   workingDir?: string;
   contextFiles?: readonly string[];
   skills?: readonly string[];
+  distributionNode?: string | null;
 }
 
 const WelcomeInner: FC<WelcomeProps> = ({
@@ -123,6 +124,7 @@ const WelcomeInner: FC<WelcomeProps> = ({
   workingDir,
   contextFiles = [],
   skills = [],
+  distributionNode,
 }) => {
   // Build subtitle strings
   const shortCwd = workingDir?.replace(homedir(), "~");
@@ -177,7 +179,7 @@ const WelcomeInner: FC<WelcomeProps> = ({
   const colorAt = staticColors
     ? (row: number, col: number) => staticColors.grid[row][col]
     : (row: number, col: number) => desaturate(opalColor(row, col, phase), sat);
-  const titleColor = staticColors ? staticColors.title : desaturate(colors.title, sat);
+  const titleColor = staticColors ? staticColors.title : desaturate(colors.primary, sat);
   const isAnimating = !staticColors;
 
   return (
@@ -190,8 +192,9 @@ const WelcomeInner: FC<WelcomeProps> = ({
       </Box>
       {infoText && <Subtitle text={infoText} dimColor />}
       {discoveryText && <Subtitle text={discoveryText} color="#555" />}
+      {distributionNode && <Subtitle text={distributionNode} color="yellow" />}
     </Box>
   );
-};;
+};
 
 export const Welcome = React.memo(WelcomeInner);

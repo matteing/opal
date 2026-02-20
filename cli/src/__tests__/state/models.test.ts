@@ -1,10 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createStore } from "zustand/vanilla";
 import { createModelsSlice, type ModelsSlice } from "../../state/models.js";
+import { createCliStateSlice, type CliStateSlice } from "../../state/cli.js";
 import type { Session } from "../../sdk/session.js";
 
+type TestStore = ModelsSlice & CliStateSlice;
+
 function makeStore() {
-  return createStore<ModelsSlice>()(createModelsSlice);
+  return createStore<TestStore>()((...a) => ({
+    ...createModelsSlice(...a),
+    ...createCliStateSlice(...a),
+  }));
 }
 
 /** Create a mock session with the methods the slice calls. */

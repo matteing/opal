@@ -107,7 +107,7 @@ describe("RpcConnection", () => {
     const rpc = new RpcConnection(client);
 
     rpc.addMethod("client/confirm", async (params) => {
-      const p = params as { file_path: string };
+      const p = params as { filePath: string };
       return { confirmed: true, filePath: p.filePath };
     });
 

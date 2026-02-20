@@ -56,11 +56,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
   /** Push an event into the stream (called by Session internals). */
   push(event: AgentEvent): void {
     this.#events.push(event);
-    if (
-      event.type === "agentEnd" ||
-      event.type === "agentAbort" ||
-      event.type === "error"
-    ) {
+    if (event.type === "agentEnd" || event.type === "agentAbort" || event.type === "error") {
       this.#done = true;
     }
     this.#resolve?.();
@@ -130,11 +126,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
         while (this.#events.length > 0) {
           const event = this.#events.shift()!;
           yield event;
-          if (
-            event.type === "agentEnd" ||
-            event.type === "agentAbort" ||
-            event.type === "error"
-          ) {
+          if (event.type === "agentEnd" || event.type === "agentAbort" || event.type === "error") {
             return;
           }
         }

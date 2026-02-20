@@ -51,10 +51,10 @@ export const CommandPalette: FC<CommandPaletteProps> = ({ input, commands, hotke
   const maxUsage = Math.max(...filtered.map((c) => c.usage.length), 0);
 
   return (
-    <Box borderStyle="round" borderColor={colors.accent} flexDirection="column" paddingX={1}>
+    <Box borderStyle="round" borderColor={colors.primary} flexDirection="column" paddingX={1}>
       {/* Header */}
       <Box>
-        <Text bold color={colors.accent}>
+        <Text bold color={colors.primary}>
           Commands
         </Text>
       </Box>
@@ -65,7 +65,7 @@ export const CommandPalette: FC<CommandPaletteProps> = ({ input, commands, hotke
           {filtered.map((cmd) => (
             <Box key={cmd.name}>
               <Box width={maxUsage + 4}>
-                <Text bold color={colors.accent}>
+                <Text bold color={colors.primary}>
                   {cmd.usage}
                 </Text>
               </Box>

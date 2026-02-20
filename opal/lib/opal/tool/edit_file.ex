@@ -11,7 +11,7 @@ defmodule Opal.Tool.EditFile do
 
   @behaviour Opal.Tool
 
-  alias Opal.{FileIO, Hashline}
+  alias Opal.{Diff, FileIO, Hashline}
 
   @impl true
   def name, do: "edit_file"
@@ -85,8 +85,13 @@ defmodule Opal.Tool.EditFile do
         restored = FileIO.restore_encoding(new_content, enc)
 
         case File.write(resolved, restored) do
-          :ok -> {:ok, format_result(resolved, replaced)}
-          {:error, reason} -> {:error, "Failed to write file: #{reason}"}
+          :ok ->
+            relative_path = Path.relative_to(resolved, working_dir)
+            diff = Diff.compute(content, new_content, relative_path)
+            {:ok, format_result(resolved, replaced), %{diff: diff}}
+
+          {:error, reason} ->
+            {:error, "Failed to write file: #{reason}"}
         end
       end
     end

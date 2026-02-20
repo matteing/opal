@@ -473,6 +473,97 @@ defmodule Opal.Tool.TasksTest do
     assert verify.status == "blocked"
   end
 
+  # -- Bulk id (array) --------------------------------------------------------
+
+  test "update with id array updates multiple tasks", %{ctx: ctx} do
+    {:ok, _} = Tasks.execute(%{"action" => "insert", "label" => "A"}, ctx)
+    {:ok, _} = Tasks.execute(%{"action" => "insert", "label" => "B"}, ctx)
+    {:ok, _} = Tasks.execute(%{"action" => "insert", "label" => "C"}, ctx)
+
+    assert {:ok, payload} =
+             Tasks.execute(%{"action" => "update", "id" => [1, 2, 3], "status" => "done"}, ctx)
+
+    assert Enum.all?(payload.tasks, &(&1.status == "done"))
+    assert length(payload.changes) == 3
+    assert Enum.all?(payload.changes, &(&1.op == "update"))
+  end
+
+  test "delete with id array deletes multiple tasks", %{ctx: ctx} do
+    {:ok, _} = Tasks.execute(%{"action" => "insert", "label" => "A"}, ctx)
+    {:ok, _} = Tasks.execute(%{"action" => "insert", "label" => "B"}, ctx)
+    {:ok, _} = Tasks.execute(%{"action" => "insert", "label" => "C"}, ctx)
+
+    assert {:ok, payload} =
+             Tasks.execute(%{"action" => "delete", "id" => [1, 3]}, ctx)
+
+    assert payload.total == 1
+    remaining_ids = Enum.map(payload.tasks, & &1.id)
+    assert remaining_ids == [2]
+    assert length(payload.changes) == 2
+  end
+
+  test "bulk update skips missing ids without error", %{ctx: ctx} do
+    {:ok, _} = Tasks.execute(%{"action" => "insert", "label" => "A"}, ctx)
+
+    assert {:ok, payload} =
+             Tasks.execute(%{"action" => "update", "id" => [1, 999], "status" => "done"}, ctx)
+
+    assert length(payload.changes) == 1
+    task = Enum.find(payload.tasks, &(&1.id == 1))
+    assert task.status == "done"
+  end
+
+  test "bulk delete skips missing ids without error", %{ctx: ctx} do
+    {:ok, _} = Tasks.execute(%{"action" => "insert", "label" => "A"}, ctx)
+
+    assert {:ok, payload} =
+             Tasks.execute(%{"action" => "delete", "id" => [1, 999]}, ctx)
+
+    assert payload.total == 0
+    assert length(payload.changes) == 1
+  end
+
+  test "bulk update triggers auto-unblock for each completed task", %{ctx: ctx} do
+    {:ok, _} = Tasks.execute(%{"action" => "insert", "label" => "A"}, ctx)
+    {:ok, _} = Tasks.execute(%{"action" => "insert", "label" => "B"}, ctx)
+
+    {:ok, _} =
+      Tasks.execute(
+        %{"action" => "insert", "label" => "C", "blocked_by" => "1,2"},
+        ctx
+      )
+
+    assert {:ok, payload} =
+             Tasks.execute(%{"action" => "update", "id" => [1, 2], "status" => "done"}, ctx)
+
+    task_c = Enum.find(payload.tasks, &(&1.id == 3))
+    assert task_c.status == "open"
+    assert task_c.blocked_by == []
+  end
+
+  test "bulk id works inside a batch op", %{ctx: ctx} do
+    {:ok, _} = Tasks.execute(%{"action" => "insert", "label" => "A"}, ctx)
+    {:ok, _} = Tasks.execute(%{"action" => "insert", "label" => "B"}, ctx)
+
+    ops = [
+      %{"action" => "update", "id" => [1, 2], "status" => "done"},
+      %{"action" => "insert", "label" => "C"}
+    ]
+
+    assert {:ok, payload} = Tasks.execute(%{"action" => "batch", "ops" => ops}, ctx)
+    assert payload.total == 3
+    assert Enum.at(payload.operations, 0).ok == true
+    assert Enum.at(payload.operations, 1).ok == true
+  end
+
+  test "meta reflects bulk id count", %{ctx: _ctx} do
+    assert Tasks.meta(%{"action" => "update", "id" => [1, 2, 3]}) == "Update 3 tasks"
+    assert Tasks.meta(%{"action" => "delete", "id" => [4, 5]}) == "Delete 2 tasks"
+    # Single id still works
+    assert Tasks.meta(%{"action" => "update", "id" => 1}) == "Update task"
+    assert Tasks.meta(%{"action" => "delete", "id" => 1}) == "Remove task"
+  end
+
   # -- Session isolation -----------------------------------------------------
 
   test "session ids isolate task lists in the same working directory", %{tmp_dir: tmp_dir} do

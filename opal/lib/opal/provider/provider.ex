@@ -142,6 +142,10 @@ defmodule Opal.Provider do
 
   def parse_chat_event(_), do: []
 
+  defp role_start(%{"reasoning_text" => _}), do: []
+  defp role_start(%{"reasoning_content" => _}), do: []
+  defp role_start(%{"reasoning_opaque" => _}), do: []
+
   defp role_start(%{"role" => "assistant", "content" => c}) when c in [nil, ""],
     do: {:text_start, %{}}
 
@@ -154,6 +158,9 @@ defmodule Opal.Provider do
   defp text_content(_), do: []
 
   defp thinking_content(%{"reasoning_content" => r}) when is_binary(r) and r != "",
+    do: {:thinking_delta, r}
+
+  defp thinking_content(%{"reasoning_text" => r}) when is_binary(r) and r != "",
     do: {:thinking_delta, r}
 
   defp thinking_content(_), do: []

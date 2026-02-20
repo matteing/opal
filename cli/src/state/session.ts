@@ -17,6 +17,7 @@ import type { TimelineSlice } from "./timeline.js";
 import type { ModelsSlice } from "./models.js";
 import type { AuthSlice } from "./auth.js";
 import type { DebugSlice } from "./debug.js";
+import type { CliStateSlice } from "./cli.js";
 
 // ── Slice state + actions ────────────────────────────────────────
 
@@ -29,6 +30,7 @@ export interface SessionSlice {
   workingDir: string;
   contextFiles: readonly string[];
   availableSkills: readonly string[];
+  distributionNode: string | null;
 
   /** Create a session and wire up events. */
   connect: (opts: SessionOptions) => void;
@@ -40,7 +42,12 @@ export interface SessionSlice {
 
 // ── Merged store type for cross-slice access ─────────────────────
 
-type StoreSlices = SessionSlice & TimelineSlice & ModelsSlice & AuthSlice & DebugSlice;
+type StoreSlices = SessionSlice &
+  TimelineSlice &
+  ModelsSlice &
+  AuthSlice &
+  DebugSlice &
+  CliStateSlice;
 
 // ── Constants ────────────────────────────────────────────────────
 
@@ -96,6 +103,7 @@ export const createSessionSlice: StateCreator<StoreSlices, [], [], SessionSlice>
     workingDir: "",
     contextFiles: [],
     availableSkills: [],
+    distributionNode: null,
 
     connect: (opts) => {
       set({ sessionStatus: "connecting", sessionError: null, workingDir: opts.workingDir ?? "" });
@@ -116,6 +124,7 @@ export const createSessionSlice: StateCreator<StoreSlices, [], [], SessionSlice>
             sessionDir: session.dir,
             contextFiles: session.contextFiles,
             availableSkills: session.skills,
+            distributionNode: session.distributionNode,
           });
 
           // Wire events → timeline
@@ -126,8 +135,20 @@ export const createSessionSlice: StateCreator<StoreSlices, [], [], SessionSlice>
           // Auth probe
           get().checkAuth(session);
 
-          // Fetch models
-          void get().fetchModels(session);
+          // Fetch models, then restore saved model from CLI state
+          void get()
+            .fetchModels(session)
+            .then(() => get().loadCliState(session))
+            .then(() => {
+              const { cliState, currentModel } = get();
+              const saved = cliState?.lastModel;
+              const savedId = typeof saved?.id === "string" ? saved.id : undefined;
+              if (savedId && (!currentModel || currentModel.id !== savedId)) {
+                const level =
+                  typeof saved?.thinkingLevel === "string" ? saved.thinkingLevel : undefined;
+                void get().selectModel(session, savedId, level);
+              }
+            });
 
           // Liveness pings
           let failCount = 0;
@@ -169,13 +190,14 @@ export const createSessionSlice: StateCreator<StoreSlices, [], [], SessionSlice>
         workingDir: "",
         contextFiles: [],
         availableSkills: [],
+        distributionNode: null,
       });
     },
 
     sendMessage: (text) => {
       const { session } = get();
       if (!session) return;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+
       void session.send(text);
     },
   };

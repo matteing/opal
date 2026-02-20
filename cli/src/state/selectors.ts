@@ -18,7 +18,7 @@ import type { OpalStore } from "./store.js";
 /** Select the currently focused agent from the store. */
 export function selectFocusedAgent(s: OpalStore): AgentView {
   const focusedId = s.focusStack[s.focusStack.length - 1] ?? ROOT_AGENT_ID;
-  return s.agents[focusedId] ?? s.agents[ROOT_AGENT_ID]!;
+  return s.agents[focusedId] ?? s.agents[ROOT_AGENT_ID];
 }
 
 // ── React hooks ──────────────────────────────────────────────────

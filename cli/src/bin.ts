@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import yargs, { type Argv, type ArgumentsCamelCase } from "yargs";
 import { hideBin } from "yargs/helpers";
-import { parseModel } from "./lib/models.js";
 
 /** Resolve working directory from flag → env → cwd. */
 function resolveWorkingDir(flag?: string): string {

@@ -25,10 +25,7 @@ export const ErrorView: FC = () => {
   const rpcEntries = useOpalStore((s) => s.rpcEntries);
   const stderrLines = useOpalStore((s) => s.stderrLines);
 
-  const errors = useMemo(
-    () => rpcEntries.filter((e) => e.kind === "error"),
-    [rpcEntries],
-  );
+  const errors = useMemo(() => rpcEntries.filter((e) => e.kind === "error"), [rpcEntries]);
 
   return (
     <Box flexDirection="column" padding={1}>
@@ -38,7 +35,9 @@ export const ErrorView: FC = () => {
 
       {errors.length > 0 && (
         <Box flexDirection="column" marginTop={1}>
-          <Text bold dimColor>RPC Errors:</Text>
+          <Text bold dimColor>
+            RPC Errors:
+          </Text>
           {errors.map((entry) => (
             <RpcErrorEntry key={entry.id} entry={entry} />
           ))}
@@ -47,7 +46,9 @@ export const ErrorView: FC = () => {
 
       {stderrLines.length > 0 && (
         <Box flexDirection="column" marginTop={1}>
-          <Text bold dimColor>Server Log:</Text>
+          <Text bold dimColor>
+            Server Log:
+          </Text>
           {stderrLines.map((line, i) => (
             <Text key={i} color="red" dimColor>
               {line.text}

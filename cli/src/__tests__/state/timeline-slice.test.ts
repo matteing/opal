@@ -9,7 +9,7 @@ function makeStore() {
 
 /** Shorthand: root agent from store. */
 function root(store: ReturnType<typeof makeStore>) {
-  return store.getState().agents[ROOT_AGENT_ID]!;
+  return store.getState().agents[ROOT_AGENT_ID];
 }
 
 describe("TimelineSlice (Zustand)", () => {
@@ -32,13 +32,15 @@ describe("TimelineSlice (Zustand)", () => {
   });
 
   it("applyEvents processes a batch of events", () => {
-    store.getState().applyEvents([
-      ev.agentStart(),
-      ev.messageStart(),
-      ev.messageDelta("Hello "),
-      ev.messageDelta("world"),
-      ev.agentEnd(),
-    ]);
+    store
+      .getState()
+      .applyEvents([
+        ev.agentStart(),
+        ev.messageStart(),
+        ev.messageDelta("Hello "),
+        ev.messageDelta("world"),
+        ev.agentEnd(),
+      ]);
 
     expect(root(store).isRunning).toBe(false);
     expect(root(store).entries).toHaveLength(1);
@@ -49,21 +51,25 @@ describe("TimelineSlice (Zustand)", () => {
   });
 
   it("applyEvents is additive across calls", () => {
-    store.getState().applyEvents([
-      ev.messageApplied("first prompt"),
-      ev.agentStart(),
-      ev.messageStart(),
-      ev.messageDelta("response 1"),
-      ev.agentEnd(),
-    ]);
+    store
+      .getState()
+      .applyEvents([
+        ev.messageApplied("first prompt"),
+        ev.agentStart(),
+        ev.messageStart(),
+        ev.messageDelta("response 1"),
+        ev.agentEnd(),
+      ]);
 
-    store.getState().applyEvents([
-      ev.messageApplied("second prompt"),
-      ev.agentStart(),
-      ev.messageStart(),
-      ev.messageDelta("response 2"),
-      ev.agentEnd(),
-    ]);
+    store
+      .getState()
+      .applyEvents([
+        ev.messageApplied("second prompt"),
+        ev.agentStart(),
+        ev.messageStart(),
+        ev.messageDelta("response 2"),
+        ev.agentEnd(),
+      ]);
 
     expect(root(store).entries).toHaveLength(4);
   });
@@ -92,14 +98,16 @@ describe("TimelineSlice (Zustand)", () => {
   });
 
   it("handles interleaved tool calls in a batch", () => {
-    store.getState().applyEvents([
-      ev.agentStart(),
-      ev.toolStart("read_file", "c1", { path: "foo.ts" }, "reading foo"),
-      ev.toolStart("read_file", "c2", { path: "bar.ts" }, "reading bar"),
-      ev.toolEnd("read_file", "c1", true, "content1"),
-      ev.toolEnd("read_file", "c2", true, "content2"),
-      ev.agentEnd(),
-    ]);
+    store
+      .getState()
+      .applyEvents([
+        ev.agentStart(),
+        ev.toolStart("read_file", "c1", { path: "foo.ts" }, "reading foo"),
+        ev.toolStart("read_file", "c2", { path: "bar.ts" }, "reading bar"),
+        ev.toolEnd("read_file", "c1", true, "content1"),
+        ev.toolEnd("read_file", "c2", true, "content2"),
+        ev.agentEnd(),
+      ]);
 
     const tools = root(store).entries.filter((e) => e.kind === "tool");
     expect(tools).toHaveLength(2);
@@ -109,7 +117,7 @@ describe("TimelineSlice (Zustand)", () => {
   it("notifies subscribers on state change", () => {
     const snapshots: boolean[] = [];
     store.subscribe((state) => {
-      snapshots.push(state.agents[ROOT_AGENT_ID]!.isRunning);
+      snapshots.push(state.agents[ROOT_AGENT_ID].isRunning);
     });
 
     store.getState().applyEvents([ev.agentStart()]);

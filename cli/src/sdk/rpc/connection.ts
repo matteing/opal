@@ -47,9 +47,7 @@ export class RpcConnection {
     this.#transport = transport;
     this.#observer = observer;
 
-    this.#transportSub = transport.onMessage((line) =>
-      this.#handleMessage(line),
-    );
+    this.#transportSub = transport.onMessage((line) => this.#handleMessage(line));
 
     this.#closeSub = transport.onClose((reason) => {
       this.#closed = true;
@@ -59,17 +57,9 @@ export class RpcConnection {
   }
 
   /** Send a JSON-RPC request and await the response. */
-  async request(
-    method: string,
-    params?: unknown,
-    timeoutMs?: number,
-  ): Promise<unknown> {
+  async request(method: string, params?: unknown, timeoutMs?: number): Promise<unknown> {
     if (this.#closed) {
-      throw new RpcError(
-        method,
-        ErrorCodes.INTERNAL_ERROR,
-        "Connection is closed",
-      );
+      throw new RpcError(method, ErrorCodes.INTERNAL_ERROR, "Connection is closed");
     }
 
     const id = ++this.#nextId;
@@ -165,9 +155,7 @@ export class RpcConnection {
 
       if (raw.error) {
         const err = raw.error as JsonRpcErrorData;
-        entry.reject(
-          new RpcError(entry.method, err.code, err.message, err.data),
-        );
+        entry.reject(new RpcError(entry.method, err.code, err.message, err.data));
       } else {
         entry.resolve(snakeToCamel(raw.result));
       }
@@ -212,9 +200,7 @@ export class RpcConnection {
   #rejectAll(reason: string): void {
     for (const [, entry] of this.#pending) {
       if (entry.timer) clearTimeout(entry.timer);
-      entry.reject(
-        new RpcError(entry.method, ErrorCodes.INTERNAL_ERROR, reason),
-      );
+      entry.reject(new RpcError(entry.method, ErrorCodes.INTERNAL_ERROR, reason));
     }
     this.#pending.clear();
   }

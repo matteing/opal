@@ -50,10 +50,20 @@ defmodule Opal.Tool.Tasks do
     result, blocked_by (comma-separated IDs), notes.
     Completing a task auto-unblocks dependents.
     Returns structured JSON snapshots (`tasks`, `counts`, `changes`, and `operations` for batch).
+
+    id accepts an integer or array for bulk operations:
+      update:  {action: "update", id: [1,2,3], status: "done"}
+      delete:  {action: "delete", id: [4,5]}
     """
   end
 
   @impl true
+  def meta(%{"action" => "update", "id" => ids}) when is_list(ids),
+    do: "Update #{length(ids)} tasks"
+
+  def meta(%{"action" => "delete", "id" => ids}) when is_list(ids),
+    do: "Delete #{length(ids)} tasks"
+
   def meta(%{"action" => "insert"}), do: "Add task"
   def meta(%{"action" => "list"}), do: "Query tasks"
   def meta(%{"action" => "update"}), do: "Update task"
@@ -72,8 +82,12 @@ defmodule Opal.Tool.Tasks do
           "description" => "The operation to perform."
         },
         "id" => %{
-          "type" => "integer",
-          "description" => "Task ID (required for update/delete)."
+          "oneOf" => [
+            %{"type" => "integer"},
+            %{"type" => "array", "items" => %{"type" => "integer"}}
+          ],
+          "description" =>
+            "Task ID (required for update/delete). Pass an array for bulk operations."
         },
         "view" => %{
           "type" => "string",
@@ -574,57 +588,79 @@ defmodule Opal.Tool.Tasks do
     end)
   end
 
-  defp do_update(table, params) do
-    case params["id"] do
-      nil ->
-        {:error, "Update requires an 'id' field."}
+  defp do_update(table, %{"id" => ids} = params) when is_list(ids) do
+    ids = Enum.map(ids, &coerce_int/1)
 
-      id ->
-        id = if is_binary(id), do: String.to_integer(id), else: id
-
-        case :dets.lookup(table, id) do
-          [{^id, task}] ->
-            updated =
-              Enum.reduce(@settable_fields, task, fn field, acc ->
-                key = to_string(field)
-
-                case Map.get(params, key) do
-                  nil ->
-                    acc
-
-                  val when field == :parent_id ->
-                    Map.put(acc, field, parse_int(val))
-
-                  val ->
-                    Map.put(acc, field, val)
-                end
-              end)
-              |> Map.put(:updated_at, now_iso())
-
-            :dets.insert(table, {id, updated})
-
-            # Auto-unblock dependents when marking done
-            unblocked = if updated.status == "done", do: auto_unblock(table, id), else: []
-
-            tasks = table |> all_tasks() |> Enum.sort_by(& &1.id)
-
-            changed_fields =
-              @settable_fields
-              |> Enum.map(&to_string/1)
-              |> Enum.filter(&Map.has_key?(params, &1))
-
-            changes = [%{op: "update", id: id, changed_fields: changed_fields}]
-
-            unblock_changes =
-              Enum.map(unblocked, fn uid ->
-                %{op: "auto_unblock", id: uid, changed_fields: ["blocked_by", "status"]}
-              end)
-
-            {:ok, tasks_payload("update", tasks, %{changes: changes ++ unblock_changes})}
-
-          [] ->
-            {:error, "Task ##{id} not found."}
+    {changes, unblock_changes} =
+      Enum.reduce(ids, {[], []}, fn id, {ch_acc, ub_acc} ->
+        case update_one(table, id, params) do
+          {:ok, ch, ub} -> {ch_acc ++ ch, ub_acc ++ ub}
+          {:error, _} -> {ch_acc, ub_acc}
         end
+      end)
+
+    tasks = table |> all_tasks() |> Enum.sort_by(& &1.id)
+    {:ok, tasks_payload("update", tasks, %{changes: changes ++ unblock_changes})}
+  end
+
+  defp do_update(table, %{"id" => id} = params) when not is_nil(id) do
+    id = coerce_int(id)
+
+    case update_one(table, id, params) do
+      {:ok, changes, unblock_changes} ->
+        tasks = table |> all_tasks() |> Enum.sort_by(& &1.id)
+        {:ok, tasks_payload("update", tasks, %{changes: changes ++ unblock_changes})}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  defp do_update(_table, _params), do: {:error, "Update requires an 'id' field."}
+
+  @spec update_one(:dets.tab_name(), integer(), map()) ::
+          {:ok, [map()], [map()]} | {:error, String.t()}
+  defp update_one(table, id, params) do
+    case :dets.lookup(table, id) do
+      [{^id, task}] ->
+        updated =
+          Enum.reduce(@settable_fields, task, fn field, acc ->
+            key = to_string(field)
+
+            case Map.get(params, key) do
+              nil ->
+                acc
+
+              val when field == :parent_id ->
+                Map.put(acc, field, parse_int(val))
+
+              val ->
+                Map.put(acc, field, val)
+            end
+          end)
+          |> Map.put(:updated_at, now_iso())
+
+        :dets.insert(table, {id, updated})
+
+        # Auto-unblock dependents when marking done
+        unblocked = if updated.status == "done", do: auto_unblock(table, id), else: []
+
+        changed_fields =
+          @settable_fields
+          |> Enum.map(&to_string/1)
+          |> Enum.filter(&Map.has_key?(params, &1))
+
+        changes = [%{op: "update", id: id, changed_fields: changed_fields}]
+
+        unblock_changes =
+          Enum.map(unblocked, fn uid ->
+            %{op: "auto_unblock", id: uid, changed_fields: ["blocked_by", "status"]}
+          end)
+
+        {:ok, changes, unblock_changes}
+
+      [] ->
+        {:error, "Task ##{id} not found."}
     end
   end
 
@@ -694,29 +730,44 @@ defmodule Opal.Tool.Tasks do
     with_dets(wd, fn table -> do_delete(table, params) end)
   end
 
-  defp do_delete(table, params) do
-    case params["id"] do
-      nil ->
-        {:error, "Delete requires an 'id' field."}
+  defp do_delete(table, %{"id" => ids} = _params) when is_list(ids) do
+    ids = Enum.map(ids, &coerce_int/1)
 
-      id ->
-        id = if is_binary(id), do: String.to_integer(id), else: id
-
+    changes =
+      Enum.flat_map(ids, fn id ->
         case :dets.lookup(table, id) do
           [{^id, task}] ->
             :dets.delete(table, id)
-            tasks = table |> all_tasks() |> Enum.sort_by(& &1.id)
-
-            {:ok,
-             tasks_payload("delete", tasks, %{
-               changes: [%{op: "delete", id: id, label: task.label}]
-             })}
+            [%{op: "delete", id: id, label: task.label}]
 
           [] ->
-            {:error, "Task ##{id} not found."}
+            []
         end
+      end)
+
+    tasks = table |> all_tasks() |> Enum.sort_by(& &1.id)
+    {:ok, tasks_payload("delete", tasks, %{changes: changes})}
+  end
+
+  defp do_delete(table, %{"id" => id} = _params) when not is_nil(id) do
+    id = coerce_int(id)
+
+    case :dets.lookup(table, id) do
+      [{^id, task}] ->
+        :dets.delete(table, id)
+        tasks = table |> all_tasks() |> Enum.sort_by(& &1.id)
+
+        {:ok,
+         tasks_payload("delete", tasks, %{
+           changes: [%{op: "delete", id: id, label: task.label}]
+         })}
+
+      [] ->
+        {:error, "Task ##{id} not found."}
     end
   end
+
+  defp do_delete(_table, _params), do: {:error, "Delete requires an 'id' field."}
 
   # -- Payload helpers --
 
@@ -798,6 +849,10 @@ defmodule Opal.Tool.Tasks do
   defp parse_int(val) when is_integer(val), do: val
   defp parse_int(val) when is_binary(val), do: String.to_integer(val)
   defp parse_int(_), do: nil
+
+  @spec coerce_int(integer() | String.t()) :: integer()
+  defp coerce_int(val) when is_integer(val), do: val
+  defp coerce_int(val) when is_binary(val), do: String.to_integer(val)
 
   defp task_to_string_map(task) do
     Map.new(task, fn {k, v} -> {to_string(k), to_s(v)} end)

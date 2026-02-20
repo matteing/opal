@@ -1,15 +1,18 @@
 import React, { useState, type FC } from "react";
 import { Box, Text, useInput } from "ink";
 import { colors } from "../lib/palette.js";
+import { OverlayPanel, Indicator } from "./overlay-panel.js";
+
+export interface ModelPickerModel {
+  id: string;
+  name: string;
+  provider?: string;
+  supportsThinking?: boolean;
+  thinkingLevels?: readonly string[];
+}
 
 export interface ModelPickerProps {
-  models: {
-    id: string;
-    name: string;
-    provider?: string;
-    supportsThinking?: boolean;
-    thinkingLevels?: string[];
-  }[];
+  models: readonly ModelPickerModel[];
   current: string;
   currentThinkingLevel?: string;
   onSelect: (modelId: string, thinkingLevel?: string) => void;
@@ -75,27 +78,15 @@ export const ModelPicker: FC<ModelPickerProps> = ({
 
   if (phase === "thinking") {
     return (
-      <Box
-        flexDirection="column"
-        borderStyle="round"
-        borderColor={colors.accentAlt}
-        paddingX={2}
-        paddingY={1}
-      >
-        <Text bold color={colors.accentAlt}>
-          Thinking level
-        </Text>
-        <Text dimColor>↑↓ navigate · enter select · esc back</Text>
+      <OverlayPanel title="Thinking level" hint="↑↓ navigate · enter select · esc back">
         <Box flexDirection="column" marginTop={1}>
           {thinkingLevels.map((level, i) => {
             const isCurrent = level === (currentThinkingLevel || "off");
             const isSelected = i === thinkingSelected;
             return (
               <Text key={level}>
-                <Text color={isSelected ? colors.accentAlt : undefined}>
-                  {isSelected ? "❯" : " "}
-                </Text>{" "}
-                <Text bold={isSelected} color={isSelected ? colors.accentAlt : undefined}>
+                <Indicator active={isSelected} />{" "}
+                <Text bold={isSelected} color={isSelected ? colors.primary : undefined}>
                   {capitalize(level)}
                 </Text>
                 {isCurrent && <Text color={colors.success}> ●</Text>}
@@ -103,22 +94,12 @@ export const ModelPicker: FC<ModelPickerProps> = ({
             );
           })}
         </Box>
-      </Box>
+      </OverlayPanel>
     );
   }
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor={colors.accent}
-      paddingX={2}
-      paddingY={1}
-    >
-      <Text bold color={colors.accent}>
-        Select a model
-      </Text>
-      <Text dimColor>↑↓ navigate · enter select · esc cancel</Text>
+    <OverlayPanel title="Select a model" hint="↑↓ navigate · enter select · esc cancel">
       <Box flexDirection="column" marginTop={1}>
         {models.map((model, i) => {
           const isCurrent = model.id === current;
@@ -127,9 +108,9 @@ export const ModelPicker: FC<ModelPickerProps> = ({
             model.provider && model.provider !== "copilot" ? `${model.provider}/` : "";
           return (
             <Text key={`${model.provider ?? ""}:${model.id}`}>
-              <Text color={isSelected ? colors.accent : undefined}>{isSelected ? "❯" : " "}</Text>{" "}
+              <Indicator active={isSelected} />{" "}
               {providerLabel && <Text dimColor>{providerLabel}</Text>}
-              <Text bold={isSelected} color={isSelected ? colors.accent : undefined}>
+              <Text bold={isSelected} color={isSelected ? colors.primary : undefined}>
                 {model.id}
               </Text>{" "}
               <Text dimColor>{model.name}</Text>
@@ -138,6 +119,6 @@ export const ModelPicker: FC<ModelPickerProps> = ({
           );
         })}
       </Box>
-    </Box>
+    </OverlayPanel>
   );
 };

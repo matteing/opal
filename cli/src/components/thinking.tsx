@@ -86,7 +86,7 @@ const ThinkingIndicatorBase: FC<ThinkingIndicatorProps> = ({ label }) => {
   }, [label]);
 
   return (
-    <Text color={colors.thinking}>
+    <Text color={colors.primary}>
       {KAOMOJI[frame]} {label ?? displayLabel}
     </Text>
   );

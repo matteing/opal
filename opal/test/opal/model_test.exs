@@ -77,7 +77,7 @@ defmodule Opal.ModelTest do
       model = Model.parse("claude-sonnet-4-5")
       assert model.provider == :copilot
       assert model.id == "claude-sonnet-4-5"
-      assert model.thinking_level == :off
+      assert model.thinking_level == :high
     end
 
     test "passes thinking_level option" do

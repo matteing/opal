@@ -137,7 +137,10 @@ defmodule Opal.SubAgentTest do
       sub_state = Agent.get_state(sub)
 
       assert sub_state.system_prompt == "Inherited prompt"
-      assert sub_state.model.provider == :test
+      # Model provider is always :copilot
+      assert sub_state.model.provider == :copilot
+      # But actual provider implementation can be different
+      assert sub_state.provider == TestProvider
       assert sub_state.model.id == "test-model"
       assert sub_state.working_dir == System.tmp_dir!()
     end

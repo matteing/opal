@@ -23,7 +23,13 @@ export const TimelineMessage: FC<Props> = memo(
     const cacheRef = useRef<MarkdownRenderCache>({ content: "", width: 0, rendered: "" });
 
     // Skip empty assistant placeholders (before any deltas arrive)
-    if (message.role === "assistant" && !message.content) return null;
+    if (
+      message.role === "assistant" &&
+      (!message.content ||
+        message.content.trim() === "" ||
+        message.content.replace("\n", "").trim() === "")
+    )
+      return null;
 
     const rendered =
       message.role === "user"
@@ -52,7 +58,7 @@ export const TimelineMessage: FC<Props> = memo(
     return (
       <Box flexDirection="row" marginBottom={1}>
         <Box marginRight={1}>
-          <Text color={colors.thinking}>{"●"}</Text>
+          <Text color={colors.primary}>{"●"}</Text>
         </Box>
         <Box>
           <Text wrap="wrap">{rendered}</Text>
