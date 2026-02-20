@@ -10,6 +10,19 @@ export function openUrl(url: string): void {
 }
 
 /**
+ * Opens a local file path in the user's default app/editor.
+ * Cross-platform via the `open` package.
+ */
+export async function openPath(targetPath: string): Promise<boolean> {
+  try {
+    await open(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Copies text to the system clipboard.
  * Cross-platform via the `clipboardy` package.
  * Returns true on success, false if clipboard access fails.

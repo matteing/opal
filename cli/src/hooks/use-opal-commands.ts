@@ -8,10 +8,12 @@
  */
 
 import { useCallback, useMemo } from "react";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { useOpalStore } from "../state/index.js";
 import { useHotkeys } from "./use-hotkeys.js";
 import { useCommands, type CommandRegistry } from "./use-commands.js";
-import { copyToClipboard } from "../lib/desktop.js";
+import { copyToClipboard, openPath } from "../lib/desktop.js";
 import type { Overlay } from "./use-overlay.js";
 
 export interface UseOpalCommandsReturn {
@@ -32,6 +34,7 @@ export function useOpalCommands(
   const toggleToolOutput = useOpalStore((s) => s.toggleToolOutput);
   const showToolOutput = useOpalStore((s) => s.showToolOutput);
   const addToHistory = useOpalStore((s) => s.addToHistory);
+  const sessionDir = useOpalStore((s) => s.sessionDir);
 
   // ── Slash commands ───────────────────────────────────────────
 
@@ -97,6 +100,26 @@ export function useOpalCommands(
       handler: () => {
         toggleToolOutput();
         showFlash(showToolOutput ? "Tool output hidden" : "Tool output visible");
+      },
+    },
+    "ctrl+y": {
+      description: "Open plan.md",
+      handler: () => {
+        if (!sessionDir) {
+          showFlash("No active session");
+          return;
+        }
+
+        const planPath = path.join(sessionDir, "plan.md");
+        if (!existsSync(planPath)) {
+          process.stderr.write("No plan.md found yet.\n");
+          showFlash("No plan.md found yet");
+          return;
+        }
+
+        void openPath(planPath).then((ok) => {
+          showFlash(ok ? "Opened plan.md" : "Failed to open plan.md");
+        });
       },
     },
   });
