@@ -8,7 +8,7 @@
   <strong>A smol agent harness built with the magic of Elixir.</strong>
 </p>
 
-[![asciicast](https://asciinema.org/a/0HlELUdYTcOoXqHH.svg)](https://asciinema.org/a/0HlELUdYTcOoXqHH)
+[![asciicast](https://asciinema.org/a/jvXcTlXIvBvPvXNG.svg)](https://asciinema.org/a/jvXcTlXIvBvPvXNG)
 
 <p align="center">
   <small><i>⤴ Watch me in action! I'm fun, I promise!</i></small>
