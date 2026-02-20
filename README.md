@@ -16,75 +16,57 @@
 
 Opal is two things:
 
-- A **minimal coding agent CLI** you can use to build things.
+- A **small coding agent CLI** you can use to build things.
 - An **idiomatic Elixir library** you can drop into your app to get an agent system.
 
-It features [built-in tools](docs/tools.md), an [MCP host](docs/mcp.md), support for [Agent Skills](https://agentskills.io), [auto-compaction](docs/compaction.md), [extended thinking](docs/reasoning.md), and a [JSON-RPC transport](docs/rpc.md) for cross-language integrations. Currently supports [GitHub Copilot](docs/providers.md) as the built-in provider, with a pluggable behaviour for adding more.
+It features support for the basics: [basic tools](), [auto-compaction](), and [extended thinking](). There's some niceties thrown in as well: discovery of [agent skills]() and a [JSON-RPC transport]() for building your own UI.
+
+The only supported provider is [GitHub Copilot](), but it's been designed with the ability to add more if anyone uses it.
 
 ## What can it do?
 
 Right now, Opal can:
 
-- **Edit files** — reads, writes, and applies targeted edits efficiently.
+- **Edit files** — reads, writes, and applies targeted edits.
 - **Run shell commands** — executes builds, tests, linters, etc.
-- **Debug and fix** — can diagnose issues and apply fixes, though expect some rough edges.
-- **Parallelize work** — sub-agents are cheap OTP processes, so it can split tasks up easily.
-- **Ask questions** — will ask for clarification when planning instead of guessing.
+- **Debug and fix** — can diagnose issues and apply fixes.
+- **Parallelize work** — sub-agents are cheap OTP processes, so it can plan + split tasks up easily.
+- **Ask questions** — will ask for clarification when planning with a nice UI.
 
-**Adjust expectations; it's a hobby project.** There's no permission or approval system yet — the agent can run any shell command and write to any file in your working directory. **No guardrails, no sandbox.** Use it on things you can afford to break. See [disclaimer](#disclaimer).
+**Adjust expectations; this is a hobby project.** I built this for my own research use. There's no approval or permissions system. **No guardrails, no sandbox.** See [disclaimer](#disclaimer).
 
-**The CLI code is a giant flying spaghetti monster.** While I've paid great attention to ensuring the Elixir is well-written, lightweight and idiomatic, I've not cared much about the CLI code. I'm manually rewriting all of it at the moment, which isn't too hard considering it's feature complete.
+As a library, it can be cleanly dropped into any Elixir project. This is a convenient mode of use; you get no serialization boundary, just plain Erlang message passing. ✨
 
-In library usage, the harness can be cleanly integrated into Elixir (or other language) systems. When integrating with Elixir, you get no serialization boundary (just Erlang message passing).
-
-You could theoretically also network these nodes together and have agents talking to agents!?
+Also, you could theoretically also network Erlang nodes together and have agents talking to agents!?
 
 ## Installing
 
+Opal works on both Windows and Unix-based systems.
+
 ```bash
+# Install it from NPM
 npm i -g @unfinite/opal
+# Run it!
 opal
 ```
 
 Or as an Elixir dependency: `{:opal, "~> 0.1"}`
 
-See the [installation guide](docs/installing.md) for authentication, API keys, configuration, and GitHub Enterprise setup.
+See the [setup guide](docs/installing.md) for authentication and configuration.
 
 ## What's interesting about this?
 
-**[Live introspection.](docs/inspecting.md)** Connect to a running agent from another terminal and stream every event in real time — what it's thinking, which tools it's calling, memory usage, the works. Under the hood, Elixir sits on the Erlang VM (the BEAM), which has built-in node-to-node networking. That means zero extra infrastructure for remote debugging.
+Mostly, the Erlang VM's [computing vision](https://www.youtube.com/watch?v=JvBT4XBdoUE&t=2356s).
 
-**[Lightweight sub-agents.](docs/supervision.md)** Spawn a child agent with its own context, tools, and model. It runs in parallel, fully isolated. If the parent dies, children are [cleaned up automatically](docs/supervision.md). This is OTP's _supervision tree_ — a battle-tested pattern for managing process lifecycles — doing the heavy lifting. No thread pools, no manual resource cleanup.
+**[Live introspection.](docs/inspecting.md)** Connect to a running agent from another terminal and stream every event in real time. See every thought, trace every call, and play with the live running system and its state. The BEAM enables unprecedented observability into agentic AI systems.
+
+**[Won't break a sweat.](docs/supervision.md)** Run as many tools as you want. Spawn a child agent with its own context, tools, and model. You won't choke the system; it'll remain responsive. OTP's _supervision tree_ manages every process lifecycle; if the parent dies, children are [cleaned up automatically](docs/supervision.md). No thread pools. No manual resource cleanup.
 
 **[Redirect the agent mid-flight.](docs/agent-loop.md)** Call `Opal.prompt(agent, "focus on tests instead")` while the agent is busy and it's queued, then picked up between tool calls. This works because every Erlang process has a _mailbox_ — a built-in message queue. The [agent loop](docs/agent-loop.md) checks it between steps. No polling, no callback chains.
 
 **Embeddable as a library.** Add `{:opal, ...}` to your Elixir deps and the full agent system runs inside your app. Since it's all Erlang processes, there's no sidecar, no serialization — just message passing. Or consume it over [JSON-RPC](docs/rpc.md) from any language. See the [SDK docs](docs/sdk.md).
 
-## CLI
-
-```sh
-opal                                       # interactive TUI
-opal --model anthropic/claude-sonnet-4     # choose a model
-opal -C /path/to/project                   # set working directory
-opal --auto-confirm                         # skip tool confirmations
-opal --debug                                # enable debug feature/tools for this session
-```
-
-## Providers
-
-GitHub Copilot is the built-in provider — pass `provider/model` with `--model`:
-
-```sh
-opal --model copilot/claude-sonnet-4   # Copilot
-opal --model anthropic/claude-sonnet-4 # Anthropic model IDs via Copilot
-opal --model openai/gpt-4o             # OpenAI model IDs via Copilot
-```
-
-See the [provider docs](docs/providers.md) for API keys, model discovery, and custom providers.
-
 ## Using Opal as a library
-
-Add it to your supervision tree and you get everything — no external process, no serialization. See the [SDK docs](docs/sdk.md) for the full API.
 
 ```elixir
 {:ok, agent} = Opal.start_session(%{working_dir: "."})
@@ -112,7 +94,7 @@ Opal.stream(agent, "Refactor the auth module")
 end)
 ```
 
-`Opal.stream/2` returns a lazy `Stream` — compose with `Stream.filter/2`, `Enum.reduce/3`, or pipe into anything.
+`Opal.stream/2` returns a lazy `Stream`. Compose with `Stream.filter/2`, `Enum.reduce/3`, or pipe into anything.
 
 ```elixir
 # Block until it's done
@@ -121,6 +103,21 @@ end)
 # Redirect mid-flight — queued in the agent's mailbox between tool calls
 %{queued: true} = Opal.prompt(agent, "Focus on the tests instead")
 ```
+
+### Built-in tools
+
+| Tool          | Description                                                                                                             |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `read_file`   | Reads file contents with line-range slicing and hashline-tagged output for use with `edit_file`.                        |
+| `edit_file`   | Edits files by hash-anchored line references from `read_file` output — no diffs, no reproduced content.                 |
+| `write_file`  | Creates or overwrites a file entirely.                                                                                  |
+| `grep`        | Cross-platform regex search with glob filtering. Output is hashline-tagged and `edit_file`-ready.                       |
+| `shell`       | Runs commands in the working directory with streaming output.                                                           |
+| `sub_agent`   | Spawns a child agent with its own context, tools, and model for isolated parallel work.                                 |
+| `tasks`       | Persistent DAG task tracker on Erlang's DETS. Plan, order, unblock, and surface ready work for parallel dispatch.       |
+| `ask_user`    | Pauses the agent to ask the user a question. Supports freeform and multiple-choice.                                     |
+| `use_skill`   | Loads skill instructions from `.claude/skills/` (or similar dirs) into context on demand.                               |
+| `debug_state` | This one is the coolest, allows the agent to **debug itself** by introspecting its own system state. Ain't that badass. |
 
 ### Custom tools
 
@@ -176,19 +173,22 @@ mise run inspect                   # connect via iex to a running dev mode insta
 
 ## Why I built this
 
-I wanted to understand how agent harnesses actually work — not just use one, but build one from the ground up. I studied [Pi](https://github.com/badlogic/pi-mono) and the more I stared at the problem — long-running loops, concurrent tool execution, process isolation, sub-agent orchestration — the more it looked like Erlang/OTP. So I built it.
+I wanted to understand how agent harnesses work, not just use them.
 
-Sub-agents? Processes. Steering? Mailbox. Fault isolation? Supervision tree. Live debugging? Erlang distribution. I didn't have to build any of that. The language did that.
+I studied [Pi](https://github.com/badlogic/pi-mono) and the more I stared at the problem space--long-running loops, concurrent tool execution, process isolation, sub-agent orchestration--the more it looked like Erlang/OTP would be a great fit. So I built it.
+
+This is a research project; I try to keep it up to date with the latest standards and any papers that pop up in arXiv.
 
 ## Future plans
 
-- A more fully featured TUI
 - Proper SDK docs, NPM package
 - Random gaps in functionality that come through!
 - Subagents + agents talking to each other through message passing?
   - subagent X asked subagent Y a question
   - not sure if that would even work but whatevs
 - A toy OpenClaw reimplementation using Opal
+
+Let me know if there's any features you'd like baked in by filing an issue; no promises, but I'll try to get to them!
 
 ## Disclaimer
 
@@ -216,12 +216,17 @@ And from my beloved past at XDA Forums:
 */
 ```
 
+## AI Usage Disclosure
+
+I use AI models heavily in the development of this project. It is _not_ vibe coded, though. What's the point of building something to learn if you skip the building part? :P
+
+My approach has been to engineer the systems, plan deeply, then execute. When a chunk is done: feature freeze, then a manual/human pass through every file to ask questions & clear out tech debt. You can trust that every system in this repo has been carefully thought through!
+
+[My thoughts on AI-assisted engineering.](https://news.ycombinator.com/item?id=47075660)
+
 ## References
 
-Standing on the shoulders of giants. Other references (papers, projects) are in the relevant documentation files.
-
-- [Pi](https://pi.dev): The best open-source harness, huge source of inspiration
-- [oh-my-pi](https://github.com/can1357/oh-my-pi): An awesome customization of Pi with so many goodies and tricks
+See [citations](./docs/research/references.md).
 
 ## License
 
