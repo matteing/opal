@@ -99,7 +99,9 @@ defmodule Opal.RPC.Protocol do
       params: [
         %{
           name: "model",
-          type: {:object, %{"provider" => :string, "id" => :string, "thinking_level" => :string}},
+          type:
+            {:object, %{"provider" => :string, "id" => :string, "thinking_level" => :string},
+             MapSet.new(["provider", "id"])},
           required: false,
           description: "Model to use. Defaults to config default."
         },
@@ -426,6 +428,89 @@ defmodule Opal.RPC.Protocol do
         %{name: "settings", type: :object, description: "The full settings after merge."}
       ]
     },
+
+    # -- CLI state --
+
+    %{
+      method: "cli/state/get",
+      direction: :client_to_server,
+      description: "Get persistent CLI state (model config, preferences).",
+      params: [],
+      result: [
+        %{
+          name: "lastModel",
+          type:
+            {:optional_fields,
+             %{
+               "id" => :string,
+               "provider" => :string,
+               "thinkingLevel" => :string
+             }},
+          description: "Last used model configuration."
+        },
+        %{
+          name: "preferences",
+          type: {:object, %{"autoConfirm" => :boolean, "verbose" => :boolean}},
+          description: "CLI user preferences."
+        },
+        %{name: "version", type: :integer, description: "CLI state format version."}
+      ]
+    },
+    %{
+      method: "cli/state/set",
+      direction: :client_to_server,
+      description: "Update persistent CLI state (merges with existing).",
+      params: [
+        %{
+          name: "lastModel",
+          type:
+            {:optional_fields,
+             %{"id" => :string, "provider" => :string, "thinkingLevel" => :string}},
+          required: false,
+          description: "Model configuration to save."
+        },
+        %{
+          name: "preferences",
+          type: {:optional_fields, %{"autoConfirm" => :boolean, "verbose" => :boolean}},
+          required: false,
+          description: "Preferences to update."
+        }
+      ],
+      result: [
+        %{
+          name: "lastModel",
+          type:
+            {:optional_fields,
+             %{"id" => :string, "provider" => :string, "thinkingLevel" => :string}},
+          description: "Last used model configuration."
+        },
+        %{
+          name: "preferences",
+          type: {:object, %{"autoConfirm" => :boolean, "verbose" => :boolean}},
+          description: "CLI user preferences."
+        },
+        %{name: "version", type: :integer, description: "CLI state format version."}
+      ]
+    },
+    %{
+      method: "cli/history/get",
+      direction: :client_to_server,
+      description: "Get command history.",
+      params: [],
+      result: [
+        %{
+          name: "commands",
+          type: {:array, {:object, %{"text" => :string, "timestamp" => :string}}},
+          description: "Array of command history entries."
+        },
+        %{
+          name: "maxSize",
+          type: :integer,
+          description: "Maximum number of history entries."
+        },
+        %{name: "version", type: :integer, description: "History format version."}
+      ]
+    },
     %{
       method: "opal/config/get",
       direction: :client_to_server,
@@ -456,6 +541,18 @@ defmodule Opal.RPC.Protocol do
                "disabled" => {:array, :string}
              }},
           description: "Tool availability for the session."
+        },
+        %{
+          name: "distribution",
+          type:
+            {:nullable,
+             {:object,
+              %{
+                "node" => :string,
+                "cookie" => :string
+              }}},
+          description:
+            "Erlang distribution info if active (node name and cookie), or null if not distributed."
         }
       ]
     },
@@ -483,6 +580,19 @@ defmodule Opal.RPC.Protocol do
           type: {:array, :string},
           required: false,
           description: "Exact list of enabled tool names."
+        },
+        %{
+          name: "distribution",
+          type:
+            {:nullable,
+             {:object,
+              %{
+                "name" => :string,
+                "cookie" => :string
+              }, MapSet.new(["name"])}},
+          required: false,
+          description:
+            "Start or stop Erlang distribution. Pass {name, cookie?} to start, null to stop."
         }
       ],
       result: [
@@ -508,6 +618,18 @@ defmodule Opal.RPC.Protocol do
                "disabled" => {:array, :string}
              }},
           description: "Tool availability for the session."
+        },
+        %{
+          name: "distribution",
+          type:
+            {:nullable,
+             {:object,
+              %{
+                "node" => :string,
+                "cookie" => :string
+              }}},
+          description:
+            "Erlang distribution info if active (node name and cookie), or null if not distributed."
         }
       ]
     },
@@ -731,7 +853,7 @@ defmodule Opal.RPC.Protocol do
           name: "result",
           type: :object,
           description:
-            "Tool execution result object. Includes ok plus tool-specific payload fields."
+            "Tool execution result object. Includes ok plus tool-specific payload fields. May optionally include a meta field with tool-specific structured data (e.g., diffs)."
         }
       ]
     },

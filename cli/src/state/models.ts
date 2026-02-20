@@ -10,6 +10,7 @@
 import type { StateCreator } from "zustand";
 import type { Session } from "../sdk/session.js";
 import type { ModelInfo, ActiveModel } from "./types.js";
+import type { CliStateSlice } from "./cli.js";
 
 // ── Slice state + actions ────────────────────────────────────────
 
@@ -24,6 +25,10 @@ export interface ModelsSlice {
   /** Switch to a different model. */
   selectModel: (session: Session, modelId: string, thinkingLevel?: string) => Promise<void>;
 }
+
+// ── Merged store type for cross-slice access ─────────────────────
+
+type ModelsStoreSlices = ModelsSlice & CliStateSlice;
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -47,7 +52,10 @@ function toActiveModel(raw: { id: string; provider: string; thinkingLevel: strin
 
 // ── Slice creator ────────────────────────────────────────────────
 
-export const createModelsSlice: StateCreator<ModelsSlice, [], [], ModelsSlice> = (set) => ({
+export const createModelsSlice: StateCreator<ModelsStoreSlices, [], [], ModelsSlice> = (
+  set,
+  get,
+) => ({
   availableModels: [],
   currentModel: null,
   modelsLoading: false,
@@ -74,9 +82,20 @@ export const createModelsSlice: StateCreator<ModelsSlice, [], [], ModelsSlice> =
     set({ modelsLoading: true, modelsError: null });
     try {
       const res = await session.setModel(thinkingLevel ? { id: modelId, thinkingLevel } : modelId);
+      const newModel = toActiveModel(res.model);
+
       set({
-        currentModel: toActiveModel(res.model),
+        currentModel: newModel,
         modelsLoading: false,
+      });
+
+      // Persist the selected model to CLI state
+      await get().updateCliState(session, {
+        lastModel: {
+          id: newModel.id,
+          provider: newModel.provider,
+          thinkingLevel: newModel.thinkingLevel,
+        },
       });
     } catch (err: unknown) {
       set({

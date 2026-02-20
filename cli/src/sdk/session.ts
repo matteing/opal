@@ -41,7 +41,11 @@ import type {
   AuthLoginResult,
   AuthPollResult,
   AgentEvent,
-} from "../sdk/protocol.js";
+  CliStateGetResult,
+  CliStateSetParams,
+  CliStateSetResult,
+  CliHistoryGetResult,
+} from "./protocol.js";
 
 // ── Options ──────────────────────────────────────────────────────────
 
@@ -122,6 +126,8 @@ export class Session {
   readonly mcpServers: readonly string[];
   /** Auth status from session startup. */
   readonly auth: SessionStartResult["auth"];
+  /** Erlang distribution node name if active (e.g. "opal_123@hostname"). */
+  readonly distributionNode: string | null;
 
   readonly #client: OpalClient;
   readonly #transport: Transport;
@@ -134,6 +140,7 @@ export class Session {
     transport: Transport,
     rpc: RpcConnection,
     result: SessionStartResult,
+    distributionNode?: string | null,
   ) {
     this.#client = client;
     this.#transport = transport;
@@ -145,6 +152,7 @@ export class Session {
     this.skills = result.availableSkills;
     this.mcpServers = result.mcpServers;
     this.auth = result.auth;
+    this.distributionNode = distributionNode ?? null;
   }
 
   // ── Prompting ──────────────────────────────────────────────────
@@ -321,6 +329,24 @@ export class Session {
     },
   };
 
+  // ── CLI State ─────────────────────────────────────────────────
+
+  /** CLI state operations — preferences and command history. */
+  readonly cli = {
+    /** Get CLI state including last model and preferences. */
+    getState: async (): Promise<CliStateGetResult> => {
+      return this.#client.request("cli/state/get", {});
+    },
+    /** Update CLI state. */
+    setState: async (updates: Partial<CliStateSetParams>): Promise<CliStateSetResult> => {
+      return this.#client.request("cli/state/set", updates);
+    },
+    /** Get command history (derived from saved sessions). */
+    getHistory: async (): Promise<CliHistoryGetResult> => {
+      return this.#client.request("cli/history/get", {});
+    },
+  };
+
   // ── Events ────────────────────────────────────────────────────
 
   /**
@@ -433,6 +459,17 @@ export async function createSession(opts: SessionOptions = {}): Promise<Session>
     throw new Error("No ask_user handler registered");
   });
 
+  client.addServerMethod("client/confirm", async (params) => {
+    if (opts.autoConfirm) {
+      return { action: "allow" };
+    }
+    if (callbacks?.onConfirm) {
+      const action = await callbacks.onConfirm(params);
+      return { action };
+    }
+    return { action: "allow" };
+  });
+
   // 4. Start the session
   const startParams: SessionStartParams = {
     workingDir: opts.workingDir,
@@ -455,11 +492,11 @@ export async function createSession(opts: SessionOptions = {}): Promise<Session>
       ? {
           model:
             typeof opts.model === "string"
-              ? { id: opts.model, provider: "copilot", thinkingLevel: "off" }
+              ? { id: opts.model, provider: "copilot" }
               : {
                   id: opts.model.id,
                   provider: opts.model.provider ?? "copilot",
-                  thinkingLevel: opts.model.thinkingLevel ?? "off",
+                  ...(opts.model.thinkingLevel ? { thinkingLevel: opts.model.thinkingLevel } : {}),
                 },
         }
       : {}),
@@ -467,11 +504,27 @@ export async function createSession(opts: SessionOptions = {}): Promise<Session>
 
   const result = await client.request("session/start", startParams);
 
+  // Start Erlang distribution if requested (for remote debugging via `--expose`).
+  // Non-fatal: if distribution fails (e.g. epmd not running), the session still works.
+  let distributionNode: string | null = null;
+  if (opts.distribution) {
+    try {
+      const configResult = await client.request("opal/config/set", {
+        sessionId: result.sessionId,
+        distribution: opts.distribution,
+      });
+      distributionNode = configResult.distribution?.node ?? null;
+    } catch {
+      // Distribution unavailable — continue without it.
+    }
+  }
+
   // Session constructor is private but accessible within this module.
   return new (Session as unknown as new (
     client: OpalClient,
     transport: Transport,
     rpc: RpcConnection,
     result: SessionStartResult,
-  ) => Session)(client, transport, rpc, result);
+    distributionNode?: string | null,
+  ) => Session)(client, transport, rpc, result, distributionNode);
 }

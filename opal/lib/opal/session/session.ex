@@ -104,6 +104,29 @@ defmodule Opal.Session do
     do: GenServer.call(session, {:replace_path_segment, ids, summary})
 
   @doc """
+  Extracts user prompts from recent saved sessions for CLI history.
+
+  Opens DETS files to read conversation paths and extracts `:user` role messages.
+  Sessions are scanned newest-first. Returns at most `limit` prompts, each a map
+  with `"text"` and `"timestamp"` keys.
+
+  ## Options
+
+    * `:limit` — max prompts to return (default 200)
+    * `:max_sessions` — max session files to scan (default 30)
+  """
+  @spec recent_prompts(String.t(), keyword()) :: [map()]
+  def recent_prompts(dir, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 200)
+    max_sessions = Keyword.get(opts, :max_sessions, 30)
+
+    list_sessions(dir)
+    |> Enum.take(max_sessions)
+    |> Enum.flat_map(&read_user_prompts/1)
+    |> Enum.take(limit)
+  end
+
+  @doc """
   Lists saved sessions in a directory.
 
   Returns `[%{id: String.t(), path: String.t(), title: String.t() | nil, modified: NaiveDateTime.t()}]`,
@@ -374,6 +397,66 @@ defmodule Opal.Session do
 
       :dets.close(ref)
       result
+    end
+  end
+
+  # Opens a DETS file, walks the conversation path, and extracts user prompts.
+  # Returns prompts newest-first within the session.
+  @spec read_user_prompts(map()) :: [map()]
+  defp read_user_prompts(%{path: path, modified: modified}) do
+    name = :"dets_history_#{:erlang.phash2(path)}"
+    ts = NaiveDateTime.to_iso8601(modified) <> "Z"
+
+    with {:ok, ref} <- :dets.open_file(name, file: to_charlist(path)) do
+      try do
+        meta =
+          case :dets.lookup(ref, @meta_key) do
+            [{@meta_key, m}] -> m
+            _ -> nil
+          end
+
+        if meta && meta.current_id do
+          # Load all messages into a lookup map
+          messages =
+            :dets.foldl(
+              fn
+                {@meta_key, _}, acc -> acc
+                {id, msg}, acc -> Map.put(acc, id, msg)
+              end,
+              %{},
+              ref
+            )
+
+          # Walk from current_id → root, then reverse for newest-first
+          walk_path_users(messages, meta.current_id, [])
+          |> Enum.reverse()
+          |> Enum.map(&%{"text" => &1, "timestamp" => ts})
+        else
+          []
+        end
+      after
+        :dets.close(ref)
+      end
+    else
+      _ -> []
+    end
+  end
+
+  # Walks from leaf to root via parent_id, collecting user message content.
+  # Returns oldest-first (caller should reverse for newest-first).
+  defp walk_path_users(_messages, nil, acc), do: acc
+
+  defp walk_path_users(messages, id, acc) do
+    case Map.get(messages, id) do
+      nil ->
+        acc
+
+      %{role: :user, content: content, parent_id: parent_id}
+      when is_binary(content) and content != "" ->
+        walk_path_users(messages, parent_id, [content | acc])
+
+      msg ->
+        walk_path_users(messages, msg.parent_id, acc)
     end
   end
 

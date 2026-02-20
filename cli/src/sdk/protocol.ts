@@ -74,6 +74,44 @@ export type AuthStatusResult = {
   authenticated: boolean;
 };
 
+export type CliHistoryGetParams = Record<string, never>;
+
+export type CliHistoryGetResult = {
+  /** Array of command history entries. */
+  commands: { text: string; timestamp: string }[];
+  /** Maximum number of history entries. */
+  maxSize: number;
+  /** History format version. */
+  version: number;
+};
+
+export type CliStateGetParams = Record<string, never>;
+
+export type CliStateGetResult = {
+  /** Last used model configuration. */
+  lastModel: Record<string, unknown>;
+  /** CLI user preferences. */
+  preferences: { autoConfirm: boolean; verbose: boolean };
+  /** CLI state format version. */
+  version: number;
+};
+
+export type CliStateSetParams = {
+  /** Model configuration to save. */
+  lastModel?: Record<string, unknown>;
+  /** Preferences to update. */
+  preferences?: Record<string, unknown>;
+};
+
+export type CliStateSetResult = {
+  /** Last used model configuration. */
+  lastModel: Record<string, unknown>;
+  /** CLI user preferences. */
+  preferences: { autoConfirm: boolean; verbose: boolean };
+  /** CLI state format version. */
+  version: number;
+};
+
 export type ModelSetParams = {
   /** Model ID to switch to. */
   modelId: string;
@@ -101,6 +139,8 @@ export type OpalConfigGetParams = {
 };
 
 export type OpalConfigGetResult = {
+  /** Erlang distribution info if active (node name and cookie), or null if not distributed. */
+  distribution: { cookie: string; node: string } | null;
   /** Current runtime feature flags. */
   features: {
     debug: boolean;
@@ -113,6 +153,8 @@ export type OpalConfigGetResult = {
 };
 
 export type OpalConfigSetParams = {
+  /** Start or stop Erlang distribution. Pass {name, cookie?} to start, null to stop. */
+  distribution?: { cookie?: string; name: string } | null;
   /** Feature flags to update. */
   features?: {
     debug: boolean;
@@ -127,6 +169,8 @@ export type OpalConfigSetParams = {
 };
 
 export type OpalConfigSetResult = {
+  /** Erlang distribution info if active (node name and cookie), or null if not distributed. */
+  distribution: { cookie: string; node: string } | null;
   /** Current runtime feature flags. */
   features: {
     debug: boolean;
@@ -207,7 +251,7 @@ export type SessionStartParams = {
   /** MCP server configurations. */
   mcpServers?: Record<string, unknown>[];
   /** Model to use. Defaults to config default. */
-  model?: { id: string; provider: string; thinkingLevel: string };
+  model?: { id: string; provider: string; thinkingLevel?: string };
   /** If true, enable session persistence. */
   session?: boolean;
   /** Resume an existing session by ID. Implies session=true. The session is loaded from disk. */
@@ -432,7 +476,7 @@ export type ToolExecutionEndEvent = {
   readonly type: "toolExecutionEnd";
   /** Unique call identifier. */
   callId: string;
-  /** Tool execution result object. Includes ok plus tool-specific payload fields. */
+  /** Tool execution result object. Includes ok plus tool-specific payload fields. May optionally include a meta field with tool-specific structured data (e.g., diffs). */
   result: Record<string, unknown>;
   /** Tool name. */
   tool: string;
@@ -513,6 +557,9 @@ export const Methods = {
   AUTH_LOGIN: "auth/login" as const,
   AUTH_POLL: "auth/poll" as const,
   AUTH_STATUS: "auth/status" as const,
+  CLI_HISTORY_GET: "cli/history/get" as const,
+  CLI_STATE_GET: "cli/state/get" as const,
+  CLI_STATE_SET: "cli/state/set" as const,
   MODEL_SET: "model/set" as const,
   MODELS_LIST: "models/list" as const,
   OPAL_CONFIG_GET: "opal/config/get" as const,
@@ -572,6 +619,12 @@ export interface MethodTypes {
   "auth/login": { params: AuthLoginParams; result: AuthLoginResult };
   "auth/poll": { params: AuthPollParams; result: AuthPollResult };
   "auth/status": { params: AuthStatusParams; result: AuthStatusResult };
+  "cli/history/get": {
+    params: CliHistoryGetParams;
+    result: CliHistoryGetResult;
+  };
+  "cli/state/get": { params: CliStateGetParams; result: CliStateGetResult };
+  "cli/state/set": { params: CliStateSetParams; result: CliStateSetResult };
   "model/set": { params: ModelSetParams; result: ModelSetResult };
   "models/list": { params: ModelsListParams; result: ModelsListResult };
   "opal/config/get": {

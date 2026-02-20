@@ -323,8 +323,13 @@ defmodule Opal.RPC.Server do
 
   def dispatch("model/set", %{"session_id" => sid, "model_id" => model_id} = params) do
     with_agent(sid, fn agent ->
-      level = parse_thinking_level(params["thinking_level"])
-      model = Opal.Provider.Model.coerce(model_id, thinking_level: level)
+      opts =
+        case parse_thinking_level(params["thinking_level"]) do
+          nil -> []
+          level -> [thinking_level: level]
+        end
+
+      model = Opal.Provider.Model.coerce(model_id, opts)
       Opal.set_model(agent, model)
 
       {:ok,
@@ -337,7 +342,7 @@ defmodule Opal.RPC.Server do
 
   def dispatch("thinking/set", %{"session_id" => sid, "level" => level_str}) do
     with_agent(sid, fn agent ->
-      level = parse_thinking_level(level_str)
+      level = parse_thinking_level(level_str) || :high
       Opal.set_thinking_level(agent, level)
       {:ok, %{thinking_level: level}}
     end)
@@ -411,6 +416,22 @@ defmodule Opal.RPC.Server do
 
   def dispatch("settings/save", _),
     do: error(:invalid_params, "Missing required param: settings")
+
+  # -- CLI state --
+
+  def dispatch("cli/state/get", _params), do: {:ok, Opal.CliState.get_state()}
+
+  def dispatch("cli/state/set", params) when is_map(params) do
+    {:ok, Opal.CliState.set_state(params)}
+  end
+
+  def dispatch("cli/history/get", _params) do
+    cfg = Opal.Config.new()
+    dir = Opal.Config.sessions_dir(cfg)
+    commands = Opal.Session.recent_prompts(dir)
+
+    {:ok, %{"commands" => commands, "maxSize" => 200, "version" => 1}}
+  end
 
   # -- Runtime config --
 
@@ -514,8 +535,13 @@ defmodule Opal.RPC.Server do
   defp parse_model(nil), do: {:ok, nil}
 
   defp parse_model(%{"id" => id} = m) when is_binary(id) and id != "" do
-    level = parse_thinking_level(m["thinking_level"])
-    {:ok, Opal.Provider.Model.new(id, thinking_level: level)}
+    opts =
+      case parse_thinking_level(m["thinking_level"]) do
+        nil -> []
+        level -> [thinking_level: level]
+      end
+
+    {:ok, Opal.Provider.Model.new(id, opts)}
   end
 
   defp parse_model(_),
@@ -589,7 +615,7 @@ defmodule Opal.RPC.Server do
 
   @valid_thinking ~w(off low medium high max)
   defp parse_thinking_level(l) when l in @valid_thinking, do: String.to_atom(l)
-  defp parse_thinking_level(_), do: :off
+  defp parse_thinking_level(_), do: nil
 
   # ── Runtime config ─────────────────────────────────────────────────
 
@@ -740,6 +766,9 @@ defmodule Opal.RPC.Server do
     do: {"tool_execution_end", %{tool: tool, call_id: "", result: format_tool_result(result)}}
 
   defp serialize_event(other), do: {"unknown", %{raw: inspect(other)}}
+
+  defp format_tool_result({:ok, output, meta}) when is_map(meta),
+    do: %{ok: true, output: output, meta: meta}
 
   defp format_tool_result({:ok, output}), do: %{ok: true, output: output}
   defp format_tool_result({:error, reason}), do: %{ok: false, error: inspect(reason)}
