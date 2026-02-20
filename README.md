@@ -5,11 +5,13 @@
 <h1 align="center">✦ Opal</h1>
 
 <p align="center">
-  <strong>A minimal agent harness built with the magic of Elixir.</strong>
+  <strong>A smol agent harness built with the magic of Elixir.</strong>
 </p>
 
+[![asciicast](https://asciinema.org/a/0HlELUdYTcOoXqHH.svg)](https://asciinema.org/a/0HlELUdYTcOoXqHH)
+
 <p align="center">
-  <img src="./docs/assets/screenshot.png" width="700" />
+  <small><i>⤴ Watch me in action! I'm fun, I promise!</i></small>
 </p>
 
 Opal is two things:
