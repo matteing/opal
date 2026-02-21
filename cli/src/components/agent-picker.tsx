@@ -9,17 +9,18 @@
 import React, { useState, type FC } from "react";
 import { Box, Text, useInput } from "ink";
 import { colors } from "../lib/palette.js";
-import type { AgentView } from "../state/types.js";
+import { useOpalStore } from "../state/store.js";
 import { OverlayPanel, Indicator } from "./overlay-panel.js";
 
 export interface AgentPickerProps {
-  agents: Record<string, AgentView>;
-  focusedId: string;
   onSelect: (id: string) => void;
   onDismiss: () => void;
 }
 
-export const AgentPicker: FC<AgentPickerProps> = ({ agents, focusedId, onSelect, onDismiss }) => {
+export const AgentPicker: FC<AgentPickerProps> = ({ onSelect, onDismiss }) => {
+  const agents = useOpalStore((s) => s.agents);
+  const focusedId = useOpalStore((s) => s.focusStack[s.focusStack.length - 1] ?? "root");
+
   const entries = Object.entries(agents);
   const currentIdx = entries.findIndex(([id]) => id === focusedId);
   const [selected, setSelected] = useState(currentIdx >= 0 ? currentIdx : 0);

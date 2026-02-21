@@ -30,7 +30,6 @@ export function useOpalCommands(
   const sendMessage = useOpalStore((s) => s.sendMessage);
   const pushStatus = useOpalStore((s) => s.pushStatus);
   const toggleDebug = useOpalStore((s) => s.toggleDebug);
-  const rpcEntries = useOpalStore((s) => s.rpcEntries);
   const toggleToolOutput = useOpalStore((s) => s.toggleToolOutput);
   const showToolOutput = useOpalStore((s) => s.showToolOutput);
   const addToHistory = useOpalStore((s) => s.addToHistory);
@@ -90,7 +89,7 @@ export function useOpalCommands(
     "ctrl+d": {
       description: "Copy RPC debug log to clipboard",
       handler: () => {
-        const json = JSON.stringify(rpcEntries, null, 2);
+        const json = JSON.stringify(useOpalStore.getState().rpcEntries, null, 2);
         const ok = copyToClipboard(json);
         showFlash(ok ? "RPC log copied to clipboard" : "Clipboard unavailable");
       },

@@ -10,6 +10,7 @@
 import React, { useMemo, type FC } from "react";
 import { Box, Text, useStdout } from "ink";
 import type { RpcLogEntry, StderrEntry } from "../state/types.js";
+import { useOpalStore } from "../state/store.js";
 import { colors } from "../lib/palette.js";
 import { truncate } from "../lib/formatting.js";
 
@@ -122,12 +123,12 @@ const StderrRow: FC<{ entry: StderrEntry }> = ({ entry }) => (
 // ── Main component ───────────────────────────────────────────
 
 export interface DebugPanelProps {
-  rpcEntries: readonly RpcLogEntry[];
-  stderrLines: readonly StderrEntry[];
   onClear?: () => void;
 }
 
-export const DebugPanel: FC<DebugPanelProps> = ({ rpcEntries, stderrLines }) => {
+export const DebugPanel: FC<DebugPanelProps> = () => {
+  const rpcEntries = useOpalStore((s) => s.rpcEntries);
+  const stderrLines = useOpalStore((s) => s.stderrLines);
   const { stdout } = useStdout();
   const termHeight = stdout?.rows ?? 24;
   const termWidth = stdout?.columns ?? 80;

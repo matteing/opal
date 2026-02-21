@@ -1,5 +1,5 @@
 import React, { type FC } from "react";
-import type { TimelineEntry as TimelineEntryType } from "../state/types.js";
+import type { TimelineEntry as TimelineEntryType, ToolCall } from "../state/types.js";
 import { useOpalStore } from "../state/index.js";
 import { TimelineMessage } from "./timeline-message.js";
 import { TimelineTool } from "./timeline-tool.js";
@@ -11,28 +11,36 @@ interface Props {
   isLast?: boolean;
 }
 
+/**
+ * Subscribes to agents ONLY for sub_agent tool entries. Uses primitive
+ * selectors (string/number) so Zustand's default Object.is comparison
+ * prevents re-renders when values haven't actually changed.
+ */
+const SubAgentToolEntry: FC<{ tool: ToolCall; showOutput: boolean }> = ({ tool, showOutput }) => {
+  const model = useOpalStore(
+    (s) => Object.values(s.agents).find((a) => a.parentCallId === tool.callId)?.model ?? null,
+  );
+  const toolCount = useOpalStore(
+    (s) => Object.values(s.agents).find((a) => a.parentCallId === tool.callId)?.toolCount ?? null,
+  );
+  const subAgent = model !== null && toolCount !== null ? { model, toolCount } : undefined;
+  return <TimelineTool tool={tool} showOutput={showOutput} subAgent={subAgent} />;
+};
+
 /** Renders a single timeline entry by dispatching on `kind`. */
 const TimelineEntryComponent: FC<Props> = ({ entry, isLast = false }) => {
   const workingDir = useOpalStore((s) => s.workingDir);
   const showToolOutput = useOpalStore((s) => s.showToolOutput);
-  const agents = useOpalStore((s) => s.agents);
 
   switch (entry.kind) {
     case "message":
       return <TimelineMessage message={entry.message} isStreaming={isLast} />;
-    case "tool": {
-      const subAgent =
-        entry.tool.tool === "sub_agent"
-          ? Object.values(agents).find((a) => a.parentCallId === entry.tool.callId)
-          : undefined;
-      return (
-        <TimelineTool
-          tool={entry.tool}
-          showOutput={showToolOutput}
-          subAgent={subAgent ? { model: subAgent.model, toolCount: subAgent.toolCount } : undefined}
-        />
+    case "tool":
+      return entry.tool.tool === "sub_agent" ? (
+        <SubAgentToolEntry tool={entry.tool} showOutput={showToolOutput} />
+      ) : (
+        <TimelineTool tool={entry.tool} showOutput={showToolOutput} />
       );
-    }
     case "thinking":
       return <TimelineThinking text={entry.text} />;
     case "skill":

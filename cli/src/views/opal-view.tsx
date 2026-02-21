@@ -25,11 +25,6 @@ export const OpalView: FC = () => {
   const availableModels = useOpalStore((s) => s.availableModels);
   const currentModel = useOpalStore((s) => s.currentModel);
   const debugVisible = useOpalStore((s) => s.debugVisible);
-  const rpcEntries = useOpalStore((s) => s.rpcEntries);
-  const stderrLines = useOpalStore((s) => s.stderrLines);
-  const clearDebug = useOpalStore((s) => s.clearDebug);
-  const agents = useOpalStore((s) => s.agents);
-  const focusStack = useOpalStore((s) => s.focusStack);
   const hasEntries = useOpalStore((s) => selectFocusedAgent(s).entries.length > 0);
 
   const [flash, setFlash] = React.useState<string | null>(null);
@@ -41,8 +36,6 @@ export const OpalView: FC = () => {
   const overlay = useOverlay(showFlash);
   const { cmds, hotkeys, handleSubmit } = useOpalCommands(overlay.setOverlay, showFlash);
 
-  const focusedId = focusStack[focusStack.length - 1] ?? "root";
-
   return (
     <Box flexDirection="column">
       <Welcome
@@ -53,9 +46,7 @@ export const OpalView: FC = () => {
         distributionNode={distributionNode}
       />
       <Timeline />
-      {debugVisible && (
-        <DebugPanel rpcEntries={rpcEntries} stderrLines={stderrLines} onClear={clearDebug} />
-      )}
+      {debugVisible && <DebugPanel />}
       <QueuedMessages messages={queuedMessages} />
       {askUserRequest === null && overlay.overlay === "models" && (
         <ModelPicker
@@ -68,8 +59,6 @@ export const OpalView: FC = () => {
       )}
       {askUserRequest === null && overlay.overlay === "agents" && (
         <AgentPicker
-          agents={agents}
-          focusedId={focusedId}
           onSelect={overlay.handleAgentSelect}
           onDismiss={overlay.dismissOverlay}
         />

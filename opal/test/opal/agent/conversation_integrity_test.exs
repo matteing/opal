@@ -595,7 +595,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
 
   # ── Helpers ────────────────────────────────────────────────────────
 
-  defp start_agent(opts \\ []) do
+  defp start_agent(opts) do
     session_id = "integrity-test-#{System.unique_integer([:positive])}"
     {:ok, tool_sup} = Task.Supervisor.start_link()
 
