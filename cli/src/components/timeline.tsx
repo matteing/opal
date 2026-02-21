@@ -24,9 +24,7 @@ const LIVE_TAIL = 5;
  * layout, keeping the tree small and renders fast.
  */
 const TimelineComponent: FC = () => {
-  const focusedId = useOpalStore(
-    (s) => s.focusStack[s.focusStack.length - 1] ?? "root",
-  );
+  const focusedId = useOpalStore((s) => s.focusStack[s.focusStack.length - 1] ?? "root");
   const entries = useOpalStore((s) => selectFocusedAgent(s).entries);
   const lastIndex = entries.length - 1;
 
@@ -39,20 +37,12 @@ const TimelineComponent: FC = () => {
     // entries from a different agent aren't stuck in the scrollback.
     <React.Fragment key={focusedId}>
       <Static items={staticEntries}>
-        {(entry, i) => (
-          <TimelineEntry key={i} entry={entry} isLast={false} />
-        )}
+        {(entry, i) => <TimelineEntry key={i} entry={entry} isLast={false} />}
       </Static>
       <Box flexDirection="column">
         {liveEntries.map((entry, j) => {
           const globalIdx = staticCount + j;
-          return (
-            <TimelineEntry
-              key={globalIdx}
-              entry={entry}
-              isLast={globalIdx === lastIndex}
-            />
-          );
+          return <TimelineEntry key={globalIdx} entry={entry} isLast={globalIdx === lastIndex} />;
         })}
       </Box>
     </React.Fragment>

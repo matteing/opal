@@ -58,10 +58,7 @@ export const OpalView: FC = () => {
         />
       )}
       {askUserRequest === null && overlay.overlay === "agents" && (
-        <AgentPicker
-          onSelect={overlay.handleAgentSelect}
-          onDismiss={overlay.dismissOverlay}
-        />
+        <AgentPicker onSelect={overlay.handleAgentSelect} onDismiss={overlay.dismissOverlay} />
       )}
       {askUserRequest === null && overlay.overlay === "opal" && (
         <ConfigPanel
