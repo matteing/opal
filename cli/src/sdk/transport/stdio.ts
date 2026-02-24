@@ -40,7 +40,12 @@ export class StdioTransport implements Transport {
   constructor(opts: StdioTransportOptions = {}) {
     const { cmd, args, cwd } = resolveCommand(opts);
 
-    this.#proc = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"], cwd });
+    this.#proc = spawn(cmd, args, {
+      stdio: ["pipe", "pipe", "pipe"],
+      cwd,
+      // .bat/.cmd files on Windows require shell execution
+      shell: process.platform === "win32",
+    });
     this.#rl = createInterface({ input: this.#proc.stdout! });
 
     // Mark open once the readline interface is ready
