@@ -77,7 +77,9 @@ defmodule Opal.Shell.Process do
         :use_stdio,
         :stderr_to_stdout,
         {:args, args}
-      ] ++ port_opts
+      ]
+      |> then(&if Opal.Platform.windows?(), do: [{:hide, true} | &1], else: &1)
+      |> Kernel.++(port_opts)
 
     port = Port.open({:spawn_executable, executable}, full_opts)
 
