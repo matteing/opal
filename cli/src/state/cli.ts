@@ -36,7 +36,10 @@ export interface CliStateSlice {
   /** Load CLI state and command history from local files. */
   loadCliState: () => void;
   /** Update CLI state to local files. */
-  updateCliState: (updates: { lastModel?: Record<string, unknown> | null; preferences?: Record<string, unknown> }) => void;
+  updateCliState: (updates: {
+    lastModel?: Record<string, unknown> | null;
+    preferences?: Record<string, unknown>;
+  }) => void;
   /** Add a command to history (persisted to disk). */
   addToHistory: (command: string) => void;
 

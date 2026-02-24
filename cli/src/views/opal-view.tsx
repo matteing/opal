@@ -1,5 +1,5 @@
 import React, { type FC } from "react";
-import { Box } from "ink";
+import { Box, Static } from "ink";
 import { Welcome } from "../components/welcome.js";
 import { useOpalStore } from "../state/index.js";
 import { selectFocusedAgent } from "../state/selectors.js";
@@ -38,13 +38,27 @@ export const OpalView: FC = () => {
 
   return (
     <Box flexDirection="column">
-      <Welcome
-        dimmed={hasEntries}
-        workingDir={workingDir}
-        contextFiles={contextFiles}
-        skills={skills}
-        distributionNode={distributionNode}
-      />
+      {hasEntries ? (
+        <Static items={["welcome"] as const} style={{ width: "100%" }}>
+          {() => (
+            <Welcome
+              key="welcome"
+              dimmed
+              workingDir={workingDir}
+              contextFiles={contextFiles}
+              skills={skills}
+              distributionNode={distributionNode}
+            />
+          )}
+        </Static>
+      ) : (
+        <Welcome
+          workingDir={workingDir}
+          contextFiles={contextFiles}
+          skills={skills}
+          distributionNode={distributionNode}
+        />
+      )}
       <Timeline />
       {debugVisible && <DebugPanel />}
       <QueuedMessages messages={queuedMessages} />

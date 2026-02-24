@@ -44,8 +44,8 @@ function statePath(): string {
 function readRaw(): StoredState {
   try {
     const data = readFileSync(statePath(), "utf-8");
-    const parsed = JSON.parse(data);
-    return typeof parsed === "object" && parsed !== null ? parsed : {};
+    const parsed: unknown = JSON.parse(data);
+    return typeof parsed === "object" && parsed !== null ? (parsed as StoredState) : {};
   } catch {
     return {};
   }
@@ -65,9 +65,7 @@ export function readCliState(): CliState {
     lastModel: raw.last_model ?? null,
     preferences: {
       ...DEFAULT_PREFERENCES,
-      ...(typeof raw.preferences === "object" && raw.preferences !== null
-        ? (raw.preferences as Record<string, unknown>)
-        : {}),
+      ...(typeof raw.preferences === "object" && raw.preferences !== null ? raw.preferences : {}),
     },
     version: VERSION,
   };

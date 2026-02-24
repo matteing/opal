@@ -7,6 +7,8 @@ defmodule Opal.Application do
 
   @impl true
   def start(_type, _args) do
+    setup_file_logger()
+
     children = [
       {Registry, keys: :unique, name: Opal.Registry},
       {Registry, keys: :duplicate, name: Opal.Events.Registry},
@@ -77,6 +79,36 @@ defmodule Opal.Application do
     :crypto.strong_rand_bytes(18)
     |> Base.url_encode64(padding: false)
     |> String.to_atom()
+  end
+
+  defp setup_file_logger do
+    data_dir =
+      Application.get_env(:opal, :data_dir) ||
+        Opal.Config.default_data_dir()
+
+    logs_dir = Path.join(Path.expand(data_dir), "logs")
+    log_file = Path.join(logs_dir, "server.log")
+
+    with :ok <- File.mkdir_p(logs_dir),
+         :ok <-
+           :logger.add_handler(:file_log, :logger_std_h, %{
+             config: %{
+               file: String.to_charlist(log_file),
+               max_no_bytes: 5_000_000,
+               max_no_files: 3
+             },
+             formatter:
+               {:logger_formatter,
+                %{
+                  single_line: true,
+                  template: [:time, " [", :level, "] ", :msg, "\n"]
+                }}
+           }) do
+      :ok
+    else
+      {:error, reason} ->
+        Logger.warning("Could not set up file logging: #{inspect(reason)}")
+    end
   end
 
   defp distribution_cookie do

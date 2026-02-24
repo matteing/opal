@@ -29,8 +29,8 @@ function historyPath(): string {
 function readRaw(): Record<string, unknown> {
   try {
     const data = readFileSync(historyPath(), "utf-8");
-    const parsed = JSON.parse(data);
-    return typeof parsed === "object" && parsed !== null ? parsed : {};
+    const parsed: unknown = JSON.parse(data);
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }
@@ -51,8 +51,11 @@ export function readHistory(): HistoryEntry[] {
 
   if (!Array.isArray(history)) return [];
   return history.filter(
-    (e): e is HistoryEntry =>
-      typeof e === "object" && e !== null && typeof e.text === "string" && typeof e.timestamp === "string",
+    (e: unknown): e is HistoryEntry =>
+      typeof e === "object" &&
+      e !== null &&
+      typeof (e as HistoryEntry).text === "string" &&
+      typeof (e as HistoryEntry).timestamp === "string",
   );
 }
 

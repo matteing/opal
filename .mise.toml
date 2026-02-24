@@ -109,3 +109,21 @@ run = "bash scripts/release.sh"
 description = "Start opal-server with Erlang distribution"
 dir = "opal"
 run = "elixir --sname opal -S mix run --no-halt"
+
+
+# ── CI Preflight ─────────────────────────────────────────────
+
+[tasks."codegen:check"]
+description = "Verify codegen is up-to-date"
+dir = "opal"
+run = "mix run ../scripts/codegen_ts.exs --check"
+
+[tasks.precommit]
+description = "Run everything CI checks: deps, codegen, lint, build, test"
+depends = ["deps"]
+run = [
+  "mise run codegen:check",
+  "mise run lint",
+  "mise run build",
+  "mise run test",
+]
