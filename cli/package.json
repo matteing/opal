@@ -17,13 +17,15 @@
   },
   "files": [
     "dist",
-    "releases"
+    "releases",
+    "scripts/postinstall.js"
   ],
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "postinstall": "node scripts/postinstall.js",
     "start": "node dist/bin.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",

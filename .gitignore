@@ -35,8 +35,8 @@ node_modules/
 # NPM release binaries (built artifacts)
 npm/opal/releases/
 
-# Burrito build output
-burrito_out/
+# OTP release tarballs (built by CI, extracted on postinstall)
+cli/releases/*.tar.gz
 
 # CLI build artifacts
 cli/dist/

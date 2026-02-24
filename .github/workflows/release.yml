@@ -30,7 +30,7 @@ jobs:
           echo "Releasing version: $VERSION"
 
   # ---------------------------------------------------------------------------
-  # Build Burrito binaries on each native platform
+  # Build OTP releases on each native platform
   # ---------------------------------------------------------------------------
   build-binary:
     needs: prepare
@@ -38,25 +38,21 @@ jobs:
       matrix:
         include:
           - runner: macos-14
-            target: darwin_arm64
-            binary: opal_server_darwin_arm64
+            target: darwin-arm64
+            tarball: opal-server-darwin-arm64.tar.gz
           - runner: ubuntu-latest
-            target: linux_x64
-            binary: opal_server_linux_x64
+            target: linux-x64
+            tarball: opal-server-linux-x64.tar.gz
           - runner: ubuntu-24.04-arm
-            target: linux_arm64
-            binary: opal_server_linux_arm64
+            target: linux-arm64
+            tarball: opal-server-linux-arm64.tar.gz
           - runner: windows-2022
-            target: win32_x64
-            binary: opal_server_win32_x64
+            target: win32-x64
+            tarball: opal-server-win32-x64.tar.gz
 
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.15.2
 
       - uses: erlef/setup-beam@v1
         with:
@@ -68,14 +64,18 @@ jobs:
 
       - name: Build release (${{ matrix.target }})
         run: cd opal && mix release opal_server --overwrite
-        env:
-          BURRITO_TARGET: ${{ matrix.target }}
 
-      - name: Upload binary
+      - name: Package release tarball
+        shell: bash
+        run: |
+          cd opal/_build/prod/rel/opal_server
+          tar -czf ../../../../${{ matrix.tarball }} .
+
+      - name: Upload tarball
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.binary }}
-          path: opal/burrito_out/*
+          name: ${{ matrix.tarball }}
+          path: opal/${{ matrix.tarball }}
           retention-days: 1
 
   # ---------------------------------------------------------------------------
@@ -135,13 +135,12 @@ jobs:
           # CLI dist
           cp -r artifacts/cli-dist/dist cli/dist
 
-          # Burrito binaries
+          # OTP release tarballs
           mkdir -p cli/releases
-          cp artifacts/opal_server_darwin_arm64/* cli/releases/
-          cp artifacts/opal_server_linux_x64/*    cli/releases/
-          cp artifacts/opal_server_linux_arm64/*   cli/releases/
-          cp artifacts/opal_server_win32_x64/*     cli/releases/
-          chmod +x cli/releases/* 2>/dev/null || true
+          cp artifacts/opal-server-darwin-arm64.tar.gz/opal-server-darwin-arm64.tar.gz cli/releases/
+          cp artifacts/opal-server-linux-x64.tar.gz/opal-server-linux-x64.tar.gz       cli/releases/
+          cp artifacts/opal-server-linux-arm64.tar.gz/opal-server-linux-arm64.tar.gz   cli/releases/
+          cp artifacts/opal-server-win32-x64.tar.gz/opal-server-win32-x64.tar.gz       cli/releases/
 
           echo "==> Package contents:"
           ls -lh cli/releases/
@@ -162,12 +161,12 @@ jobs:
           MIX_ENV: dev
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
 
-      - name: Upload binaries to GitHub Release
+      - name: Upload tarballs to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.prepare.outputs.version }}
           files: |
-            artifacts/opal_server_darwin_arm64/*
-            artifacts/opal_server_linux_x64/*
-            artifacts/opal_server_linux_arm64/*
-            artifacts/opal_server_win32_x64/*
+            artifacts/opal-server-darwin-arm64.tar.gz/*
+            artifacts/opal-server-linux-x64.tar.gz/*
+            artifacts/opal-server-linux-arm64.tar.gz/*
+            artifacts/opal-server-win32-x64.tar.gz/*

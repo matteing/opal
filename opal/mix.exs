@@ -131,16 +131,8 @@ defmodule Opal.MixProject do
     [
       opal_server: [
         applications: [opal: :permanent],
-        steps: [:assemble, &Burrito.wrap/1],
-        burrito: [
-          targets: [
-            darwin_arm64: [os: :darwin, cpu: :aarch64],
-            darwin_x64: [os: :darwin, cpu: :x86_64],
-            linux_x64: [os: :linux, cpu: :x86_64],
-            linux_arm64: [os: :linux, cpu: :aarch64],
-            win32_x64: [os: :windows, cpu: :x86_64]
-          ]
-        ]
+        include_erts: true,
+        strip_beams: true
       ]
     ]
   end
@@ -155,8 +147,7 @@ defmodule Opal.MixProject do
       {:yaml_elixir, "~> 2.11"},
       {:anubis_mcp, "~> 0.17"},
       {:ex_doc, "~> 0.35", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:burrito, "~> 1.5", only: :prod}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 end

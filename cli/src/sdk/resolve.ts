@@ -1,16 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { platform, arch } from "node:os";
+import { platform, homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-
-const PLATFORM_MAP: Record<string, string> = {
-  "darwin-arm64": "opal_server_darwin_arm64",
-  "darwin-x64": "opal_server_darwin_x64",
-  "linux-x64": "opal_server_linux_x64",
-  "linux-arm64": "opal_server_linux_arm64",
-  "win32-x64": "opal_server_win32_x64.exe",
-};
 
 export interface ServerResolution {
   /** Command to spawn (binary path or executable name) */
@@ -47,12 +39,19 @@ function detectMonorepo(): ServerResolution | null {
   return null;
 }
 
+/** Read the package version to locate the extracted release. */
+function getPackageVersion(): string {
+  const pkgPath = resolve(fileURLToPath(import.meta.url), "../../../package.json");
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+  return pkg.version;
+}
+
 /**
  * Resolve the opal-server binary.
  *
  * 0. Monorepo dev mode via `mise exec` (when running from source tree)
  * 1. `opal-server` in PATH (user-installed or dev build)
- * 2. Bundled platform binary in `releases/` (npm distribution)
+ * 2. Extracted OTP release at ~/.opal/erts/<version>/
  */
 export function resolveServer(): ServerResolution {
   // 0. Monorepo dev mode
@@ -73,32 +72,25 @@ export function resolveServer(): ServerResolution {
     // not in PATH
   }
 
-  // 2. Bundled binary
-  const key = `${platform()}-${arch()}`;
-  const name = PLATFORM_MAP[key];
-  if (name) {
-    const dir = resolve(fileURLToPath(import.meta.url), "../../../releases");
-    const binPath = join(dir, name);
-    if (existsSync(binPath)) {
-      return { command: binPath, args: [] };
-    }
-  }
+  // 2. Extracted OTP release at ~/.opal/erts/<version>/
+  const version = getPackageVersion();
+  const releaseDir = join(homedir(), ".opal", "erts", version);
+  const binName = platform() === "win32" ? "opal_server.bat" : "opal_server";
+  const binPath = join(releaseDir, "bin", binName);
 
-  const tried = [
-    `  1. opal-server in PATH`,
-    name
-      ? `  2. ${join(resolve(fileURLToPath(import.meta.url), "../../releases"), name)}`
-      : `  2. (unsupported platform: ${key})`,
-  ];
+  if (existsSync(binPath)) {
+    return { command: binPath, args: ["start"] };
+  }
 
   throw new Error(
     [
       `opal-server not found.`,
       ``,
       `Tried:`,
-      ...tried,
+      `  1. opal-server in PATH`,
+      `  2. ${binPath}`,
       ``,
-      `Install opal-server or place a binary in the releases/ directory.`,
+      `Run "npm rebuild @unfinite/opal" to extract the server, or install opal-server manually.`,
     ].join("\n"),
   );
 }
