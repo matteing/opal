@@ -8,6 +8,22 @@ function parseExpose(expose: string): { name: string; cookie?: string } {
   return cookie ? { name, cookie } : { name };
 }
 
+/**
+ * On Windows, ensure the console is in VT processing mode and clear the
+ * screen so Ink gets a clean slate. Without this, ANSI cursor-movement
+ * sequences may be ignored and the initial render "sticks" to the top.
+ */
+function prepareTerminal(): void {
+  if (process.platform !== "win32" || !process.stdout.isTTY) return;
+
+  // Emit an ANSI escape to nudge the console into VT mode (no-op if already enabled).
+  // ESC[6n (device status report) is harmless and forces VT processing on.
+  process.stdout.write("\x1b[6n");
+
+  // Clear the screen so Ink starts from a known state.
+  process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
+}
+
 export async function launchTui(args: TuiArgs): Promise<void> {
   const opts: AppProps = {
     // Generate a session ID if not provided, so we can always show the resume hint on exit.
@@ -15,6 +31,8 @@ export async function launchTui(args: TuiArgs): Promise<void> {
     workingDir: args.workingDir,
     ...(args.expose ? { distribution: parseExpose(args.expose) } : {}),
   };
+
+  prepareTerminal();
 
   // Off to the races, bitch
   const instance = render(React.createElement(App, opts));

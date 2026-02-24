@@ -56,9 +56,17 @@ export const ViewportProvider: FC<{ children: ReactNode }> = ({ children }) => {
     if (!stdout) return;
 
     stdout.on("resize", onResize);
+
+    // On Windows, resize events can be unreliable; poll as a fallback.
+    let pollInterval: ReturnType<typeof setInterval> | undefined;
+    if (process.platform === "win32") {
+      pollInterval = setInterval(onResize, 500);
+    }
+
     return () => {
       stdout.off("resize", onResize);
       onResize.cancel();
+      if (pollInterval) clearInterval(pollInterval);
     };
   }, [stdout, onResize]);
 
