@@ -50,6 +50,10 @@ Compiled from `## References` sections across docs, plus README and ongoing rese
 
 - [Evaluating AGENTS.md: Are Repository-Level Context Files Helpful for Coding Agents?](https://arxiv.org/abs/2602.11988) — Gloaguen et al., 2026. Finds that AGENTS.md context files tend to reduce task success rates while increasing inference cost by 20%+; recommends minimal requirements only. (arxiv)
 
+## CI & Distribution
+
+- [GitHub Actions: macOS 13 runner image is closing down](https://github.blog/changelog/2025-09-19-github-actions-macos-13-runner-image-is-closing-down/) — macos-13 retired Dec 2025. Use `macos-15-intel` for x86_64 builds. Intel macOS support ends Fall 2027 when macos-15 image retires. (GitHub changelog)
+
 ---
 
 ## TODO

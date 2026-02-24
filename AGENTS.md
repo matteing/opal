@@ -26,4 +26,5 @@
 mise run dev    # Run TUI
 mise run test   # Run tests
 mise run lint   # Check code quality
+mise run release # Release
 ```
