@@ -138,6 +138,15 @@ defmodule Opal.MCP.Config do
     args = config["args"] || []
     env = parse_env(config["env"])
 
+    # On Windows, .cmd/.bat files can't be executed directly via open_port;
+    # wrap with cmd.exe /C so Erlang's spawn_executable works.
+    {command, args} =
+      if Opal.Platform.windows?() do
+        {"cmd", ["/C", command | args]}
+      else
+        {command, args}
+      end
+
     opts =
       [{:command, command}, {:args, args}]
       |> maybe_add(:env, env)
