@@ -41,10 +41,6 @@ import type {
   AuthLoginResult,
   AuthPollResult,
   AgentEvent,
-  CliStateGetResult,
-  CliStateSetParams,
-  CliStateSetResult,
-  CliHistoryGetResult,
 } from "./protocol.js";
 
 // ── Options ──────────────────────────────────────────────────────────
@@ -326,24 +322,6 @@ export class Session {
     /** Poll for device-code login completion. */
     poll: async (deviceCode: string, interval: number): Promise<AuthPollResult> => {
       return this.#client.request("auth/poll", { deviceCode, interval });
-    },
-  };
-
-  // ── CLI State ─────────────────────────────────────────────────
-
-  /** CLI state operations — preferences and command history. */
-  readonly cli = {
-    /** Get CLI state including last model and preferences. */
-    getState: async (): Promise<CliStateGetResult> => {
-      return this.#client.request("cli/state/get", {});
-    },
-    /** Update CLI state. */
-    setState: async (updates: Partial<CliStateSetParams>): Promise<CliStateSetResult> => {
-      return this.#client.request("cli/state/set", updates);
-    },
-    /** Get command history (derived from saved sessions). */
-    getHistory: async (): Promise<CliHistoryGetResult> => {
-      return this.#client.request("cli/history/get", {});
     },
   };
 

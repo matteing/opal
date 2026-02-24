@@ -74,51 +74,6 @@ export type AuthStatusResult = {
   authenticated: boolean;
 };
 
-export type CliHistoryAddParams = {
-  /** Command text to add. */
-  command: string;
-};
-
-export type CliHistoryAddResult = Record<string, never>;
-
-export type CliHistoryGetParams = Record<string, never>;
-
-export type CliHistoryGetResult = {
-  /** Array of command history entries. */
-  commands: { text: string; timestamp: string }[];
-  /** Maximum number of history entries. */
-  maxSize: number;
-  /** History format version. */
-  version: number;
-};
-
-export type CliStateGetParams = Record<string, never>;
-
-export type CliStateGetResult = {
-  /** Last used model configuration. */
-  lastModel: Record<string, unknown>;
-  /** CLI user preferences. */
-  preferences: { autoConfirm: boolean; verbose: boolean };
-  /** CLI state format version. */
-  version: number;
-};
-
-export type CliStateSetParams = {
-  /** Model configuration to save. */
-  lastModel?: Record<string, unknown>;
-  /** Preferences to update. */
-  preferences?: Record<string, unknown>;
-};
-
-export type CliStateSetResult = {
-  /** Last used model configuration. */
-  lastModel: Record<string, unknown>;
-  /** CLI user preferences. */
-  preferences: { autoConfirm: boolean; verbose: boolean };
-  /** CLI state format version. */
-  version: number;
-};
-
 export type ModelSetParams = {
   /** Model ID to switch to. */
   modelId: string;
@@ -564,10 +519,6 @@ export const Methods = {
   AUTH_LOGIN: "auth/login" as const,
   AUTH_POLL: "auth/poll" as const,
   AUTH_STATUS: "auth/status" as const,
-  CLI_HISTORY_ADD: "cli/history/add" as const,
-  CLI_HISTORY_GET: "cli/history/get" as const,
-  CLI_STATE_GET: "cli/state/get" as const,
-  CLI_STATE_SET: "cli/state/set" as const,
   MODEL_SET: "model/set" as const,
   MODELS_LIST: "models/list" as const,
   OPAL_CONFIG_GET: "opal/config/get" as const,
@@ -627,16 +578,6 @@ export interface MethodTypes {
   "auth/login": { params: AuthLoginParams; result: AuthLoginResult };
   "auth/poll": { params: AuthPollParams; result: AuthPollResult };
   "auth/status": { params: AuthStatusParams; result: AuthStatusResult };
-  "cli/history/add": {
-    params: CliHistoryAddParams;
-    result: CliHistoryAddResult;
-  };
-  "cli/history/get": {
-    params: CliHistoryGetParams;
-    result: CliHistoryGetResult;
-  };
-  "cli/state/get": { params: CliStateGetParams; result: CliStateGetResult };
-  "cli/state/set": { params: CliStateSetParams; result: CliStateSetResult };
   "model/set": { params: ModelSetParams; result: ModelSetResult };
   "models/list": { params: ModelsListParams; result: ModelsListResult };
   "opal/config/get": {

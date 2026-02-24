@@ -1,6 +1,10 @@
 defmodule Opal.Tool.Shell do
   @moduledoc """
-  Runs shell commands cross-platform with timeout support.
+  Runs shell commands cross-platform with checkpoint-based execution.
+
+  Long-running commands don't hard-timeout — after `timeout` ms the tool
+  returns partial output and a process ID. The agent can then `wait`,
+  send `input`, or `kill` the process.
 
   The tool name and description adapt to the configured shell type
   (`:sh`, `:bash`, `:zsh`, `:cmd`, `:powershell`) so the LLM generates
@@ -9,18 +13,11 @@ defmodule Opal.Tool.Shell do
 
   @behaviour Opal.Tool
 
-  alias Opal.Tool.Args, as: ToolArgs
-
-  @default_timeout 30_000
+  @default_wait 30_000
   @max_lines 2_000
   @max_bytes 50 * 1024
 
   @type shell :: :sh | :bash | :zsh | :cmd | :powershell
-
-  @args_schema [
-    command: [type: :string, required: true],
-    timeout: [type: :integer, default: @default_timeout]
-  ]
 
   @shell_meta %{
     sh: %{
@@ -49,7 +46,6 @@ defmodule Opal.Tool.Shell do
     }
   }
 
-  # Returns {executable, args_list} for the given shell and command.
   defp shell_cmd(:sh, command), do: {"sh", ["-c", command]}
   defp shell_cmd(:bash, command), do: {"bash", ["-c", command]}
   defp shell_cmd(:zsh, command), do: {"zsh", ["-c", command]}
@@ -58,7 +54,7 @@ defmodule Opal.Tool.Shell do
   defp shell_cmd(:powershell, command),
     do: {"powershell", ["-NoProfile", "-NonInteractive", "-Command", command]}
 
-  # -- Behaviour callbacks (zero-arity use platform default) --
+  # -- Behaviour callbacks --
 
   @doc "Returns all possible shell tool names across platforms."
   @spec shell_names() :: MapSet.t(String.t())
@@ -72,13 +68,6 @@ defmodule Opal.Tool.Shell do
   @spec description() :: String.t()
   def description, do: shell_description(default_shell())
 
-  @doc """
-  Context-aware description that includes the working directory.
-
-  When the tool context includes `:working_dir`, appends it to the
-  description so the LLM knows commands already execute there and
-  avoids prepending unnecessary `cd` commands.
-  """
   @impl true
   @spec description(Opal.Tool.tool_context()) :: String.t()
   def description(%{working_dir: wd} = context) when is_binary(wd) and wd != "" do
@@ -101,6 +90,9 @@ defmodule Opal.Tool.Shell do
     "Run `#{Opal.Util.Text.truncate(command, 57, "...")}`"
   end
 
+  def meta(%{"action" => "wait", "id" => id}), do: "Waiting on #{id}"
+  def meta(%{"action" => "input", "id" => id}), do: "Input to #{id}"
+  def meta(%{"action" => "kill", "id" => id}), do: "Kill #{id}"
   def meta(_), do: "Run command"
 
   @impl true
@@ -109,10 +101,36 @@ defmodule Opal.Tool.Shell do
     %{
       "type" => "object",
       "properties" => %{
-        "command" => %{"type" => "string", "description" => "The shell command to execute"},
+        "command" => %{
+          "type" => "string",
+          "description" => "The shell command to execute (required for run action)."
+        },
+        "action" => %{
+          "type" => "string",
+          "enum" => ["run", "wait", "input", "kill"],
+          "description" =>
+            "Action to perform. \"run\" (default) starts a command; " <>
+              "\"wait\" checks on a running command (ALWAYS wait at least once before " <>
+              "considering kill — builds, tests, and installs often produce no output for " <>
+              "long periods); " <>
+              "\"input\" sends text to stdin; " <>
+              "\"kill\" terminates a running command (last resort — only use if the " <>
+              "command is genuinely stuck, NOT just slow)."
+        },
+        "id" => %{
+          "type" => "string",
+          "description" => "Process ID from a previous run (required for wait/input/kill)."
+        },
+        "input" => %{
+          "type" => "string",
+          "description" =>
+            "Text to send to the command's stdin (required for input action). Include \\n for Enter."
+        },
         "timeout" => %{
           "type" => "integer",
-          "description" => "Timeout in milliseconds (default: 30000)"
+          "description" =>
+            "How long to wait for output in ms (default: 30000). " <>
+              "If the command hasn't finished, partial output is returned with the process ID."
         }
       },
       "required" => ["command"]
@@ -121,33 +139,73 @@ defmodule Opal.Tool.Shell do
 
   @impl true
   @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
-  def execute(args, %{working_dir: working_dir} = context) when is_map(args) do
-    with {:ok, opts} <-
-           ToolArgs.validate(args, @args_schema,
-             required_message: "Missing required parameter: command"
-           ) do
-      shell_type =
-        case context do
-          %{config: %{shell: shell}} when shell != nil -> shell
-          _ -> default_shell()
+  def execute(%{"action" => "wait", "id" => id} = args, _context) do
+    wait_ms = args["timeout"] || @default_wait
+
+    case Opal.Shell.Process.wait(id, wait_ms) do
+      {:completed, output, status} -> format_completed(output, status)
+      {:running, output} -> {:ok, format_still_running(id, output)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def execute(%{"action" => "input", "id" => id, "input" => text}, _context) do
+    case Opal.Shell.Process.input(id, text, @default_wait) do
+      {:completed, output, status} -> format_completed(output, status)
+      {:running, output} -> {:ok, format_still_running(id, output)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def execute(%{"action" => "input"}, _context),
+    do: {:error, "Missing required parameters: id, input"}
+
+  def execute(%{"action" => "kill", "id" => id}, _context) do
+    case Opal.Shell.Process.kill(id) do
+      {:ok, output} -> {:ok, "[Process #{id} killed]\n#{truncate_output(output)}"}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def execute(%{"action" => "kill"}, _context),
+    do: {:error, "Missing required parameter: id"}
+
+  def execute(%{"command" => command} = args, %{working_dir: working_dir} = context) do
+    shell_type =
+      case context do
+        %{config: %{shell: shell}} when shell != nil -> shell
+        _ -> default_shell()
+      end
+
+    {executable, shell_args} = shell_cmd(shell_type, command)
+
+    case System.find_executable(executable) do
+      nil ->
+        {:error, "Shell '#{executable}' not found in PATH"}
+
+      exec_path ->
+        wait_ms = args["timeout"] || @default_wait
+
+        port_opts =
+          case working_dir do
+            nil -> []
+            dir -> [{:cd, String.to_charlist(dir)}]
+          end
+
+        emit = Map.get(context, :emit)
+
+        case Opal.Shell.Process.run(exec_path, shell_args, port_opts, wait_ms, emit) do
+          {:completed, output, status} -> format_completed(output, status)
+          {:running, id, output} -> {:ok, format_still_running(id, output)}
         end
-
-      {executable, shell_args} = shell_cmd(shell_type, opts[:command])
-
-      run_command(
-        executable,
-        shell_args,
-        [stderr_to_stdout: true, cd: working_dir],
-        opts[:timeout],
-        Map.get(context, :emit)
-      )
     end
   end
 
   def execute(%{"command" => _}, _context), do: {:error, "Missing working_dir in context"}
+  def execute(_args, %{working_dir: _}), do: {:error, "Missing required parameter: command"}
   def execute(_args, _context), do: {:error, "Missing required parameter: command"}
 
-  # -- Config-aware variants (called by the agent with session config) --
+  # -- Config-aware variants --
 
   @doc "Returns the tool name for the given shell type."
   @spec name(shell()) :: String.t()
@@ -157,98 +215,39 @@ defmodule Opal.Tool.Shell do
   @spec shell_description(shell()) :: String.t()
   def shell_description(shell_type), do: Map.fetch!(@shell_meta, shell_type).description
 
-  # -- Internals --
-
   @doc "Returns the default shell for the current platform."
   @spec default_shell() :: shell()
   def default_shell do
     if Opal.Platform.windows?(), do: :cmd, else: :sh
   end
 
-  defp run_command(shell, args, opts, timeout, emit) do
-    caller = self()
-    os_pid_ref = make_ref()
+  # -- Formatting --
 
-    task =
-      Task.async(fn ->
-        if emit do
-          run_streaming(shell, args, opts, emit, caller, os_pid_ref)
-        else
-          System.cmd(shell, args, opts)
-        end
-      end)
+  defp format_completed(output, 0), do: {:ok, truncate_output(output)}
 
-    case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
-      {:ok, {output, 0}} ->
-        flush_os_pid(os_pid_ref)
-        {:ok, truncate_shell_output(output)}
+  defp format_completed(output, status),
+    do: {:error, "Command exited with status #{status}\n#{truncate_output(output)}"}
 
-      {:ok, {output, exit_code}} ->
-        flush_os_pid(os_pid_ref)
-        {:error, "Command exited with status #{exit_code}\n#{truncate_shell_output(output)}"}
+  defp format_still_running(id, output) do
+    truncated = truncate_output(output)
 
-      nil ->
-        kill_orphaned_process(os_pid_ref)
-        {:error, "Command timed out after #{timeout}ms"}
-    end
+    "[Command still running — id: #{id}]\n" <>
+      truncated <>
+      "\n\n" <>
+      "Use action: \"wait\" with id: \"#{id}\" to check again (recommended — " <>
+      "builds and tests often take minutes with no output). " <>
+      "Use \"input\" to send text to stdin, or \"kill\" to terminate (only if stuck)."
   end
 
-  # Runs a command via Port, emitting output chunks as they arrive.
-  defp run_streaming(shell, args, opts, emit, caller, os_pid_ref) do
-    port_opts = [
-      :binary,
-      :exit_status,
-      :use_stdio,
-      :stderr_to_stdout,
-      {:args, args}
-    ]
+  # -- Output truncation --
 
-    port_opts =
-      case Keyword.get(opts, :cd) do
-        nil -> port_opts
-        dir -> [{:cd, String.to_charlist(dir)} | port_opts]
-      end
+  defp truncate_output(""), do: "(no output)"
 
-    case System.find_executable(shell) do
-      nil ->
-        {"Shell '#{shell}' not found in PATH", 127}
-
-      executable ->
-        port = Port.open({:spawn_executable, executable}, port_opts)
-
-        # Report the OS PID so the caller can kill it on timeout
-        case Port.info(port, :os_pid) do
-          {:os_pid, pid} -> send(caller, {os_pid_ref, pid})
-          _ -> :ok
-        end
-
-        collect_port_output(port, emit, [])
-    end
-  end
-
-  defp collect_port_output(port, emit, acc) do
-    receive do
-      {^port, {:data, data}} ->
-        emit.(data)
-        collect_port_output(port, emit, [data | acc])
-
-      {^port, {:exit_status, status}} ->
-        output = acc |> Enum.reverse() |> IO.iodata_to_binary()
-        {output, status}
-    end
-  end
-
-  # -- Output truncation ------------------------------------------------------
-  #
-  # Tail-truncation: keeps the *end* of shell output (where errors and results
-  # live). Saves full output to a temp file for reference.
-
-  defp truncate_shell_output(output) do
+  defp truncate_output(output) do
     lines = String.split(String.replace(output, "\r\n", "\n"), "\n")
     total = length(lines)
 
     cond do
-      # Too many lines — keep the last @max_lines
       total > @max_lines ->
         tmp_path = save_full_output(output)
         kept = Enum.slice(lines, total - @max_lines, @max_lines)
@@ -258,13 +257,11 @@ defmodule Opal.Tool.Shell do
         "[Showing lines #{start}-#{total} of #{total}. " <>
           "Full output: #{tmp_path}]\n\n#{text}"
 
-      # Under line limit but over byte limit — keep the tail bytes
       byte_size(output) > @max_bytes ->
         tmp_path = save_full_output(output)
         drop = byte_size(output) - @max_bytes
         truncated = binary_part(output, drop, @max_bytes)
 
-        # Find first newline to avoid splitting mid-line
         tail =
           case :binary.match(truncated, "\n") do
             {pos, _} ->
@@ -276,13 +273,11 @@ defmodule Opal.Tool.Shell do
 
         "[Output truncated. Full output: #{tmp_path}]\n\n#{tail}"
 
-      # Within limits — pass through unchanged
       true ->
         output
     end
   end
 
-  # Writes full output to a temp file so the LLM can reference it later.
   defp save_full_output(output) do
     dir = Path.join(System.tmp_dir!(), "opal-shell")
     File.mkdir_p!(dir)
@@ -291,31 +286,5 @@ defmodule Opal.Tool.Shell do
     path = Path.join(dir, "#{id}.log")
     File.write!(path, output)
     path
-  end
-
-  # Drains the OS PID message after normal command completion.
-  defp flush_os_pid(ref) do
-    receive do
-      {^ref, _os_pid} -> :ok
-    after
-      0 -> :ok
-    end
-  end
-
-  # Kills an orphaned OS process after timeout.
-  defp kill_orphaned_process(ref) do
-    receive do
-      {^ref, os_pid} when is_integer(os_pid) and os_pid > 0 ->
-        if Opal.Platform.windows?() do
-          System.cmd("taskkill", ["/PID", "#{os_pid}", "/T", "/F"], stderr_to_stdout: true)
-        else
-          # Kill process and its children
-          System.cmd("kill", ["-9", "#{os_pid}"], stderr_to_stdout: true)
-        end
-
-        :ok
-    after
-      0 -> :ok
-    end
   end
 end

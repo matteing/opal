@@ -1,38 +1,40 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createStore } from "zustand/vanilla";
 import { createCliStateSlice, type CliStateSlice } from "../../state/cli.js";
-import type { Session } from "../../sdk/session.js";
+
+// Mock file-based modules
+vi.mock("../../sdk/cli-state.js", () => ({
+  readCliState: vi.fn().mockReturnValue({
+    lastModel: { id: "gpt-4", provider: "copilot", thinkingLevel: "off" },
+    preferences: { autoConfirm: false, verbose: false },
+    version: 1,
+  }),
+  writeCliState: vi.fn().mockImplementation((updates) => ({
+    lastModel: updates.lastModel ?? { id: "gpt-4", provider: "copilot" },
+    preferences: { autoConfirm: false, verbose: false, ...updates.preferences },
+    version: 1,
+  })),
+}));
+
+vi.mock("../../sdk/cli-history.js", () => ({
+  readHistory: vi.fn().mockReturnValue([
+    { text: "ls -la", timestamp: "2026-01-01T00:00:00Z" },
+    { text: "git status", timestamp: "2026-01-01T00:01:00Z" },
+  ]),
+  appendHistory: vi.fn().mockImplementation((command) => [
+    { text: command, timestamp: new Date().toISOString() },
+    { text: "ls -la", timestamp: "2026-01-01T00:00:00Z" },
+    { text: "git status", timestamp: "2026-01-01T00:01:00Z" },
+  ]),
+}));
+
+import { readCliState, writeCliState } from "../../sdk/cli-state.js";
+import { readHistory, appendHistory } from "../../sdk/cli-history.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
 function makeStore() {
   return createStore<CliStateSlice>()(createCliStateSlice);
-}
-
-function mockSession(overrides: Partial<Session["cli"]> = {}): Session {
-  return {
-    cli: {
-      getState: vi.fn().mockResolvedValue({
-        lastModel: { id: "gpt-4", provider: "copilot", thinkingLevel: "off" },
-        preferences: { autoConfirm: false, verbose: false },
-        version: 1,
-      }),
-      setState: vi.fn().mockImplementation(async (updates) => ({
-        lastModel: updates.lastModel ?? { id: "gpt-4", provider: "copilot" },
-        preferences: { autoConfirm: false, verbose: false, ...updates.preferences },
-        version: 1,
-      })),
-      getHistory: vi.fn().mockResolvedValue({
-        commands: [
-          { text: "ls -la", timestamp: "2026-01-01T00:00:00Z" },
-          { text: "git status", timestamp: "2026-01-01T00:01:00Z" },
-        ],
-        maxSize: 500,
-        version: 1,
-      }),
-      ...overrides,
-    },
-  } as unknown as Session;
 }
 
 // ── Tests ────────────────────────────────────────────────────────
@@ -42,6 +44,34 @@ describe("CliStateSlice", () => {
 
   beforeEach(() => {
     store = makeStore();
+
+    // Re-apply default mock implementations (clearAllMocks wipes them)
+    vi.mocked(readCliState).mockReturnValue({
+      lastModel: { id: "gpt-4", provider: "copilot", thinkingLevel: "off" },
+      preferences: { autoConfirm: false, verbose: false },
+      version: 1,
+    });
+    vi.mocked(readHistory).mockReturnValue([
+      { text: "ls -la", timestamp: "2026-01-01T00:00:00Z" },
+      { text: "git status", timestamp: "2026-01-01T00:01:00Z" },
+    ]);
+    vi.mocked(appendHistory).mockImplementation((command) => [
+      { text: command, timestamp: new Date().toISOString() },
+      { text: "ls -la", timestamp: "2026-01-01T00:00:00Z" },
+      { text: "git status", timestamp: "2026-01-01T00:01:00Z" },
+    ]);
+    vi.mocked(writeCliState).mockImplementation((updates) => ({
+      lastModel: (updates.lastModel as Record<string, unknown>) ?? {
+        id: "gpt-4",
+        provider: "copilot",
+      },
+      preferences: {
+        autoConfirm: false,
+        verbose: false,
+        ...((updates.preferences as Record<string, boolean>) ?? {}),
+      },
+      version: 1,
+    }));
   });
 
   // ── Initial state ────────────────────────────────────────────
@@ -57,11 +87,12 @@ describe("CliStateSlice", () => {
 
   // ── loadCliState ─────────────────────────────────────────────
 
-  it("loads state and history from session", async () => {
-    const session = mockSession();
-    await store.getState().loadCliState(session);
+  it("loads state and history from local files", () => {
+    store.getState().loadCliState();
 
     const s = store.getState();
+    expect(readCliState).toHaveBeenCalled();
+    expect(readHistory).toHaveBeenCalled();
     expect(s.cliState).not.toBeNull();
     expect(s.cliState?.lastModel?.id).toBe("gpt-4");
     expect(s.commandHistory?.commands).toHaveLength(2);
@@ -69,87 +100,52 @@ describe("CliStateSlice", () => {
     expect(s.historyIndex).toBe(-1);
   });
 
-  it("sets loading state during fetch", async () => {
-    let resolveState!: (v: unknown) => void;
-    const session = mockSession({
-      getState: vi.fn().mockReturnValue(
-        new Promise((r) => {
-          resolveState = r;
-        }),
-      ),
-      getHistory: vi.fn().mockResolvedValue({ commands: [], maxSize: 500, version: 1 }),
+  it("handles load errors", () => {
+    vi.mocked(readCliState).mockImplementation(() => {
+      throw new Error("file corrupt");
     });
 
-    const promise = store.getState().loadCliState(session);
-    expect(store.getState().cliStateLoading).toBe(true);
-
-    resolveState({ preferences: { autoConfirm: false, verbose: false }, version: 1 });
-    await promise;
-    expect(store.getState().cliStateLoading).toBe(false);
-  });
-
-  it("handles load errors", async () => {
-    const session = mockSession({
-      getState: vi.fn().mockRejectedValue(new Error("network error")),
-    });
-
-    await store.getState().loadCliState(session);
-    expect(store.getState().cliStateError).toBe("network error");
+    store.getState().loadCliState();
+    expect(store.getState().cliStateError).toBe("file corrupt");
     expect(store.getState().cliStateLoading).toBe(false);
   });
 
   // ── updateCliState ───────────────────────────────────────────
 
-  it("updates state on the server and stores result", async () => {
-    const session = mockSession();
-    await store.getState().updateCliState(session, {
+  it("writes state to local file and stores result", () => {
+    store.getState().updateCliState({
       lastModel: { id: "claude-4", provider: "copilot" },
     });
 
-    expect(session.cli.setState).toHaveBeenCalledWith({
+    expect(writeCliState).toHaveBeenCalledWith({
       lastModel: { id: "claude-4", provider: "copilot" },
     });
     expect(store.getState().cliState).not.toBeNull();
-    expect(store.getState().cliStateLoading).toBe(false);
   });
 
-  it("handles update errors", async () => {
-    const session = mockSession({
-      setState: vi.fn().mockRejectedValue(new Error("save failed")),
+  it("handles write errors", () => {
+    vi.mocked(writeCliState).mockImplementation(() => {
+      throw new Error("disk full");
     });
 
-    await store.getState().updateCliState(session, {});
-    expect(store.getState().cliStateError).toBe("save failed");
+    store.getState().updateCliState({});
+    expect(store.getState().cliStateError).toBe("disk full");
   });
 
   // ── addToHistory ─────────────────────────────────────────────
 
-  it("adds to local history", async () => {
-    const session = mockSession();
-    // First load history
-    await store.getState().loadCliState(session);
-
+  it("adds to history and persists to disk", () => {
+    store.getState().loadCliState();
     store.getState().addToHistory("npm test");
 
+    expect(appendHistory).toHaveBeenCalledWith("npm test");
     const history = store.getState().commandHistory;
     expect(history?.commands[0].text).toBe("npm test");
     expect(history?.commands).toHaveLength(3);
   });
 
-  it("skips duplicate consecutive commands", async () => {
-    const session = mockSession();
-    await store.getState().loadCliState(session);
-
-    // "ls -la" is already the most recent command
-    store.getState().addToHistory("ls -la");
-
-    const history = store.getState().commandHistory;
-    expect(history?.commands).toHaveLength(2); // Unchanged
-  });
-
-  it("resets historyIndex after adding", async () => {
-    const session = mockSession();
-    await store.getState().loadCliState(session);
+  it("resets historyIndex after adding", () => {
+    store.getState().loadCliState();
 
     // Navigate up first
     store.getState().getPreviousCommand();
@@ -161,9 +157,8 @@ describe("CliStateSlice", () => {
 
   // ── History navigation ───────────────────────────────────────
 
-  it("getPreviousCommand returns commands in reverse order", async () => {
-    const session = mockSession();
-    await store.getState().loadCliState(session);
+  it("getPreviousCommand returns commands in reverse order", () => {
+    store.getState().loadCliState();
 
     const first = store.getState().getPreviousCommand();
     expect(first).toBe("ls -la");
@@ -172,9 +167,8 @@ describe("CliStateSlice", () => {
     expect(second).toBe("git status");
   });
 
-  it("getPreviousCommand stays at oldest entry", async () => {
-    const session = mockSession();
-    await store.getState().loadCliState(session);
+  it("getPreviousCommand stays at oldest entry", () => {
+    store.getState().loadCliState();
 
     store.getState().getPreviousCommand(); // ls -la
     store.getState().getPreviousCommand(); // git status
@@ -187,9 +181,8 @@ describe("CliStateSlice", () => {
     expect(store.getState().getPreviousCommand()).toBeNull();
   });
 
-  it("getNextCommand navigates forward", async () => {
-    const session = mockSession();
-    await store.getState().loadCliState(session);
+  it("getNextCommand navigates forward", () => {
+    store.getState().loadCliState();
 
     store.getState().getPreviousCommand(); // ls -la (index 0)
     store.getState().getPreviousCommand(); // git status (index 1)
@@ -198,9 +191,8 @@ describe("CliStateSlice", () => {
     expect(next).toBe("ls -la");
   });
 
-  it("getNextCommand returns null at end", async () => {
-    const session = mockSession();
-    await store.getState().loadCliState(session);
+  it("getNextCommand returns null at end", () => {
+    store.getState().loadCliState();
 
     store.getState().getPreviousCommand(); // index 0
     store.getState().getNextCommand(); // back to -1
@@ -209,9 +201,8 @@ describe("CliStateSlice", () => {
     expect(store.getState().getNextCommand()).toBeNull();
   });
 
-  it("resetHistoryNavigation resets index", async () => {
-    const session = mockSession();
-    await store.getState().loadCliState(session);
+  it("resetHistoryNavigation resets index", () => {
+    store.getState().loadCliState();
 
     store.getState().getPreviousCommand();
     expect(store.getState().historyIndex).toBe(0);

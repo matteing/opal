@@ -140,6 +140,11 @@ export const StableTextInput: FC<StableTextInputProps> = ({
     setCursorState({ cursorOffset: nextCursorOffset, cursorWidth: nextCursorWidth });
 
     if (nextValue !== value) {
+      // Eagerly update the ref so the *next* keystroke (which may fire before
+      // React re-renders and assigns `valueRef.current = originalValue`) sees
+      // the correct, up-to-date string. Without this, fast typing causes each
+      // keystroke to overwrite the previous one because valueRef is still stale.
+      valueRef.current = nextValue;
       onChangeRef.current(nextValue);
     }
   }, []);

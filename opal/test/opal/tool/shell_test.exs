@@ -134,11 +134,16 @@ defmodule Opal.Tool.ShellTest do
   end
 
   describe "execute/2 with timeout" do
-    test "returns timeout error for long-running command", %{tmp_dir: tmp_dir} do
+    test "returns partial output for long-running command", %{tmp_dir: tmp_dir} do
       ctx = %{working_dir: tmp_dir}
-      # sleep for 10 seconds with a 100ms timeout
-      assert {:error, msg} = Shell.execute(%{"command" => "sleep 10", "timeout" => 100}, ctx)
-      assert msg =~ "timed out"
+      # sleep for 10 seconds with a 100ms wait
+      assert {:ok, msg} = Shell.execute(%{"command" => "sleep 10", "timeout" => 100}, ctx)
+      assert msg =~ "still running"
+      assert msg =~ "id:"
+
+      # Extract process ID and kill it
+      [_, id] = Regex.run(~r/id: "([^"]+)"/, msg)
+      Shell.execute(%{"action" => "kill", "id" => id}, ctx)
     end
   end
 

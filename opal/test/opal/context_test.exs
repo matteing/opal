@@ -54,7 +54,10 @@ defmodule Opal.ContextTest do
       File.write!(Path.join(base, "AGENTS.md"), "Root context.")
       File.write!(Path.join(child, "AGENTS.md"), "Child context.")
 
-      result = Context.discover_context(child, filenames: ["AGENTS.md"])
+      result =
+        Context.discover_context(child, filenames: ["AGENTS.md"])
+        |> Enum.filter(&String.starts_with?(&1.path, base))
+
       assert length(result) == 2
       # Root-first ordering: root comes first, child comes last (higher priority)
       [first, second] = result

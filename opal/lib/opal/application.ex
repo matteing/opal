@@ -10,6 +10,7 @@ defmodule Opal.Application do
     children = [
       {Registry, keys: :unique, name: Opal.Registry},
       {Registry, keys: :duplicate, name: Opal.Events.Registry},
+      Opal.Shell.Process,
       {DynamicSupervisor, name: Opal.SessionSupervisor, strategy: :one_for_one}
     ]
 

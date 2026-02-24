@@ -90,7 +90,7 @@ export const createModelsSlice: StateCreator<ModelsStoreSlices, [], [], ModelsSl
       });
 
       // Persist the selected model to CLI state
-      await get().updateCliState(session, {
+      get().updateCliState({
         lastModel: {
           id: newModel.id,
           provider: newModel.provider,

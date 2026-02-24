@@ -418,22 +418,6 @@ defmodule Opal.RPC.Server do
   def dispatch("settings/save", _),
     do: error(:invalid_params, "Missing required param: settings")
 
-  # -- CLI state --
-
-  def dispatch("cli/state/get", _params), do: {:ok, Opal.CliState.get_state()}
-
-  def dispatch("cli/state/set", params) when is_map(params) do
-    {:ok, Opal.CliState.set_state(params)}
-  end
-
-  def dispatch("cli/history/get", _params) do
-    cfg = Opal.Config.new()
-    dir = Opal.Config.sessions_dir(cfg)
-    commands = Opal.Session.recent_prompts(dir)
-
-    {:ok, %{"commands" => commands, "maxSize" => 200, "version" => 1}}
-  end
-
   # -- Runtime config --
 
   def dispatch("opal/config/get", %{"session_id" => sid}) do

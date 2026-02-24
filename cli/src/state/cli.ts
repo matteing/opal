@@ -6,29 +6,38 @@
  * - User preferences (auto-confirm, verbose)
  * - Command history for arrow key navigation
  *
+ * All persistence is local (filesystem) — no RPC needed.
+ *
  * @module
  */
 
 import type { StateCreator } from "zustand";
-import type { Session } from "../sdk/session.js";
-import type { CliStateGetResult, CliHistoryGetResult, CliStateSetParams } from "../sdk/protocol.js";
+import { type CliState, readCliState, writeCliState } from "../sdk/cli-state.js";
+import { type HistoryEntry, readHistory, appendHistory } from "../sdk/cli-history.js";
+
+// ── History container (matches old CliHistoryGetResult shape) ─────
+
+export interface CommandHistory {
+  commands: HistoryEntry[];
+  maxSize: number;
+}
 
 // ── Slice state + actions ────────────────────────────────────────
 
 export interface CliStateSlice {
   // State
-  cliState: CliStateGetResult | null;
-  commandHistory: CliHistoryGetResult | null;
+  cliState: CliState | null;
+  commandHistory: CommandHistory | null;
   historyIndex: number;
   cliStateLoading: boolean;
   cliStateError: string | null;
 
   // Actions
-  /** Load CLI state and command history from server. */
-  loadCliState: (session: Session) => Promise<void>;
-  /** Update CLI state on the server. */
-  updateCliState: (session: Session, updates: Partial<CliStateSetParams>) => Promise<void>;
-  /** Add a command to the local history (no server call). */
+  /** Load CLI state and command history from local files. */
+  loadCliState: () => void;
+  /** Update CLI state to local files. */
+  updateCliState: (updates: { lastModel?: Record<string, unknown> | null; preferences?: Record<string, unknown> }) => void;
+  /** Add a command to history (persisted to disk). */
   addToHistory: (command: string) => void;
 
   // History navigation
@@ -42,6 +51,8 @@ export interface CliStateSlice {
 
 // ── Slice creator ────────────────────────────────────────────────
 
+const MAX_HISTORY = 200;
+
 export const createCliStateSlice: StateCreator<CliStateSlice, [], [], CliStateSlice> = (
   set,
   get,
@@ -53,21 +64,18 @@ export const createCliStateSlice: StateCreator<CliStateSlice, [], [], CliStateSl
   cliStateLoading: false,
   cliStateError: null,
 
-  // Load CLI state and history
-  loadCliState: async (session) => {
-    set({ cliStateLoading: true, cliStateError: null });
-
+  // Load CLI state and history from local files
+  loadCliState: () => {
     try {
-      const [stateRes, historyRes] = await Promise.all([
-        session.cli.getState(),
-        session.cli.getHistory(),
-      ]);
+      const state = readCliState();
+      const commands = readHistory();
 
       set({
-        cliState: stateRes,
-        commandHistory: historyRes,
-        historyIndex: -1, // Reset to end
+        cliState: state,
+        commandHistory: { commands, maxSize: MAX_HISTORY },
+        historyIndex: -1,
         cliStateLoading: false,
+        cliStateError: null,
       });
     } catch (err: unknown) {
       set({
@@ -77,45 +85,29 @@ export const createCliStateSlice: StateCreator<CliStateSlice, [], [], CliStateSl
     }
   },
 
-  // Update CLI state
-  updateCliState: async (session, updates) => {
-    set({ cliStateLoading: true, cliStateError: null });
-
+  // Update CLI state (local file)
+  updateCliState: (updates) => {
     try {
-      const result = await session.cli.setState(updates);
-      set({
-        cliState: result,
-        cliStateLoading: false,
-      });
+      const result = writeCliState(updates);
+      set({ cliState: result });
     } catch (err: unknown) {
       set({
         cliStateError: err instanceof Error ? err.message : String(err),
-        cliStateLoading: false,
       });
     }
   },
 
-  // Add command to local history (no server round-trip; sessions persist prompts)
+  // Add command to history and persist to disk
   addToHistory: (command) => {
-    const { commandHistory } = get();
-    if (!commandHistory) return;
-
-    const newEntry = {
-      text: command,
-      timestamp: new Date().toISOString(),
-    };
-
-    // Don't add if it's identical to the last command
-    const lastCommand = commandHistory.commands[0]?.text;
-    if (lastCommand === command) return;
-
-    set({
-      commandHistory: {
-        ...commandHistory,
-        commands: [newEntry, ...commandHistory.commands.slice(0, commandHistory.maxSize - 1)],
-      },
-      historyIndex: -1,
-    });
+    try {
+      const updated = appendHistory(command);
+      set({
+        commandHistory: { commands: updated, maxSize: MAX_HISTORY },
+        historyIndex: -1,
+      });
+    } catch {
+      // Best-effort — don't break the UI if history write fails
+    }
   },
 
   // History navigation

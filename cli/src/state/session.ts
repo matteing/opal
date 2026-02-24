@@ -179,9 +179,9 @@ export const createSessionSlice: StateCreator<StoreSlices, [], [], SessionSlice>
           get().checkAuth(session);
 
           // Fetch models, then restore saved model from CLI state
+          get().loadCliState();
           void get()
             .fetchModels(session)
-            .then(() => get().loadCliState(session))
             .then(() => {
               const { cliState, currentModel } = get();
               const saved = cliState?.lastModel;
