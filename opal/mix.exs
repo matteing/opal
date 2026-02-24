@@ -1,7 +1,7 @@
 defmodule Opal.MixProject do
   use Mix.Project
 
-  @version "0.1.19"
+  @version "0.1.20"
   @source_url "https://github.com/scohen/opal"
 
   def project do
