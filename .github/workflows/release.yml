@@ -43,6 +43,7 @@ jobs:
           - runner: macos-15-intel
             target: darwin-x64
             tarball: opal-server-darwin-x64.tar.gz
+            otp-version: "28.2"
           - runner: ubuntu-latest
             target: linux-x64
             tarball: opal-server-linux-x64.tar.gz
@@ -60,7 +61,7 @@ jobs:
       - uses: erlef/setup-beam@v1
         with:
           elixir-version: ${{ env.ELIXIR_VERSION }}
-          otp-version: ${{ env.OTP_VERSION }}
+          otp-version: ${{ matrix.otp-version || env.OTP_VERSION }}
 
       - name: Install deps
         run: cd opal && mix deps.get --only prod
