@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const PLATFORM_MAP = {
   "darwin-arm64": "opal-server-darwin-arm64.tar.gz",
+  "darwin-x64": "opal-server-darwin-x64.tar.gz",
   "linux-x64": "opal-server-linux-x64.tar.gz",
   "linux-arm64": "opal-server-linux-arm64.tar.gz",
   "win32-x64": "opal-server-win32-x64.tar.gz",

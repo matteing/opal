@@ -40,6 +40,9 @@ jobs:
           - runner: macos-14
             target: darwin-arm64
             tarball: opal-server-darwin-arm64.tar.gz
+          - runner: macos-15-intel
+            target: darwin-x64
+            tarball: opal-server-darwin-x64.tar.gz
           - runner: ubuntu-latest
             target: linux-x64
             tarball: opal-server-linux-x64.tar.gz
@@ -138,6 +141,7 @@ jobs:
           # OTP release tarballs
           mkdir -p cli/releases
           cp artifacts/opal-server-darwin-arm64.tar.gz/opal-server-darwin-arm64.tar.gz cli/releases/
+          cp artifacts/opal-server-darwin-x64.tar.gz/opal-server-darwin-x64.tar.gz     cli/releases/
           cp artifacts/opal-server-linux-x64.tar.gz/opal-server-linux-x64.tar.gz       cli/releases/
           cp artifacts/opal-server-linux-arm64.tar.gz/opal-server-linux-arm64.tar.gz   cli/releases/
           cp artifacts/opal-server-win32-x64.tar.gz/opal-server-win32-x64.tar.gz       cli/releases/
@@ -167,6 +171,7 @@ jobs:
           tag_name: v${{ needs.prepare.outputs.version }}
           files: |
             artifacts/opal-server-darwin-arm64.tar.gz/*
+            artifacts/opal-server-darwin-x64.tar.gz/*
             artifacts/opal-server-linux-x64.tar.gz/*
             artifacts/opal-server-linux-arm64.tar.gz/*
             artifacts/opal-server-win32-x64.tar.gz/*
