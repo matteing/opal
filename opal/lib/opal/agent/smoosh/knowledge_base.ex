@@ -4,7 +4,8 @@ defmodule Opal.Agent.Smoosh.KnowledgeBase do
 
   Dual-table design: Porter-stemmed index for natural language queries,
   trigram index for substring/partial matches. BM25 ranking with
-  title-boosted weights. Two-layer fallback search with fuzzy planned.
+  title-boosted weights. Three-layer fallback search: Porter → Trigram →
+  Fuzzy (Levenshtein correction against vocabulary).
 
   ## Process lifecycle
 
@@ -23,6 +24,17 @@ defmodule Opal.Agent.Smoosh.KnowledgeBase do
   alias Opal.Agent.Smoosh.Chunker
 
   require Logger
+
+  @stopwords MapSet.new(~w[
+    the and for are but not you all can had her was one our out has his how
+    its may new now old see way who did get got let say she too use will with
+    this that from they been have many some them than each make like just over
+    such take into year your good could would about which their there other
+    after should through also more most only very when what then these those
+    being does done both same still while where here were much
+    update updates updated deps dev tests test add added fix fixed run
+    running using
+  ])
 
   defstruct [:db, :session_id, :stmts, :source_count]
 
@@ -83,7 +95,7 @@ defmodule Opal.Agent.Smoosh.KnowledgeBase do
     GenServer.call(pid, {:index, source_label, content, opts}, 30_000)
   end
 
-  @doc "Search with fallback: Porter AND → Porter OR → Trigram AND → Trigram OR."
+  @doc "Search with 3-layer fallback: Porter → Trigram → Fuzzy correction."
   @spec search(pid(), String.t(), keyword()) :: {:ok, [map()]}
   def search(pid, query, opts \\ []) do
     GenServer.call(pid, {:search, query, opts}, 10_000)
@@ -240,7 +252,7 @@ defmodule Opal.Agent.Smoosh.KnowledgeBase do
         (c <> " " <> t)
         |> String.downcase()
         |> String.split(~r/[^a-z0-9_]+/, trim: true)
-        |> Enum.filter(&(String.length(&1) >= 3))
+        |> Enum.filter(&(String.length(&1) >= 3 and &1 not in @stopwords))
       end)
       |> Enum.uniq()
 
@@ -263,48 +275,84 @@ defmodule Opal.Agent.Smoosh.KnowledgeBase do
     sanitized_and = sanitize_query(query, :and)
     sanitized_or = sanitize_query(query, :or)
 
-    # Layer 1: Porter AND
-    results =
-      execute_search(state.db, state.stmts.search_porter, sanitized_and, limit, source_filter)
+    porter = pick_search_stmt(state.stmts, :porter, source_filter)
+    trigram = pick_search_stmt(state.stmts, :trigram, source_filter)
 
-    # Layer 1b: Porter OR
+    # Layer 1: Porter AND → OR
+    results = execute_search(state.db, porter, sanitized_and, limit, source_filter)
+
     results =
       if results == [] do
-        execute_search(state.db, state.stmts.search_porter, sanitized_or, limit, source_filter)
+        execute_search(state.db, porter, sanitized_or, limit, source_filter)
       else
         results
       end
 
-    # Layer 2: Trigram AND
+    # Layer 2: Trigram AND → OR
     results =
       if results == [] do
-        execute_search(state.db, state.stmts.search_trigram, sanitized_and, limit, source_filter)
+        execute_search(state.db, trigram, sanitized_and, limit, source_filter)
       else
         results
       end
 
-    # Layer 2b: Trigram OR
     results =
       if results == [] do
-        execute_search(state.db, state.stmts.search_trigram, sanitized_or, limit, source_filter)
+        execute_search(state.db, trigram, sanitized_or, limit, source_filter)
       else
         results
       end
 
-    results
+    # Layer 3: Fuzzy correction → re-search Porter AND → OR, Trigram AND → OR
+    if results == [] do
+      case fuzzy_correct_query(state, query) do
+        nil ->
+          []
+
+        corrected ->
+          corrected_and = sanitize_query(corrected, :and)
+          corrected_or = sanitize_query(corrected, :or)
+
+          fuzzy_results = execute_search(state.db, porter, corrected_and, limit, source_filter)
+
+          fuzzy_results =
+            if fuzzy_results == [],
+              do: execute_search(state.db, porter, corrected_or, limit, source_filter),
+              else: fuzzy_results
+
+          fuzzy_results =
+            if fuzzy_results == [],
+              do: execute_search(state.db, trigram, corrected_and, limit, source_filter),
+              else: fuzzy_results
+
+          if fuzzy_results == [],
+            do: execute_search(state.db, trigram, corrected_or, limit, source_filter),
+            else: fuzzy_results
+      end
+    else
+      results
+    end
+  end
+
+  defp pick_search_stmt(stmts, :porter, nil), do: stmts.search_porter
+  defp pick_search_stmt(stmts, :porter, _), do: stmts.search_porter_filtered
+  defp pick_search_stmt(stmts, :trigram, nil), do: stmts.search_trigram
+  defp pick_search_stmt(stmts, :trigram, _), do: stmts.search_trigram_filtered
+
+  defp execute_search(_db, _stmt, "", _limit, _source_filter), do: []
+
+  defp execute_search(db, stmt, query, limit, nil) do
+    :ok = Sqlite3.bind(stmt, [query, limit])
+    rows = collect_search_rows(db, stmt)
+    :ok = Sqlite3.reset(stmt)
+    rows
   end
 
   defp execute_search(db, stmt, query, limit, source_filter) do
-    if query == "" do
-      []
-    else
-      :ok = Sqlite3.bind(stmt, [query, limit])
-      rows = collect_search_rows(db, stmt)
-      :ok = Sqlite3.reset(stmt)
-
-      rows
-      |> maybe_filter_source(source_filter)
-    end
+    :ok = Sqlite3.bind(stmt, [query, "%#{source_filter}%", limit])
+    rows = collect_search_rows(db, stmt)
+    :ok = Sqlite3.reset(stmt)
+    rows
   end
 
   defp collect_search_rows(db, stmt) do
@@ -326,14 +374,97 @@ defmodule Opal.Agent.Smoosh.KnowledgeBase do
     end
   end
 
-  defp maybe_filter_source(results, nil), do: results
-
-  defp maybe_filter_source(results, source) do
-    Enum.filter(results, &String.contains?(&1.source, source))
-  end
-
   defp parse_content_type("code"), do: :code
   defp parse_content_type(_), do: :prose
+
+  # ── Fuzzy Correction ──
+
+  # Correct a query by finding vocabulary words within Levenshtein edit distance.
+  @spec fuzzy_correct_query(t(), String.t()) :: String.t() | nil
+  defp fuzzy_correct_query(state, query) do
+    words =
+      query
+      |> String.downcase()
+      |> String.trim()
+      |> String.split(~r/\s+/)
+      |> Enum.filter(&(String.length(&1) >= 3))
+
+    if words == [] do
+      nil
+    else
+      corrected = Enum.map(words, &(fuzzy_correct_word(state, &1) || &1))
+
+      if corrected == words do
+        nil
+      else
+        Enum.join(corrected, " ")
+      end
+    end
+  end
+
+  defp fuzzy_correct_word(state, word) do
+    max_dist = max_edit_distance(String.length(word))
+    min_len = String.length(word) - max_dist
+    max_len = String.length(word) + max_dist
+
+    :ok = Sqlite3.bind(state.stmts.fuzzy_vocab, [min_len, max_len])
+    candidates = collect_column(state.db, state.stmts.fuzzy_vocab)
+    :ok = Sqlite3.reset(state.stmts.fuzzy_vocab)
+
+    {best_word, best_dist} =
+      Enum.reduce(candidates, {nil, max_dist + 1}, fn candidate, {bw, bd} ->
+        if candidate == word do
+          # Exact match — no correction needed
+          {nil, 0}
+        else
+          dist = levenshtein(word, candidate)
+          if dist < bd, do: {candidate, dist}, else: {bw, bd}
+        end
+      end)
+
+    # Exact match found (dist == 0) means no correction needed
+    if best_dist == 0, do: nil, else: if(best_dist <= max_dist, do: best_word, else: nil)
+  end
+
+  defp max_edit_distance(len) when len <= 4, do: 1
+  defp max_edit_distance(len) when len <= 12, do: 2
+  defp max_edit_distance(_), do: 3
+
+  @doc false
+  @spec levenshtein(String.t(), String.t()) :: non_neg_integer()
+  def levenshtein(a, b) do
+    a_chars = String.graphemes(a)
+    b_chars = String.graphemes(b)
+    a_len = length(a_chars)
+    b_len = length(b_chars)
+
+    cond do
+      a_len == 0 ->
+        b_len
+
+      b_len == 0 ->
+        a_len
+
+      true ->
+        prev = Enum.to_list(0..b_len)
+
+        {final_row, _} =
+          Enum.reduce(a_chars, {prev, 1}, fn a_ch, {prev_row, i} ->
+            row =
+              Enum.reduce(Enum.zip(b_chars, 1..b_len), [i], fn {b_ch, j}, acc ->
+                cost = if a_ch == b_ch, do: 0, else: 1
+                above = Enum.at(prev_row, j)
+                left = hd(acc)
+                diag = Enum.at(prev_row, j - 1)
+                [min(min(above + 1, left + 1), diag + cost) | acc]
+              end)
+
+            {Enum.reverse(row), i + 1}
+          end)
+
+        List.last(final_row)
+    end
+  end
 
   @doc false
   def sanitize_query(query, mode \\ :and) do
@@ -400,6 +531,18 @@ defmodule Opal.Agent.Smoosh.KnowledgeBase do
       LIMIT ?2
       """)
 
+    {:ok, search_porter_filtered} =
+      Sqlite3.prepare(db, """
+      SELECT c.title, c.content, c.content_type, s.label,
+             bm25(chunks, 2.0, 1.0) AS rank,
+             highlight(chunks, 1, char(2), char(3)) AS highlighted
+      FROM chunks c
+      JOIN sources s ON s.id = c.source_id
+      WHERE chunks MATCH ?1 AND s.label LIKE ?2
+      ORDER BY rank
+      LIMIT ?3
+      """)
+
     {:ok, search_trigram} =
       Sqlite3.prepare(db, """
       SELECT c.title, c.content, c.content_type, s.label,
@@ -410,6 +553,23 @@ defmodule Opal.Agent.Smoosh.KnowledgeBase do
       WHERE chunks_trigram MATCH ?1
       ORDER BY rank
       LIMIT ?2
+      """)
+
+    {:ok, search_trigram_filtered} =
+      Sqlite3.prepare(db, """
+      SELECT c.title, c.content, c.content_type, s.label,
+             bm25(chunks_trigram, 2.0, 1.0) AS rank,
+             highlight(chunks_trigram, 1, char(2), char(3)) AS highlighted
+      FROM chunks_trigram c
+      JOIN sources s ON s.id = c.source_id
+      WHERE chunks_trigram MATCH ?1 AND s.label LIKE ?2
+      ORDER BY rank
+      LIMIT ?3
+      """)
+
+    {:ok, fuzzy_vocab} =
+      Sqlite3.prepare(db, """
+      SELECT word FROM vocabulary WHERE length(word) BETWEEN ?1 AND ?2
       """)
 
     {:ok, insert_source} =
@@ -432,7 +592,10 @@ defmodule Opal.Agent.Smoosh.KnowledgeBase do
 
     %{
       search_porter: search_porter,
+      search_porter_filtered: search_porter_filtered,
       search_trigram: search_trigram,
+      search_trigram_filtered: search_trigram_filtered,
+      fuzzy_vocab: fuzzy_vocab,
       insert_source: insert_source,
       insert_porter: insert_porter,
       insert_trigram: insert_trigram

@@ -19,7 +19,7 @@ import { OverlayPanel, Indicator } from "./overlay-panel.js";
 
 // ── Types ────────────────────────────────────────────────────
 
-type FeatureKey = "subAgents" | "skills" | "debug";
+type FeatureKey = "subAgents" | "skills" | "debug" | "smoosh";
 type Section = "features" | "tools";
 
 interface MenuItem {
@@ -33,9 +33,10 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   subAgents: "Sub-agents",
   skills: "Skills",
   debug: "Debug introspection",
+  smoosh: "Smoosh compression",
 };
 
-const FEATURE_KEYS: FeatureKey[] = ["subAgents", "skills", "debug"];
+const FEATURE_KEYS: FeatureKey[] = ["subAgents", "skills", "debug", "smoosh"];
 
 const SECTIONS: { key: Section; heading: string }[] = [
   { key: "features", heading: "Features" },

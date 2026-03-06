@@ -538,7 +538,8 @@ defmodule Opal.RPC.Server do
   @feature_keys %{
     "sub_agents" => :sub_agents,
     "skills" => :skills,
-    "debug" => :debug
+    "debug" => :debug,
+    "smoosh" => :smoosh
   }
 
   defp parse_features(nil), do: {:ok, nil}
@@ -609,7 +610,8 @@ defmodule Opal.RPC.Server do
       features: %{
         sub_agents: state.config.features.sub_agents.enabled,
         skills: state.config.features.skills.enabled,
-        debug: state.config.features.debug.enabled
+        debug: state.config.features.debug.enabled,
+        smoosh: state.config.features.smoosh.enabled
       },
       tools: %{
         all: Enum.map(state.tools, & &1.name()),
@@ -701,6 +703,12 @@ defmodule Opal.RPC.Server do
     do: {"skill_loaded", %{name: name, description: desc}}
 
   defp serialize_event({:usage_update, usage}), do: {"usage_update", %{usage: usage}}
+
+  defp serialize_event({:smoosh_compress, data}),
+    do: {"smoosh_compress", data}
+
+  defp serialize_event({:smoosh_index, data}),
+    do: {"smoosh_index", data}
 
   defp serialize_event({:agent_end, _messages}), do: {"agent_end", %{}}
   defp serialize_event({:agent_end, _messages, usage}), do: {"agent_end", %{usage: usage}}

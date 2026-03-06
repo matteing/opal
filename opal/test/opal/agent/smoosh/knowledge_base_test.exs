@@ -134,6 +134,18 @@ defmodule Opal.Agent.Smoosh.KnowledgeBaseTest do
       {:ok, results} = KnowledgeBase.search(pid, "token_ttl")
       assert length(results) > 0
     end
+
+    test "fuzzy correction finds misspelled terms", %{pid: pid} do
+      # "authenticaton" (missing 'i') should fuzzy-correct to "authentication"
+      {:ok, results} = KnowledgeBase.search(pid, "authenticaton")
+      assert length(results) > 0
+      assert Enum.any?(results, &String.contains?(&1.content, "login"))
+    end
+
+    test "fuzzy correction returns nothing when no close match", %{pid: pid} do
+      {:ok, results} = KnowledgeBase.search(pid, "zzzzxyzzy")
+      assert results == []
+    end
   end
 
   describe "list_sources/1" do
@@ -170,6 +182,49 @@ defmodule Opal.Agent.Smoosh.KnowledgeBaseTest do
 
     test "strips special characters" do
       assert KnowledgeBase.sanitize_query("test's (value)") == ~s|"test" "s" "value"|
+    end
+  end
+
+  describe "levenshtein/2" do
+    test "identical strings have distance 0" do
+      assert KnowledgeBase.levenshtein("hello", "hello") == 0
+    end
+
+    test "empty vs non-empty" do
+      assert KnowledgeBase.levenshtein("", "abc") == 3
+      assert KnowledgeBase.levenshtein("abc", "") == 3
+    end
+
+    test "single substitution" do
+      assert KnowledgeBase.levenshtein("cat", "bat") == 1
+    end
+
+    test "single insertion" do
+      assert KnowledgeBase.levenshtein("cat", "cats") == 1
+    end
+
+    test "single deletion" do
+      assert KnowledgeBase.levenshtein("cats", "cat") == 1
+    end
+
+    test "multiple edits" do
+      assert KnowledgeBase.levenshtein("kitten", "sitting") == 3
+    end
+  end
+
+  describe "stopwords" do
+    test "common words are excluded from vocabulary", %{pid: pid} do
+      KnowledgeBase.index(
+        pid,
+        "stopword_test",
+        "the quick brown fox and the lazy dog with very much running"
+      )
+
+      # "the", "and", "with", "very", "much", "running" are stopwords
+      # "quick", "brown", "fox", "lazy", "dog" should be in vocabulary
+      # Search for a non-stopword should work
+      {:ok, results} = KnowledgeBase.search(pid, "quick brown fox")
+      assert length(results) > 0
     end
   end
 end

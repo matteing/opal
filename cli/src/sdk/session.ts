@@ -453,6 +453,7 @@ export async function createSession(opts: SessionOptions = {}): Promise<Session>
             skills: false,
             subAgents: false,
             debug: false,
+            smoosh: false,
             ...opts.features,
           },
         }

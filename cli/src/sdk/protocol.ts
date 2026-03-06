@@ -104,7 +104,12 @@ export type OpalConfigGetResult = {
   /** Erlang distribution info if active (node name and cookie), or null if not distributed. */
   distribution: { cookie: string; node: string } | null;
   /** Current runtime feature flags. */
-  features: { debug: boolean; skills: boolean; subAgents: boolean };
+  features: {
+    debug: boolean;
+    skills: boolean;
+    smoosh: boolean;
+    subAgents: boolean;
+  };
   /** Tool availability for the session. */
   tools: { all: string[]; disabled: string[]; enabled: string[] };
 };
@@ -113,7 +118,12 @@ export type OpalConfigSetParams = {
   /** Start or stop Erlang distribution. Pass {name, cookie?} to start, null to stop. */
   distribution?: { cookie?: string; name: string } | null;
   /** Feature flags to update. */
-  features?: { debug: boolean; skills: boolean; subAgents: boolean };
+  features?: {
+    debug: boolean;
+    skills: boolean;
+    smoosh: boolean;
+    subAgents: boolean;
+  };
   /** Target session ID. */
   sessionId: string;
   /** Exact list of enabled tool names. */
@@ -124,7 +134,12 @@ export type OpalConfigSetResult = {
   /** Erlang distribution info if active (node name and cookie), or null if not distributed. */
   distribution: { cookie: string; node: string } | null;
   /** Current runtime feature flags. */
-  features: { debug: boolean; skills: boolean; subAgents: boolean };
+  features: {
+    debug: boolean;
+    skills: boolean;
+    smoosh: boolean;
+    subAgents: boolean;
+  };
   /** Tool availability for the session. */
   tools: { all: string[]; disabled: string[]; enabled: string[] };
 };
@@ -189,7 +204,12 @@ export type SessionListResult = {
 
 export type SessionStartParams = {
   /** Boot-time feature toggles. */
-  features?: { debug: boolean; skills: boolean; subAgents: boolean };
+  features?: {
+    debug: boolean;
+    skills: boolean;
+    smoosh: boolean;
+    subAgents: boolean;
+  };
   /** Model to use. Defaults to config default. */
   model?: { id: string; provider: string; thinkingLevel?: string };
   /** If true, enable session persistence. */
@@ -379,6 +399,26 @@ export type SkillLoadedEvent = {
   name: string;
 };
 
+export type SmooshCompressEvent = {
+  /** Event type discriminator. */
+  readonly type: "smooshCompress";
+  /** Compressed output size in bytes. */
+  compressedBytes: number;
+  /** Original output size in bytes. */
+  rawBytes: number;
+  /** Tool that produced the output. */
+  tool: string;
+};
+
+export type SmooshIndexEvent = {
+  /** Event type discriminator. */
+  readonly type: "smooshIndex";
+  /** Original output size in bytes. */
+  rawBytes: number;
+  /** Tool that produced the output. */
+  tool: string;
+};
+
 export type StatusUpdateEvent = {
   /** Event type discriminator. */
   readonly type: "statusUpdate";
@@ -476,6 +516,8 @@ export type AgentEvent =
   | MessageQueuedEvent
   | MessageStartEvent
   | SkillLoadedEvent
+  | SmooshCompressEvent
+  | SmooshIndexEvent
   | StatusUpdateEvent
   | SubAgentEventEvent
   | ThinkingDeltaEvent
