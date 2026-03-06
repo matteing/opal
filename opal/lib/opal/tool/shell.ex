@@ -145,6 +145,7 @@ defmodule Opal.Tool.Shell do
     case Opal.Shell.Process.wait(id, wait_ms) do
       {:completed, output, status} -> format_completed(output, status)
       {:running, output} -> {:ok, format_still_running(id, output)}
+      {:hard_timeout, output} -> {:error, format_hard_timeout(id, output)}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -153,6 +154,7 @@ defmodule Opal.Tool.Shell do
     case Opal.Shell.Process.input(id, text, @default_wait) do
       {:completed, output, status} -> format_completed(output, status)
       {:running, output} -> {:ok, format_still_running(id, output)}
+      {:hard_timeout, output} -> {:error, format_hard_timeout(id, output)}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -197,6 +199,7 @@ defmodule Opal.Tool.Shell do
         case Opal.Shell.Process.run(exec_path, shell_args, port_opts, wait_ms, emit) do
           {:completed, output, status} -> format_completed(output, status)
           {:running, id, output} -> {:ok, format_still_running(id, output)}
+          {:hard_timeout, id, output} -> {:error, format_hard_timeout(id, output)}
         end
     end
   end
@@ -227,6 +230,16 @@ defmodule Opal.Tool.Shell do
 
   defp format_completed(output, status),
     do: {:error, "Command exited with status #{status}\n#{truncate_output(output)}"}
+
+  defp format_hard_timeout(id, output) do
+    max_ms = Application.get_env(:opal, :shell_max_lifetime, 600_000)
+    minutes = div(max_ms, 60_000)
+
+    "[Process #{id} killed — exceeded maximum lifetime of #{minutes} minutes]\n" <>
+      truncate_output(output) <>
+      "\n\nThe command was automatically terminated. " <>
+      "If it needs more time, break it into smaller steps."
+  end
 
   defp format_still_running(id, output) do
     truncated = truncate_output(output)

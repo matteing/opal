@@ -145,6 +145,23 @@ defmodule Opal.Tool.ShellTest do
       [_, id] = Regex.run(~r/id: "([^"]+)"/, msg)
       Shell.execute(%{"action" => "kill", "id" => id}, ctx)
     end
+
+    test "hard timeout kills process after max lifetime", %{tmp_dir: tmp_dir} do
+      prev = Application.get_env(:opal, :shell_max_lifetime)
+      Application.put_env(:opal, :shell_max_lifetime, 200)
+
+      on_exit(fn ->
+        if prev,
+          do: Application.put_env(:opal, :shell_max_lifetime, prev),
+          else: Application.delete_env(:opal, :shell_max_lifetime)
+      end)
+
+      ctx = %{working_dir: tmp_dir}
+      # Long soft timeout (30s) but very short hard timeout (200ms)
+      assert {:error, msg} = Shell.execute(%{"command" => "sleep 60", "timeout" => 30_000}, ctx)
+      assert msg =~ "exceeded maximum lifetime"
+      assert msg =~ "automatically terminated"
+    end
   end
 
   describe "execute/2 with streaming" do

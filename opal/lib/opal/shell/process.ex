@@ -4,12 +4,20 @@ defmodule Opal.Shell.Process do
 
   Each running command gets an ID. The tool can start, wait, send input,
   or kill a process by ID. Output is buffered and returned at checkpoints.
+
+  ## Hard timeout
+
+  Every process has a hard lifetime ceiling (default 10 minutes, configurable
+  via `:shell_max_lifetime` in the `:opal` app env). When this ceiling is
+  reached the process is killed automatically — a safety net against runaway
+  commands that the agent never terminates.
   """
 
   use GenServer
   require Logger
 
   @max_buffer_bytes 256 * 1024
+  @default_max_lifetime :timer.minutes(10)
 
   defstruct [
     :id,
@@ -17,6 +25,7 @@ defmodule Opal.Shell.Process do
     :os_pid,
     :command,
     :started_at,
+    :hard_timeout_ref,
     buffer: [],
     buffer_bytes: 0,
     exit_status: nil,
@@ -34,21 +43,29 @@ defmodule Opal.Shell.Process do
 
   @doc "Starts a command and blocks up to `wait_ms`. Returns output or a handle."
   @spec run(String.t(), [String.t()], keyword(), pos_integer(), function() | nil) ::
-          {:completed, String.t(), integer()} | {:running, String.t(), String.t()}
+          {:completed, String.t(), integer()}
+          | {:running, String.t(), String.t()}
+          | {:hard_timeout, String.t(), String.t()}
   def run(executable, args, port_opts, wait_ms, emit) do
     GenServer.call(__MODULE__, {:run, executable, args, port_opts, wait_ms, emit}, :infinity)
   end
 
   @doc "Waits on a running command for up to `wait_ms`."
   @spec wait(String.t(), pos_integer()) ::
-          {:completed, String.t(), integer()} | {:running, String.t()} | {:error, String.t()}
+          {:completed, String.t(), integer()}
+          | {:running, String.t()}
+          | {:hard_timeout, String.t()}
+          | {:error, String.t()}
   def wait(id, wait_ms) do
     GenServer.call(__MODULE__, {:wait, id, wait_ms}, :infinity)
   end
 
   @doc "Sends input to a running command's stdin, then waits."
   @spec input(String.t(), String.t(), pos_integer()) ::
-          {:completed, String.t(), integer()} | {:running, String.t()} | {:error, String.t()}
+          {:completed, String.t(), integer()}
+          | {:running, String.t()}
+          | {:hard_timeout, String.t()}
+          | {:error, String.t()}
   def input(id, text, wait_ms) do
     GenServer.call(__MODULE__, {:input, id, text, wait_ms}, :infinity)
   end
@@ -89,12 +106,16 @@ defmodule Opal.Shell.Process do
         _ -> nil
       end
 
+    max_lifetime = Application.get_env(:opal, :shell_max_lifetime, @default_max_lifetime)
+    hard_ref = Process.send_after(self(), {:hard_timeout, id}, max_lifetime)
+
     proc = %__MODULE__{
       id: id,
       port: port,
       os_pid: os_pid,
       command: Enum.join([Path.basename(executable) | args], " "),
       started_at: DateTime.utc_now(),
+      hard_timeout_ref: hard_ref,
       waiters: [{from, wait_ms, emit, System.monotonic_time(:millisecond), :run}]
     }
 
@@ -159,6 +180,7 @@ defmodule Opal.Shell.Process do
         {:reply, {:error, "No running command with id: #{id}"}, state}
 
       proc ->
+        if proc.hard_timeout_ref, do: Process.cancel_timer(proc.hard_timeout_ref)
         kill_process(proc)
         output = drain_buffer(proc)
         state = remove_process(state, id)
@@ -192,6 +214,7 @@ defmodule Opal.Shell.Process do
   def handle_info({port, {:exit_status, status}}, state) when is_port(port) do
     case find_by_port(state, port) do
       {id, proc} ->
+        if proc.hard_timeout_ref, do: Process.cancel_timer(proc.hard_timeout_ref)
         proc = %{proc | exit_status: status}
         output = drain_buffer(proc)
 
@@ -255,6 +278,34 @@ defmodule Opal.Shell.Process do
           state = put_in(state, [:processes, id], proc)
           {:noreply, state}
         end
+    end
+  end
+
+  def handle_info({:hard_timeout, id}, state) do
+    case get_in(state, [:processes, id]) do
+      nil ->
+        {:noreply, state}
+
+      %{exit_status: status} when not is_nil(status) ->
+        {:noreply, state}
+
+      proc ->
+        Logger.warning(
+          "Shell process #{id} killed: exceeded max lifetime (#{inspect(proc.command)})"
+        )
+
+        kill_process(proc)
+        output = drain_buffer(proc)
+
+        for {from, _wait, _emit, _start, origin} <- proc.waiters do
+          case origin do
+            :run -> GenServer.reply(from, {:hard_timeout, id, output})
+            :wait -> GenServer.reply(from, {:hard_timeout, output})
+          end
+        end
+
+        state = remove_process(state, id)
+        {:noreply, state}
     end
   end
 
