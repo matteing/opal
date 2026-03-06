@@ -388,6 +388,7 @@ defmodule Opal.Tool.Tasks do
           ensure_counter(table)
           fun.(table)
         after
+          :dets.sync(table)
           :dets.close(table)
         end
 
