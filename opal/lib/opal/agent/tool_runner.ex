@@ -43,6 +43,9 @@ defmodule Opal.Agent.ToolRunner do
   end
 
   def collect_result(ref, tc, result, %State{} = state) do
+    tool_mod = find_tool(tc.name, active_tools(state))
+    {result, state} = Opal.Agent.Smoosh.maybe_compress(tool_mod, result, state)
+
     Emitter.broadcast(state, {:tool_execution_end, tc.name, tc.call_id, result})
 
     state = %{

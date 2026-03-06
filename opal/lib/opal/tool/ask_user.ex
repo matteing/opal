@@ -54,6 +54,9 @@ defmodule Opal.Tool.AskUser do
   end
 
   @impl true
+  def smoosh, do: :skip
+
+  @impl true
   @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
   def execute(args, context) when is_map(args) do
     with {:ok, opts} <-

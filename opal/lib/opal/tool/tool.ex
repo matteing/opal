@@ -109,7 +109,21 @@ defmodule Opal.Tool do
   @callback execute(args :: map(), context :: map()) ::
               {:ok, String.t()} | {:error, String.t()} | {:effect, term()}
 
-  @optional_callbacks [meta: 1, description: 1]
+  @doc """
+  Declares the tool's compression policy for Smoosh.
+
+  Optional callback. When not implemented, defaults to `:auto` (compressed
+  only when output exceeds the size threshold).
+
+    * `:auto` — compress if output exceeds `config.features.smoosh.threshold_bytes`
+    * `:skip` — never compress (use for code-critical tools like `read_file`)
+    * `:always` — always compress regardless of size
+
+  See `Opal.Agent.Smoosh` for full policy details.
+  """
+  @callback smoosh() :: :auto | :skip | :always
+
+  @optional_callbacks [meta: 1, description: 1, smoosh: 0]
 
   @doc """
   Returns the tool description, enriched with context when supported.
