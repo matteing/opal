@@ -147,9 +147,9 @@ defmodule Opal.Agent.SmooshTest do
   # ── Features integration ────────────────────────────────────────────
 
   describe "Config.Features smoosh" do
-    test "smoosh disabled by default" do
+    test "smoosh enabled by default" do
       f = Opal.Config.Features.new(%{})
-      assert f.smoosh.enabled == false
+      assert f.smoosh.enabled == true
     end
 
     test "smoosh can be enabled" do

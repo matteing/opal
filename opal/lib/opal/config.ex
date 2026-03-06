@@ -99,7 +99,7 @@ defmodule Opal.Config.Features do
             skills: %{enabled: true, extra_dirs: []},
             debug: %{enabled: false},
             smoosh: %{
-              enabled: false,
+              enabled: true,
               threshold_bytes: 4_096,
               hard_limit_bytes: 102_400,
               compressor_model: nil,
