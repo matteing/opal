@@ -250,7 +250,7 @@ function reduceView(view: ViewFields, event: Record<string, unknown>): ViewField
           ...view.entries,
           {
             kind: "status",
-            text: `⊜ Compressed ${e.tool} output (${formatBytes(e.rawBytes)} → ${formatBytes(e.compressedBytes)}, ${ratio}% reduction)`,
+            text: `Compressed ${e.tool} output (${formatBytes(e.rawBytes)} → ${formatBytes(e.compressedBytes)}, ${ratio}% reduction)`,
             level: "info" as StatusLevel,
           },
         ],
@@ -266,7 +266,7 @@ function reduceView(view: ViewFields, event: Record<string, unknown>): ViewField
           ...view.entries,
           {
             kind: "status",
-            text: `⊜ Indexed ${e.tool} output (${formatBytes(e.rawBytes)}) into knowledge base`,
+            text: `Indexed ${e.tool} output (${formatBytes(e.rawBytes)}) into knowledge base`,
             level: "info" as StatusLevel,
           },
         ],

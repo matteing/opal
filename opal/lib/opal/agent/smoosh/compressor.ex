@@ -69,14 +69,34 @@ defmodule Opal.Agent.Smoosh.Compressor do
     """
   end
 
-  # Prefer the cheapest model available. If a compressor_model is configured,
-  # use that. Otherwise inherit the parent's model — in the future we can
-  # add haiku-class auto-selection here.
+  # Pick the fastest model in the same family. If a compressor_model is
+  # explicitly configured, use that. Otherwise downshift to the cheapest
+  # variant in the same provider family (e.g. sonnet → haiku, gpt-5 → gpt-4o-mini).
   defp pick_model(%State{config: %{features: %{smoosh: %{compressor_model: nil}}}} = state) do
-    state.model
+    fast_variant(state.model)
   end
 
   defp pick_model(%State{config: %{features: %{smoosh: %{compressor_model: model}}}}) do
     Opal.Provider.Model.coerce(model)
+  end
+
+  @fast_variants %{
+    "claude-opus" => "claude-haiku-4.5",
+    "claude-sonnet" => "claude-haiku-4.5",
+    "claude-haiku" => nil,
+    "gpt-5" => "gpt-4o-mini",
+    "gpt-4o" => "gpt-4o-mini",
+    "gpt-4o-mini" => nil,
+    "o3" => "gpt-4o-mini",
+    "o4" => "gpt-4o-mini",
+    "gemini" => nil
+  }
+
+  defp fast_variant(%Opal.Provider.Model{id: id} = model) do
+    case Enum.find(@fast_variants, fn {prefix, _} -> String.starts_with?(id, prefix) end) do
+      {_, nil} -> model
+      {_, fast_id} -> Opal.Provider.Model.coerce(fast_id)
+      nil -> model
+    end
   end
 end
