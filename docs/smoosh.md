@@ -1,28 +1,74 @@
-# Smoosh
+# Smoosh!
 
 > **Status**: Implemented
 > **Scope**: `Opal.Agent.Smoosh.*`, `Opal.Tool.KbSearch`, `Opal.Agent.ToolRunner`
 
-## How It Works (Plain English)
+## The Algorithm at a Glance
 
-Every time an agent calls a tool — like running a shell command or searching
-files — the tool returns raw output. Some outputs are small (a 50-byte grep
-result), but others are huge (a 60 KB `gh issue list` dump). Left unchecked,
-these large outputs eat through the context window. After 30 minutes, 40% of a
-200K window can be gone.
+Smoosh is a tool output compressor that keeps the agent's context window lean.
+Here's what happens every time a tool returns output, and the jargon involved:
 
-**Smoosh** sits at the exit of every tool call and decides what to do with the
-output before it enters the conversation:
+### Step 1: Should we compress this?
 
-1. **Small output?** Pass it through untouched.
-2. **Medium output?** Compress it — a cheap sub-agent summarizes the key
-   information into a fraction of the original size.
-3. **Huge output?** Index it — store the full text in a per-session SQLite
-   search database. The agent gets a short summary and can search the full
-   data later with `kb_search`.
+Each tool declares a policy (`:skip`, `:always`, or `:auto`). File reads and
+grep are `:skip` — the agent needs exact text. Shell output is `:auto`, meaning
+Smoosh decides by size: under 4 KB passes through, 4–100 KB gets compressed,
+over 100 KB gets indexed.
 
-Code-related tools (file reads, edits, grep) are marked `:skip` — their output
-is never compressed because the agent needs exact content for code tasks.
+### Step 2a: Compression (medium outputs)
+
+A child agent with no tools reads the raw output and writes a structured
+summary. The raw text never enters the parent agent's context — only the
+summary does. Think of it as having an assistant read a 50-page report and hand
+you a one-page brief.
+
+### Step 2b: Indexing (huge outputs)
+
+The raw text is split into small chunks (~4 KB each) and stored in a search
+database. The agent gets a short "indexed, use kb_search to query" message
+instead of the full output.
+
+The search database uses **FTS5** and **BM25** — here's what those mean:
+
+- **FTS5** (Full-Text Search 5) is a SQLite extension that builds an inverted
+  index over text. Instead of scanning every document for your search term, it
+  maintains a lookup table: word → list of documents containing it. Like the
+  index at the back of a textbook, but automatic.
+
+- **BM25** (Best Match 25) is a ranking formula. When your search matches
+  multiple chunks, BM25 scores each one by: how rare the search terms are (rare
+  terms = more relevant), how many times they appear, and how long the chunk is
+  (shorter chunks with your term score higher). It's the same algorithm behind
+  search engines. We weight title matches 2× over body matches.
+
+### Step 3: Three-layer search fallback
+
+When the agent searches with `kb_search`, the query cascades through three
+layers until results are found:
+
+| Layer | What it does | Example |
+| ----- | ------------ | ------- |
+| **Porter stemming** | Reduces words to roots. Matches inflections. | "running" matches "run", "runner", "runs" |
+| **Trigram** | Matches any 3-character substring. Finds partial identifiers. | "auth" matches "authentication", "OAuth" |
+| **Fuzzy correction** | Fixes typos using Levenshtein distance against a vocabulary table. | "authenticaton" corrects to "authentication" |
+
+Each layer tries AND mode first (all terms must match), then OR mode (any term
+matches). This gives 6 attempts total before returning empty.
+
+**Levenshtein distance** counts the minimum single-character edits (insert,
+delete, substitute) to transform one word into another. "cat" → "bat" is
+distance 1. We allow 1 edit for short words (≤4 chars), 2 for medium (≤12),
+3 for long.
+
+**Stopwords** — common words like "the", "and", "with" — are filtered out of
+the vocabulary table so fuzzy correction doesn't waste time comparing your
+technical query against noise.
+
+### The net effect
+
+A 56 KB Playwright snapshot becomes a 300-byte summary. Twenty GitHub issues
+(59 KB) become a 1 KB digest. The full data stays searchable via `kb_search`.
+Context usage drops 90–99%, extending sessions from ~30 minutes to ~3 hours.
 
 ### How is this different from Compaction?
 
@@ -161,14 +207,22 @@ CREATE TABLE vocabulary (word TEXT PRIMARY KEY);
 **BM25 ranking:** Queries use `bm25(chunks, 2.0, 1.0)` — title matches weighted
 2× over content matches.
 
-**Search fallback (4 layers):**
+**Search — 3-layer fallback (6 attempts):**
 
-| Layer | Strategy     | When used |
-| ----- | ------------ | --------- |
-| 1     | Porter AND   | Default — stemmed matching ("running" → "run") |
-| 1b    | Porter OR    | Fallback when AND finds nothing |
-| 2     | Trigram AND  | Substring/partial identifier matching |
-| 2b    | Trigram OR   | Last resort broad match |
+| Layer | Strategy | Mode | When used |
+| ----- | -------- | ---- | --------- |
+| 1a    | Porter   | AND  | Default — stemmed matching ("running" → "run") |
+| 1b    | Porter   | OR   | Fallback when AND finds nothing |
+| 2a    | Trigram  | AND  | Substring/partial identifier matching |
+| 2b    | Trigram  | OR   | Broader substring match |
+| 3a–3d | Fuzzy    | AND/OR | Levenshtein-correct misspelled terms, re-search Porter then Trigram |
+
+Source filtering uses SQL-level `LIKE` via dedicated prepared statements
+(`search_porter_filtered`, `search_trigram_filtered`) rather than post-query
+filtering, for efficiency on large knowledge bases.
+
+**Stopwords:** Common English words are excluded from vocabulary extraction,
+keeping the fuzzy correction vocabulary clean and fast.
 
 **Dedup:** Re-indexing the same source label deletes previous chunks in a
 transaction before inserting new ones.
@@ -222,6 +276,21 @@ Opal.Config.new(%{
 
 Boolean shorthand `smoosh: true` enables with defaults. Map form allows
 overriding individual settings.
+
+### Prepared Statements
+
+The knowledge base caches 8 prepared statements at init:
+
+| Statement | Purpose |
+| --------- | ------- |
+| `search_porter` | BM25 search on Porter-stemmed index |
+| `search_porter_filtered` | Same, with `AND s.label LIKE ?` source filter |
+| `search_trigram` | BM25 search on trigram index |
+| `search_trigram_filtered` | Same, with source filter |
+| `fuzzy_vocab` | Vocabulary lookup by word length range (for Levenshtein) |
+| `insert_source` | Insert source metadata |
+| `insert_porter` | Insert chunk into Porter FTS5 table |
+| `insert_trigram` | Insert chunk into trigram FTS5 table |
 
 ### exqlite Dependency
 
@@ -301,7 +370,7 @@ automatically when the session ends.
 | `opal/lib/opal/agent/smoosh/smoosh.ex` | New | Core: classify + maybe_compress |
 | `opal/lib/opal/agent/smoosh/compressor.ex` | New | Sub-agent compression wrapper |
 | `opal/lib/opal/agent/smoosh/chunker.ex` | New | Content splitting for FTS5 |
-| `opal/lib/opal/agent/smoosh/knowledge_base.ex` | New | SQLite FTS5 GenServer |
+| `opal/lib/opal/agent/smoosh/knowledge_base.ex` | New | SQLite FTS5 GenServer + 3-layer search + fuzzy correction |
 | `opal/lib/opal/tool/kb_search.ex` | New | Search tool |
 | `opal/lib/opal/tool/tool.ex` | Modified | `smoosh/0` optional callback |
 | `opal/lib/opal/config.ex` | Modified | `smoosh:` feature flag |
@@ -339,6 +408,11 @@ The compiler will flag any remaining references as warnings.
 - [Context Mode](https://mksg.lu/blog/context-mode) — reference implementation
   by Mustafa Kılıç (mksglu/claude-context-mode). Source of the FTS5 dual-table
   design, BM25 weights, and 3-layer search architecture.
+- [context-mode SKILL.md](https://github.com/mksglu/context-mode/blob/main/skills/context-mode/SKILL.md) — skill definition with intent-driven search, sandboxed execution, and configuration details.
+- [context-mode source](https://github.com/mksglu/context-mode) — TypeScript implementation: `store.ts` (FTS5 schema), `executor.ts` (sandboxed eval), `truncate.ts` (smart truncation).
+- [BM25 (Okapi)](https://en.wikipedia.org/wiki/Okapi_BM25) — the ranking function used by FTS5. Balances term frequency, inverse document frequency, and document length normalization.
+- [Levenshtein distance](https://en.wikipedia.org/wiki/Levenshtein_distance) — edit distance metric used in the fuzzy correction layer.
+- [Porter stemming](https://tartarus.org/martin/PorterStemmer/) — the stemming algorithm used by FTS5's built-in Porter tokenizer to reduce words to roots.
 - [exqlite](https://github.com/elixir-sqlite/exqlite) — SQLite3 NIF for Elixir.
 - [SQLite FTS5](https://www.sqlite.org/fts5.html) — full-text search extension.
 - [Compaction](compaction.md) — complementary system for summarizing old messages.
