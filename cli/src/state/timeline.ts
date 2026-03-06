@@ -245,11 +245,12 @@ function reduceView(view: ViewFields, event: Record<string, unknown>): ViewField
       const ratio = ((1 - e.compressedBytes / e.rawBytes) * 100).toFixed(0);
       return {
         ...view,
+        statusMessage: null,
         entries: [
           ...view.entries,
           {
             kind: "status",
-            text: `⊜ Smoosh: compressed ${e.tool} output (${formatBytes(e.rawBytes)} → ${formatBytes(e.compressedBytes)}, ${ratio}% reduction)`,
+            text: `⊜ Compressed ${e.tool} output (${formatBytes(e.rawBytes)} → ${formatBytes(e.compressedBytes)}, ${ratio}% reduction)`,
             level: "info" as StatusLevel,
           },
         ],
@@ -260,11 +261,12 @@ function reduceView(view: ViewFields, event: Record<string, unknown>): ViewField
       const e = event as unknown as SmooshIndexEvent;
       return {
         ...view,
+        statusMessage: null,
         entries: [
           ...view.entries,
           {
             kind: "status",
-            text: `⊜ Smoosh: indexed ${e.tool} output (${formatBytes(e.rawBytes)}) into knowledge base`,
+            text: `⊜ Indexed ${e.tool} output (${formatBytes(e.rawBytes)}) into knowledge base`,
             level: "info" as StatusLevel,
           },
         ],
@@ -316,6 +318,8 @@ export function applyEvent(state: TimelineSnapshot, event: AgentEvent): Timeline
     case "toolExecutionEnd":
     case "toolOutput":
     case "statusUpdate":
+    case "smooshCompress":
+    case "smooshIndex":
       return {
         ...state,
         agents: reduceAgentView(

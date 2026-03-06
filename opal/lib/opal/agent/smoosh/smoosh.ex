@@ -58,6 +58,8 @@ defmodule Opal.Agent.Smoosh do
         {result, state}
 
       :compress ->
+        Emitter.broadcast(state, {:status_update, "Smooshing #{tool_mod.name()} output…"})
+
         case Opal.Agent.Smoosh.Compressor.compress(raw_output, tool_mod.name(), state) do
           {:ok, compressed} ->
             Emitter.broadcast(state, smoosh_event(tool_mod.name(), raw_output, compressed))
@@ -69,6 +71,8 @@ defmodule Opal.Agent.Smoosh do
         end
 
       :index_only ->
+        Emitter.broadcast(state, {:status_update, "Indexing #{tool_mod.name()} output…"})
+
         case ensure_and_index(tool_mod, raw_output, state) do
           {:ok, summary} ->
             Emitter.broadcast(state, smoosh_index_event(tool_mod.name(), raw_output))
