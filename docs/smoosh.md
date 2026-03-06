@@ -151,6 +151,11 @@ Spawns a lightweight sub-agent (no tools, pure summarization) to compress output
 Uses `Spawner.spawn_from_state/2` with a 30-second timeout. The sub-agent runs
 in its own context so the raw output never pollutes the parent agent's window.
 
+**Model selection:** The compressor automatically downshifts to the fastest model
+in the same provider family — e.g. if the parent runs `claude-sonnet-4`, the
+compressor uses `claude-haiku-4.5`. This keeps compression cheap and fast. You
+can override this with the `compressor_model` config key.
+
 ### Chunker (`Opal.Agent.Smoosh.Chunker`)
 
 **File:** `opal/lib/opal/agent/smoosh/chunker.ex`
@@ -255,7 +260,7 @@ When `kb_search` is active, this guideline is injected:
 ### Feature Flag
 
 ```elixir
-# Enable smoosh (disabled by default):
+# Enable smoosh (enabled by default):
 Opal.Config.new(%{
   features: %{smoosh: true}
 })
@@ -310,11 +315,15 @@ config :exqlite,
 
 ### Status Indicator
 
-Smoosh events appear as status entries in the TUI timeline:
+Smoosh shows progress in two ways:
+
+1. **ThinkingIndicator** — while compression or indexing is active, the input bar
+   shows "Smooshing shell output…" or "Indexing shell output…".
+2. **Timeline entries** — once complete, a status entry appears:
 
 ```
-⊜ Smoosh: compressed shell output (45.2 KB → 2.1 KB, 95% reduction)
-⊜ Smoosh: indexed shell output (120.5 KB) into knowledge base
+⊜ Compressed shell output (45.2 KB → 2.1 KB, 95% reduction)
+⊜ Indexed shell output (120.5 KB) into knowledge base
 ```
 
 ### `/smoosh` Command
@@ -382,7 +391,7 @@ automatically when the session ends.
 | `cli/src/state/timeline.ts` | Modified | Smoosh event rendering |
 | `cli/src/hooks/use-opal-commands.ts` | Modified | `/smoosh` command |
 | `cli/src/components/config-panel.tsx` | Modified | Smoosh toggle |
-| `cli/src/sdk/session.ts` | Modified | `smoosh: false` default |
+| `cli/src/sdk/session.ts` | Modified | `smoosh: true` default |
 
 ## Removal Recipe
 

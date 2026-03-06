@@ -10,7 +10,7 @@ defmodule Opal.Agent.Smoosh do
   ## Integration
 
   Called from `Opal.Agent.ToolRunner.collect_result/4` via `maybe_compress/3`.
-  When disabled (the default), this is a no-op that returns the result unchanged.
+  When disabled, this is a no-op that returns the result unchanged.
 
   ## Policy
 
