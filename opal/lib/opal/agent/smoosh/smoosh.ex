@@ -26,6 +26,7 @@ defmodule Opal.Agent.Smoosh do
 
   require Logger
   alias Opal.Agent.{Emitter, State}
+  alias Opal.Agent.Smoosh.KnowledgeBase
 
   @type policy :: :pass_through | :compress | :index_only
 
@@ -68,15 +69,21 @@ defmodule Opal.Agent.Smoosh do
         end
 
       :index_only ->
-        # Phase 2: knowledge base indexing will go here
-        # For now, fall back to compression
-        case Opal.Agent.Smoosh.Compressor.compress(raw_output, tool_mod.name(), state) do
-          {:ok, compressed} ->
-            Emitter.broadcast(state, smoosh_event(tool_mod.name(), raw_output, compressed))
-            {{:ok, compressed}, state}
+        case ensure_and_index(tool_mod, raw_output, state) do
+          {:ok, summary} ->
+            Emitter.broadcast(state, smoosh_index_event(tool_mod.name(), raw_output))
+            {{:ok, summary}, state}
 
           {:error, _reason} ->
-            {result, state}
+            # Indexing failed — fall back to compression
+            case Opal.Agent.Smoosh.Compressor.compress(raw_output, tool_mod.name(), state) do
+              {:ok, compressed} ->
+                Emitter.broadcast(state, smoosh_event(tool_mod.name(), raw_output, compressed))
+                {{:ok, compressed}, state}
+
+              {:error, _} ->
+                {result, state}
+            end
         end
     end
   end
@@ -133,4 +140,42 @@ defmodule Opal.Agent.Smoosh do
        compressed_bytes: byte_size(compressed)
      }}
   end
+
+  defp smoosh_index_event(tool_name, raw) do
+    {:smoosh_index,
+     %{
+       tool: tool_name,
+       raw_bytes: byte_size(raw)
+     }}
+  end
+
+  defp ensure_and_index(tool_mod, raw_output, %State{} = state) do
+    sessions_dir = Opal.Config.sessions_dir(state.config)
+    supervisor = state.sub_agent_supervisor
+
+    case KnowledgeBase.ensure_started(state.session_id, supervisor, sessions_dir) do
+      {:ok, pid} ->
+        source_label = "#{tool_mod.name()}"
+
+        case KnowledgeBase.index(pid, source_label, raw_output) do
+          {:ok, %{chunks: chunk_count}} ->
+            summary =
+              "[Smoosh] Output indexed (#{chunk_count} chunks, #{format_bytes(byte_size(raw_output))}). " <>
+                "Use kb_search to retrieve details."
+
+            {:ok, summary}
+
+          {:error, reason} ->
+            Logger.warning("[smoosh] indexing failed for #{tool_mod.name()}: #{inspect(reason)}")
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        Logger.warning("[smoosh] KB start failed: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp format_bytes(bytes) when bytes >= 1_024, do: "#{Float.round(bytes / 1_024, 1)} KB"
+  defp format_bytes(bytes), do: "#{bytes} B"
 end
