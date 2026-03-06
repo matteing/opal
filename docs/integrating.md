@@ -467,7 +467,7 @@ sequenceDiagram
 
 | Method | Params | Description |
 |--------|--------|-------------|
-| `session/start` | `model?`, `system_prompt?`, `working_dir?`, `tools?`, `mcp_servers?`, `features?`, `session?` | Start a session, returns `session_id`, `auth` probe |
+| `session/start` | `model?`, `system_prompt?`, `working_dir?`, `tools?`, `features?`, `session?` | Start a session, returns `session_id`, `auth` probe |
 | `agent/prompt` | `session_id`, `text` | Send a prompt (queued if busy — events stream via notifications) |
 | `agent/abort` | `session_id` | Cancel the current run |
 | `agent/state` | `session_id` | Query agent status, model, tools, message count |
@@ -488,7 +488,7 @@ sequenceDiagram
 | `opal/config/get` | `session_id` | Read runtime feature/tool config for a session |
 | `opal/config/set` | `session_id`, `features?`, `tools?` | Update runtime feature/tool config for a session |
 
-`features` accepts `sub_agents`, `skills`, `mcp`, and `debug` booleans at boot (`session/start`) or runtime (`opal/config/set`).
+`features` accepts `sub_agents`, `skills`, and `debug` booleans at boot (`session/start`) or runtime (`opal/config/set`).
 
 ### Server → Client Requests
 
@@ -783,7 +783,7 @@ const session = await Session.start({
   tools: ["read_file", "edit_file", "shell"],
 
   // Features
-  features: { subAgents: true, skills: true, mcp: false, debug: false },
+  features: { subAgents: true, skills: true, debug: false },
 
   // Interaction handlers
   autoConfirm: true,

@@ -9,7 +9,6 @@ defmodule Opal.Config.FeaturesTest do
       assert f.sub_agents.enabled == true
       assert f.context.enabled == true
       assert f.skills.enabled == true
-      assert f.mcp.enabled == true
       assert f.debug.enabled == false
     end
 
@@ -29,13 +28,6 @@ defmodule Opal.Config.FeaturesTest do
     test "enables debug feature" do
       f = Features.new(%{debug: %{enabled: true}})
       assert f.debug.enabled == true
-    end
-
-    test "handles MCP config with servers" do
-      servers = [%{name: "test", command: "node"}]
-      f = Features.new(%{mcp: %{enabled: true, servers: servers}})
-      assert f.mcp.enabled == true
-      assert f.mcp.servers == servers
     end
   end
 end

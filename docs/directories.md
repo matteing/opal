@@ -17,7 +17,6 @@ Opal uses two directory hierarchies: a **global data directory** for runtime sta
 └── logs/                         # Reserved for structured logging
 
 {project}/.opal/                  # Per-project configuration (committed to repo)
-├── mcp.json                      # MCP server configuration
 └── ...                           # Future project-level config
 
 {project}/.{agents,github,claude}/skills/
@@ -34,7 +33,6 @@ Opal discovers these directories during context and skill walk-up:
 
 | Path | Purpose |
 |------|---------|
-| `.opal/mcp.json` | MCP server definitions (also checks `.vscode/mcp.json`, `.github/mcp.json`, `.mcp.json`, `~/.opal/mcp.json`) |
 | `.{agents,github,claude}/skills/{name}/SKILL.md` | Project-scoped skills with progressive disclosure |
 
 Context file discovery (`AGENTS.md`, `OPAL.md`) walks up from the working directory, checking standard locations including `.opal/` and `.agents/` variants. See `Opal.Context` (and `Opal.Config.Features` overrides) for the full discovery behavior.
@@ -146,4 +144,4 @@ end
 - `opal/lib/opal/tool/shell.ex` — Temporary output files
 - `opal/lib/opal/application.ex` — Node discovery file
 - `opal/lib/opal/context/context.ex` — Context/skills discovery paths
-- `opal/lib/opal/mcp/config.ex` — MCP config discovery paths
+

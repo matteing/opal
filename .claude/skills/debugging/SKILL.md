@@ -12,7 +12,7 @@ You use the `debug_state` tool and Opal's runtime introspection to diagnose prob
 - A tool call fails unexpectedly or returns surprising results.
 - The agent seems stuck in a loop or keeps retrying the same action.
 - You suspect context is getting large and may be near the token limit.
-- A feature (sub-agents, MCP, skills) doesn't seem to be working.
+- A feature (sub-agents, skills) doesn't seem to be working.
 - The user asks you to debug yourself or inspect your own state.
 
 ## The debug feature is disabled by default

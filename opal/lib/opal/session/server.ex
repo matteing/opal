@@ -7,15 +7,14 @@ defmodule Opal.SessionServer do
       Opal.SessionServer (Supervisor, :rest_for_one)
       ├── Task.Supervisor        — per-session tool execution
       ├── DynamicSupervisor      — per-session sub-agents
-      ├── Opal.MCP.Supervisor    — MCP client connections (optional)
       ├── Opal.Session           — conversation persistence (optional)
       └── Opal.Agent             — the agent loop
 
   Terminating the SessionServer cleans up everything: the agent, all
-  running tools, all sub-agents, MCP connections, and the session store.
+  running tools, all sub-agents, and the session store.
 
-  The `:rest_for_one` strategy means if the Task.Supervisor,
-  DynamicSupervisor, or MCP.Supervisor crashes, the Agent (which depends
+  The `:rest_for_one` strategy means if the Task.Supervisor or
+  DynamicSupervisor crashes, the Agent (which depends
   on them) restarts too.
   """
 
@@ -45,22 +44,11 @@ defmodule Opal.SessionServer do
   @impl true
   def init(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
-    config = Keyword.get(opts, :config, Opal.Config.new())
-    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
 
     # Name the per-session supervisors using Registry for discoverability
     # (avoids dynamic atom generation which leaks memory on the BEAM)
     tool_sup_name = {:via, Registry, {Opal.Registry, {:tool_sup, session_id}}}
     sub_agent_sup_name = {:via, Registry, {Opal.Registry, {:sub_agent_sup, session_id}}}
-    mcp_sup_name = {:via, Registry, {Opal.Registry, {:mcp_sup, session_id}}}
-
-    # Discover MCP servers from config files + explicit config (if MCP enabled)
-    mcp_servers =
-      if config.features.mcp.enabled do
-        discover_mcp_servers(config, working_dir)
-      else
-        []
-      end
 
     # Build child list dynamically
     children =
@@ -68,16 +56,13 @@ defmodule Opal.SessionServer do
         {Task.Supervisor, name: tool_sup_name},
         {DynamicSupervisor, name: sub_agent_sup_name, strategy: :one_for_one}
       ] ++
-        maybe_mcp_child(mcp_servers, mcp_sup_name) ++
         maybe_session_child(opts) ++
         [
           {Opal.Agent,
            opts ++
              [
                tool_supervisor: tool_sup_name,
-               sub_agent_supervisor: sub_agent_sup_name,
-               mcp_supervisor: if(mcp_servers != [], do: mcp_sup_name),
-               mcp_servers: mcp_servers
+               sub_agent_supervisor: sub_agent_sup_name
              ]}
         ]
 
@@ -108,25 +93,6 @@ defmodule Opal.SessionServer do
     else
       []
     end
-  end
-
-  # Includes MCP.Supervisor child if there are MCP servers configured.
-  defp maybe_mcp_child([], _name), do: []
-
-  defp maybe_mcp_child(servers, name) do
-    [{Opal.MCP.Supervisor, servers: servers, name: name}]
-  end
-
-  # Discovers MCP servers from config files and merges with explicit config.
-  defp discover_mcp_servers(config, working_dir) do
-    discovered =
-      Opal.MCP.Config.discover(working_dir, extra_files: config.features.mcp.config_files)
-
-    explicit = config.features.mcp.servers
-
-    # Explicit config takes priority, then discovered (dedup by name)
-    (explicit ++ discovered)
-    |> Enum.uniq_by(&to_string(&1.name))
   end
 
   @doc """

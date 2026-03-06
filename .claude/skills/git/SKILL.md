@@ -46,7 +46,6 @@ Use a scope to identify the affected area:
 | `rpc`    | JSON-RPC protocol layer                     |
 | `agent`  | Agent loop / GenServer                      |
 | `tools`  | Built-in tool implementations               |
-| `mcp`    | MCP bridge                                  |
 | `ci`     | GitHub Actions workflows                    |
 | `release`| Release and versioning infrastructure       |
 | `docs`   | Documentation                               |

@@ -153,7 +153,6 @@ defmodule Opal.RPC.ServerDispatchTest do
 
       assert is_boolean(features.sub_agents)
       assert is_boolean(features.skills)
-      assert is_boolean(features.mcp)
       assert is_boolean(features.debug)
       assert is_list(tools.all)
       assert is_list(tools.enabled)

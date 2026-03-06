@@ -82,7 +82,6 @@ defmodule Opal.Agent.ToolRunner do
 
     gates = [
       {not config.features.sub_agents.enabled, &(&1 == Opal.Tool.SubAgent)},
-      {not config.features.mcp.enabled, &mcp_module?/1},
       {not config.features.debug.enabled, &(&1 == Opal.Tool.DebugState)},
       {not (config.features.skills.enabled and skills != []), &(&1 == Opal.Tool.UseSkill)}
     ]
@@ -211,10 +210,6 @@ defmodule Opal.Agent.ToolRunner do
         {{:error, "Skill '#{skill_name}' not found. Available: #{available}"}, state}
     end
   end
-
-  @spec mcp_module?(module()) :: boolean()
-  defp mcp_module?(mod),
-    do: mod |> Atom.to_string() |> String.starts_with?("Elixir.Opal.MCP.Tool.")
 
   @spec to_text(term()) :: String.t()
   defp to_text(output) when is_binary(output), do: output

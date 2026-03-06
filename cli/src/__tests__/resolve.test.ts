@@ -7,16 +7,17 @@ vi.mock("node:child_process", () => ({
 
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
+  readFileSync: vi.fn(),
 }));
 
 vi.mock("node:os", () => ({
   platform: vi.fn(),
-  arch: vi.fn(),
+  homedir: vi.fn(),
 }));
 
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { platform, arch } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
+import { platform, homedir } from "node:os";
 import { join } from "node:path";
 
 // We need to re-import resolveServer fresh for each test
@@ -30,7 +31,8 @@ async function getResolveServer() {
 describe("resolveServer", () => {
   beforeEach(() => {
     vi.mocked(platform).mockReturnValue("darwin");
-    vi.mocked(arch).mockReturnValue("arm64");
+    vi.mocked(homedir).mockReturnValue("/home/testuser");
+    vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: "0.1.0" }));
     // Default: nothing found
     vi.mocked(execFileSync).mockImplementation(() => {
       throw new Error("not found");
@@ -73,14 +75,15 @@ describe("resolveServer", () => {
     expect(result.command).toContain("opal-server");
   });
 
-  it("falls back to bundled binary", async () => {
+  it("falls back to extracted OTP release", async () => {
     vi.mocked(existsSync).mockImplementation((path) => {
-      return String(path).includes("opal_server_darwin_arm64");
+      return String(path).includes(join(".opal", "erts", "0.1.0", "bin", "opal_server"));
     });
 
     const resolveServer = await getResolveServer();
     const result = resolveServer();
-    expect(result.command).toContain("opal_server_darwin_arm64");
+    expect(result.command).toContain("opal_server");
+    expect(result.args).toEqual(["start"]);
   });
 
   it("throws when nothing found", async () => {
@@ -88,16 +91,16 @@ describe("resolveServer", () => {
     expect(() => resolveServer()).toThrow("opal-server not found");
   });
 
-  it("returns correct platform binary name for linux-x64", async () => {
-    vi.mocked(platform).mockReturnValue("linux");
-    vi.mocked(arch).mockReturnValue("x64");
+  it("uses opal_server.bat on win32", async () => {
+    vi.mocked(platform).mockReturnValue("win32");
     vi.mocked(existsSync).mockImplementation((path) => {
-      return String(path).includes("opal_server_linux_x64");
+      return String(path).includes("opal_server.bat");
     });
 
     const resolveServer = await getResolveServer();
     const result = resolveServer();
-    expect(result.command).toContain("opal_server_linux_x64");
+    expect(result.command).toContain("opal_server.bat");
+    expect(result.args).toEqual(["start"]);
   });
 
   it("detects monorepo and uses mise exec", async () => {

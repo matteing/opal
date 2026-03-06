@@ -45,14 +45,13 @@ defmodule Opal do
           working_dir: String.t(),
           context_files: [String.t()],
           available_skills: [map()],
-          mcp_servers: [map()],
           tools: [module()],
           message_count: non_neg_integer(),
           token_usage: map()
         }
 
   @info_keys ~w(session_id status model provider session working_dir
-                context_files available_skills mcp_servers tools token_usage)a
+                context_files available_skills tools token_usage)a
 
   # -- Session lifecycle ------------------------------------------------------
 

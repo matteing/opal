@@ -28,12 +28,7 @@ defmodule Opal.MixProject do
           # Mix task — tested via CLI integration, not unit tests
           Mix.Tasks.Opal.Gen.JsonSchema,
           # I/O-bound stdio transport — tested via RPC integration tests
-          Opal.RPC.Stdio,
-          # MCP runtime discovery — requires live MCP servers
-          Opal.MCP.Resources,
-          # MCP client/bridge — requires live MCP servers to test
-          Opal.MCP.Client,
-          Opal.MCP.Bridge
+          Opal.RPC.Stdio
         ]
       ]
     ]
@@ -104,13 +99,6 @@ defmodule Opal.MixProject do
           Opal.Tool.SubAgent,
           Opal.Skill
         ],
-        MCP: [
-          Opal.MCP.Bridge,
-          Opal.MCP.Client,
-          Opal.MCP.Config,
-          Opal.MCP.Resources,
-          Opal.MCP.Supervisor
-        ],
         Internals: [
           Opal.Application,
           Opal.Context,
@@ -145,7 +133,6 @@ defmodule Opal.MixProject do
       {:nimble_options, "~> 1.1"},
       {:glob_ex, "~> 0.1"},
       {:yaml_elixir, "~> 2.11"},
-      {:anubis_mcp, "~> 0.17"},
       {:ex_doc, "~> 0.35", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]

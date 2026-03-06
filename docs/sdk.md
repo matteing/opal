@@ -51,7 +51,7 @@ const session = await createSession({
   model: "claude-sonnet-4-5", // string shorthand
   model: { id: "gpt-4", thinkingLevel: "high" }, // full spec
   systemPrompt: "You are a code reviewer",
-  features: { skills: true, mcp: false },
+  features: { skills: true },
   callbacks: {
     onAskUser: async ({ question, choices }) => "user response",
     onRpcMessage: (entry) => console.log(entry),

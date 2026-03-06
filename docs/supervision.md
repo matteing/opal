@@ -27,12 +27,10 @@ graph TD
         SSA["SessionServer<br/><i>Supervisor :rest_for_one</i>"]
         TSA["Task.Supervisor<br/><i>tool execution</i>"]
         DSA["DynamicSupervisor<br/><i>sub-agents</i>"]
-        MCPA["Opal.MCP.Supervisor<br/><i>MCP clients (optional)</i>"]
         SesA["Opal.Session<br/><i>persistence (optional)</i>"]
         AgentA["Opal.Agent<br/><i>agent loop</i>"]
         SSA --> TSA
         SSA --> DSA
-        SSA --> MCPA
         SSA --> SesA
         SSA --> AgentA
     end
@@ -113,12 +111,11 @@ started in order:
 
 1. **`Task.Supervisor`** — executes tool calls as supervised tasks
 2. **`DynamicSupervisor`** — manages sub-agent processes
-3. **`Opal.MCP.Supervisor`** — MCP client connections *(optional, started when MCP servers are configured)*
-4. **`Opal.Session`** — conversation persistence *(optional, started when `session: true`)*
-5. **`Opal.Agent`** — the agent loop
+3. **`Opal.Session`** — conversation persistence *(optional, started when `session: true`)*
+4. **`Opal.Agent`** — the agent loop
 
 The `:rest_for_one` strategy means if the `Task.Supervisor` or
-`DynamicSupervisor` or `Opal.MCP.Supervisor` crashes, the Agent (which depends on them) is restarted
+`DynamicSupervisor` crashes, the Agent (which depends on them) is restarted
 too. But a crash in the Agent does not affect the supervisors above it.
 
 Each child is registered via `Opal.Registry` for discoverability:
@@ -127,7 +124,6 @@ Each child is registered via `Opal.Registry` for discoverability:
 |----------------------|------------------------------|
 | Task.Supervisor      | `{:tool_sup, session_id}`    |
 | DynamicSupervisor    | `{:sub_agent_sup, session_id}` |
-| MCP.Supervisor       | `{:mcp_sup, session_id}`     |
 | Session              | `{:session, session_id}`     |
 
 ### `Opal.Agent`
@@ -407,9 +403,8 @@ started *after* it are restarted. The child order is:
 ```mermaid
 flowchart TD
     A["1. Task.Supervisor"] -->|"if this crashes..."| B["2. DynamicSupervisor"]
-    B -->|"...this restarts..."| C["3. MCP.Supervisor (optional)"]
-    C -->|"...this restarts..."| D["4. Session (optional)"]
-    D -->|"...this restarts..."| E["5. Agent"]
+    B -->|"...this restarts..."| C["3. Session (optional)"]
+    C -->|"...this restarts..."| D["4. Agent"]
 
     style A fill:#f9f,stroke:#333
     style E fill:#bbf,stroke:#333

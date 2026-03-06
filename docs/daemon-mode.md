@@ -152,7 +152,6 @@ graph TD
     SeSup --> SS["Opal.SessionServer<br/><code>:rest_for_one</code><br/><i>per session</i>"]
     SS --> TS["Task.Supervisor"]
     SS --> DS["DynamicSupervisor<br/><i>sub-agents</i>"]
-    SS --> MCP["Opal.MCP.Supervisor<br/><i>optional</i>"]
     SS --> Ses["Opal.Session<br/><i>GenServer, DETS</i>"]
     SS --> Ag["Opal.Agent<br/><i>:gen_statem</i>"]
 ```
@@ -189,7 +188,7 @@ graph TD
 
 3. **`SessionManager`** — Coordinator that tracks session lifecycle, client bindings, and idle timeouts. Only process that calls `DynamicSupervisor.start_child/terminate_child`. Separates policy (when to start/stop) from mechanism (supervision).
 
-4. **Per-session trees unchanged** — The existing `SessionServer` (`:rest_for_one`) with `Task.Supervisor → DynamicSupervisor → MCP → Session → Agent` is already correct for daemon mode.
+4. **Per-session trees unchanged** — The existing `SessionServer` (`:rest_for_one`) with `Task.Supervisor → DynamicSupervisor → Session → Agent` is already correct for daemon mode.
 
 ### Agent Process Hibernation
 
@@ -764,7 +763,7 @@ graph LR
 | 5. CLI Integration | 1 | 3 | ~300 | Phase 4 |
 | **Total** | **9** | **~12** | **~1450** | |
 
-**The entire daemon layer is additive — it wraps the existing architecture rather than modifying it.** No changes to Agent, Session DETS, Tool implementations, Provider, MCP, or Events. This is the strongest validation of the current OTP design.
+**The entire daemon layer is additive — it wraps the existing architecture rather than modifying it.** No changes to Agent, Session DETS, Tool implementations, Provider, or Events. This is the strongest validation of the current OTP design.
 
 ---
 

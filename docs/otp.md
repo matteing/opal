@@ -22,7 +22,6 @@ A running Opal node is composed of global transport processes plus per-session c
 | `Opal.Session` | GenServer | Conversation tree — message storage, branching, compaction |
 | `Opal.RPC.Server` | GenServer | JSON-RPC transport over stdin/stdout (global) |
 | `Opal.SessionServer` | Supervisor | Per-session supervisor (`:rest_for_one`) |
-| `Opal.MCP.Supervisor` | Supervisor | Per-session MCP client group (`:one_for_one`) |
 | Tool tasks | Task (under Task.Supervisor) | Supervised non-blocking tool execution |
 | Sub-agents | Opal.Agent (under DynamicSupervisor) | Delegated child agents |
 
@@ -87,10 +86,6 @@ Key types:
 - `{:session, id}` → Session process
 - `{:tool_sup, id}` → Task.Supervisor for tool execution
 - `{:sub_agent_sup, id}` → DynamicSupervisor for sub-agents
-- `{:mcp_sup, id}` → MCP.Supervisor
-- `{:mcp_client, name}` → Individual MCP client
-- `{:mcp_transport, name}` → MCP transport process
-
 ### Duplicate Registry (`Opal.Events.Registry`)
 
 Pub/sub backbone. Multiple processes can register under the same session ID:
@@ -160,9 +155,7 @@ Depth is limited to one level by excluding `Opal.Tool.SubAgent` from the sub-age
 | Application | `:rest_for_one` | Core infrastructure starts first; later children restart if an earlier dependency fails |
 | SessionSupervisor | `:one_for_one` (Dynamic) | Sessions are independent of each other |
 | SessionServer | `:rest_for_one` | If infrastructure (Task.Supervisor, DynamicSupervisor) crashes, restart the Agent that depends on it |
-| MCP.Supervisor | `:one_for_one` | MCP server connections are independent |
-
-The `:rest_for_one` strategy in SessionServer is the key design choice. Children are ordered: Task.Supervisor → DynamicSupervisor → [MCP.Supervisor] → [Session] → Agent. If the Task.Supervisor crashes, the Agent restarts (it can't function without tool execution). If the Agent crashes, infrastructure children stay up and the Agent restarts cleanly.
+The `:rest_for_one` strategy in SessionServer is the key design choice. Children are ordered: Task.Supervisor → DynamicSupervisor → [Session] → Agent. If the Task.Supervisor crashes, the Agent restarts (it can't function without tool execution). If the Agent crashes, infrastructure children stay up and the Agent restarts cleanly.
 
 ## Port — External I/O
 
@@ -218,5 +211,4 @@ Process.send_after(self(), :retry_turn, delay_ms)
 | `lib/opal/events.ex` | Pub/sub helpers (subscribe, broadcast) |
 | `lib/opal/rpc/server.ex` | JSON-RPC transport GenServer |
 | `lib/opal/agent/spawner.ex` | Sub-agent spawning helpers |
-| `lib/opal/mcp/supervisor.ex` | MCP client supervision |
-| `lib/opal/mcp/client.ex` | MCP client (Anubis-based) |
+

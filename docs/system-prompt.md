@@ -294,7 +294,7 @@ sequenceDiagram
 
 3. **XML boundary tags.** Each section is wrapped in XML-style tags (`<identity>`, `<project-context>`, `<skills>`, `<environment>`, `<tool-guidelines>`, `<planning>`) so the model can clearly distinguish section boundaries — a pattern proven effective in production agent systems.
 
-4. **Tool guidelines are computed per-turn.** Since the active tool set can change (e.g., MCP tools coming online, config-gated tools), `build_guidelines/2` runs on every call to `build/1`.
+4. **Tool guidelines are computed per-turn.** Since the active tool set can change (e.g., config-gated tools), `build_guidelines/2` runs on every call to `build/1`.
 
 5. **Skills use progressive disclosure.** Only names and descriptions go into the system prompt. Full instructions are injected as user messages when activated — this keeps the system prompt small and lets skill instructions age out during compaction.
 

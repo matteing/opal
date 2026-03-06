@@ -21,7 +21,7 @@ defmodule Opal.Agent.SystemPrompt do
 
   ## How tools reach the model
 
-  Every tool — built-in, custom, and MCP — is exposed to the model via
+  Every tool — built-in and custom — is exposed to the model via
   the provider's `convert_tools/1`, which serialises each module's
   `name()`, `description()`, and `parameters()` into the API's `tools`
   array. That is the primary mechanism; the model learns what each tool
@@ -38,8 +38,7 @@ defmodule Opal.Agent.SystemPrompt do
   The guidelines are **conditional**: they only mention tools that are
   actually active, so the model never receives instructions about tools
   it can't call. They are rebuilt every turn because the active tool
-  set can change mid-session (e.g. MCP servers connecting, feature
-  flags toggling).
+  set can change mid-session (e.g. feature flags toggling).
 
   ## Editing rules
 

@@ -745,12 +745,6 @@ defmodule Opal.Inspect do
       "**Available:** #{if(skills_available == [], do: "_none_", else: Enum.join(skills_available, ", "))}",
       "**Active:** #{if(s.active_skills == [], do: "_none_", else: Enum.join(s.active_skills, ", "))}",
       "",
-      "### MCP Servers\n",
-      if(s.mcp_servers == [],
-        do: "_none_",
-        else: fence_content(Jason.encode!(s.mcp_servers, pretty: true), "json")
-      ),
-      "",
       "**System Prompt →** [system-prompt.md](system-prompt.md)\n",
       "---\n"
     ]

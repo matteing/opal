@@ -180,7 +180,6 @@ defmodule Opal.RPC.Server do
          session_dir: info.session_dir,
          context_files: info.context_files,
          available_skills: Enum.map(info.available_skills, & &1.name),
-         mcp_servers: Enum.map(info.mcp_servers, & &1.name),
          node_name: Atom.to_string(Node.self()),
          auth: auth
        }}
@@ -539,7 +538,6 @@ defmodule Opal.RPC.Server do
   @feature_keys %{
     "sub_agents" => :sub_agents,
     "skills" => :skills,
-    "mcp" => :mcp,
     "debug" => :debug
   }
 
@@ -611,7 +609,6 @@ defmodule Opal.RPC.Server do
       features: %{
         sub_agents: state.config.features.sub_agents.enabled,
         skills: state.config.features.skills.enabled,
-        mcp: state.config.features.mcp.enabled,
         debug: state.config.features.debug.enabled
       },
       tools: %{

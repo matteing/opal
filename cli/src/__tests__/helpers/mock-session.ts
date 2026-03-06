@@ -11,7 +11,6 @@ export interface MockSession {
   sessionDir: string;
   contextFiles: string[];
   availableSkills: string[];
-  mcpServers: string[];
   nodeName: string;
   auth: { provider: string; providers: unknown[]; status: string };
   prompt: ReturnType<typeof vi.fn>;
@@ -45,7 +44,6 @@ export function createMockSession(overrides: Partial<MockSession> = {}): MockSes
     sessionDir: "/tmp/test-session",
     contextFiles: [],
     availableSkills: [],
-    mcpServers: [],
     nodeName: "opal@test",
     auth: { provider: "copilot", providers: [], status: "ready" },
     prompt: vi.fn(),
@@ -66,11 +64,11 @@ export function createMockSession(overrides: Partial<MockSession> = {}): MockSes
     getSettings: vi.fn().mockResolvedValue({ settings: {} }),
     saveSettings: vi.fn().mockResolvedValue({ settings: {} }),
     getOpalConfig: vi.fn().mockResolvedValue({
-      features: { subAgents: true, skills: true, mcp: true, debug: false },
+      features: { subAgents: true, skills: true, debug: false },
       tools: { all: ["read_file", "shell"], enabled: ["read_file", "shell"], disabled: [] },
     }),
     setOpalConfig: vi.fn().mockResolvedValue({
-      features: { subAgents: true, skills: true, mcp: true, debug: false },
+      features: { subAgents: true, skills: true, debug: false },
       tools: { all: ["read_file", "shell"], enabled: ["read_file", "shell"], disabled: [] },
     }),
     authStatus: vi.fn().mockResolvedValue({ authenticated: true }),

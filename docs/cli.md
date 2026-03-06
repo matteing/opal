@@ -158,7 +158,7 @@ State uses a nested `AgentView` shape. The `main` field holds the primary agent'
 | `/compact` | Trigger conversation compaction |
 | `/agents` | List active sub-agents |
 | `/agents <n\|main>` | Switch view to a sub-agent or back to main |
-| `/opal` | Open runtime configuration menu (toggle Sub-agents, Skills, MCP, Debug introspection, and tools) |
+| `/opal` | Open runtime configuration menu (toggle Sub-agents, Skills, Debug introspection, and tools) |
 | `/debug` | Toggle JSON-RPC debug panel |
 
 ## Keyboard Shortcuts

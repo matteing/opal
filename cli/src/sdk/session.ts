@@ -63,12 +63,8 @@ export interface SessionOptions {
   features?: Partial<{
     skills: boolean;
     subAgents: boolean;
-    mcp: boolean;
     debug: boolean;
   }>;
-  // TODO: this bothers me too?
-  /** MCP server configurations. */
-  mcpServers?: Record<string, unknown>[];
 
   /** Callbacks for server-initiated interactions and diagnostics. */
   callbacks?: {
@@ -118,8 +114,6 @@ export class Session {
   readonly contextFiles: readonly string[];
   /** Available skill names. */
   readonly skills: readonly string[];
-  /** Connected MCP server names. */
-  readonly mcpServers: readonly string[];
   /** Auth status from session startup. */
   readonly auth: SessionStartResult["auth"];
   /** Erlang distribution node name if active (e.g. "opal_123@hostname"). */
@@ -146,7 +140,6 @@ export class Session {
     this.dir = result.sessionDir;
     this.contextFiles = result.contextFiles;
     this.skills = result.availableSkills;
-    this.mcpServers = result.mcpServers;
     this.auth = result.auth;
     this.distributionNode = distributionNode ?? null;
   }
@@ -459,13 +452,11 @@ export async function createSession(opts: SessionOptions = {}): Promise<Session>
           features: {
             skills: false,
             subAgents: false,
-            mcp: false,
             debug: false,
             ...opts.features,
           },
         }
       : {}),
-    ...(opts.mcpServers ? { mcpServers: opts.mcpServers } : {}),
     ...(opts.model
       ? {
           model:

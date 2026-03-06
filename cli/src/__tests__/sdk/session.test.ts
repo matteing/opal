@@ -85,7 +85,6 @@ const SESSION_START_RESULT = {
   session_dir: "/tmp/s1",
   context_files: ["AGENTS.md"],
   available_skills: ["git"],
-  mcp_servers: [],
   node_name: "opal@localhost",
   auth: { status: "ready", provider: "copilot", providers: [] },
 };
@@ -208,7 +207,7 @@ describe("SDK2 Session", () => {
     const p = session.config.getRuntime();
     await new Promise((r) => setTimeout(r, 10));
     respondNext({
-      features: { debug: false, mcp: true, skills: true, sub_agents: true },
+      features: { debug: false, skills: true, sub_agents: true },
       tools: { all: ["read_file"], enabled: ["read_file"], disabled: [] },
     });
     const result = await p;

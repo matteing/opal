@@ -66,7 +66,6 @@ graph LR
 | **RPC** | JSON-RPC 2.0 protocol over stdio between CLI and server | [rpc.md](rpc.md) |
 | **Providers** | LLM integration (streaming, SSE parsing, model discovery) | [providers.md](providers.md) |
 | **Authentication** | Server-driven credential detection and setup wizard | [auth.md](auth.md) |
-| **MCP** | Model Context Protocol bridge for external tool servers | [mcp.md](mcp.md) |
 | **Testing** | Fixture-based provider mocking, SSE simulation, no Mox | [testing.md](testing.md) |
 | **CLI** | Terminal UI, components, state management, slash commands | [cli.md](cli.md) |
 | **SDK** | TypeScript client library for the JSON-RPC protocol | [sdk.md](sdk.md) |
@@ -99,7 +98,6 @@ opal/lib/opal/
 ├── auth/auth.ex             # Provider-agnostic auth probe
 ├── tool/tool.ex             # Tool behaviour
 ├── tool/                    # Built-in tools (read, edit, write, shell, etc.)
-├── mcp/                     # MCP bridge (client, discovery, supervisor)
 ├── rpc/                     # JSON-RPC protocol and stdio server
 ├── config.ex                # Runtime configuration
 ├── context/context.ex       # Project context discovery (AGENTS.md, skills)

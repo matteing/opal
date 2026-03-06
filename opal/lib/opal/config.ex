@@ -10,15 +10,13 @@ defmodule Opal.Config.Features do
     * `:sub_agents` — child agent spawning via `Opal.Agent.Spawner`
     * `:context` — walk-up context file discovery (AGENTS.md, OPAL.md, etc.)
     * `:skills` — skill directory discovery and progressive disclosure
-    * `:mcp` — MCP (Model Context Protocol) client integration
     * `:debug` — internal debug/introspection tooling (disabled by default)
 
   ## Usage
 
-      # Disable sub-agents and MCP, customize context filenames
+      # Disable sub-agents, customize context filenames
       features = Opal.Config.Features.new(%{
         sub_agents: %{enabled: false},
-        mcp: %{enabled: false},
         context: %{filenames: ["AGENTS.md", "CUSTOM.md"]}
       })
 
@@ -28,7 +26,6 @@ defmodule Opal.Config.Features do
           sub_agents: %{enabled: true},
           context: %{filenames: ["AGENTS.md"]},
           skills: %{extra_dirs: ["/opt/skills"]},
-          mcp: %{enabled: true, servers: [], config_files: []},
           debug: %{enabled: false}
         }
   """
@@ -37,7 +34,6 @@ defmodule Opal.Config.Features do
           sub_agents: sub_agents_config(),
           context: context_config(),
           skills: skills_config(),
-          mcp: mcp_config(),
           debug: debug_config()
         }
 
@@ -70,21 +66,6 @@ defmodule Opal.Config.Features do
   @type skills_config :: %{enabled: boolean(), extra_dirs: [String.t()]}
 
   @typedoc """
-  MCP (Model Context Protocol) client configuration.
-
-    * `:enabled` — whether MCP client integration is active. When `false`,
-      no MCP servers are started and no `mcp.json` files are read. Default: `true`.
-    * `:servers` — explicit list of MCP server configurations, each a map
-      with `:name` (string) and `:transport` (tuple) keys. Default: `[]`.
-    * `:config_files` — additional file paths to search for `mcp.json`
-      configuration files (absolute or relative to the working directory).
-      Searched in addition to standard locations (`.vscode/mcp.json`,
-      `.github/mcp.json`, `.opal/mcp.json`, `.mcp.json`, `~/.opal/mcp.json`).
-      Default: `[]`.
-  """
-  @type mcp_config :: %{enabled: boolean(), servers: [map()], config_files: [String.t()]}
-
-  @typedoc """
   Internal debug/introspection feature configuration.
 
     * `:enabled` — whether internal debug tooling is available. Default: `false`.
@@ -95,7 +76,6 @@ defmodule Opal.Config.Features do
   defstruct sub_agents: %{enabled: true},
             context: %{enabled: true, filenames: ["AGENTS.md", "OPAL.md"]},
             skills: %{enabled: true, extra_dirs: []},
-            mcp: %{enabled: true, servers: [], config_files: []},
             debug: %{enabled: false}
 
   @doc """
@@ -107,13 +87,10 @@ defmodule Opal.Config.Features do
   ## Examples
 
       # Full config
-      Opal.Config.Features.new(%{
-        sub_agents: %{enabled: false},
-        mcp: %{enabled: true, servers: [%{name: :fs, transport: {:stdio, command: "npx"}}]}
-      })
+      Opal.Config.Features.new(%{sub_agents: %{enabled: false}})
 
       # Boolean shorthand
-      Opal.Config.Features.new(%{sub_agents: false, mcp: false})
+      Opal.Config.Features.new(%{sub_agents: false})
   """
   @spec new(map() | keyword()) :: t()
   def new(attrs \\ %{})
@@ -127,7 +104,6 @@ defmodule Opal.Config.Features do
     |> merge_subsystem(:sub_agents, attrs)
     |> merge_subsystem(:context, attrs)
     |> merge_subsystem(:skills, attrs)
-    |> merge_subsystem(:mcp, attrs)
     |> merge_subsystem(:debug, attrs)
   end
 
@@ -197,7 +173,7 @@ defmodule Opal.Config do
       subsystems. Each subsystem has an `:enabled` toggle and subsystem-specific
       options. See `Opal.Config.Features` for full documentation.
 
-      Subsystems: `:sub_agents`, `:context`, `:skills`, `:mcp`, `:debug`.
+      Subsystems: `:sub_agents`, `:context`, `:skills`, `:debug`.
 
   ## Application config example
 
@@ -213,7 +189,6 @@ defmodule Opal.Config do
           sub_agents: %{enabled: true},
           context: %{filenames: ["AGENTS.md", "OPAL.md"]},
           skills: %{extra_dirs: []},
-          mcp: %{enabled: true, servers: [], config_files: []},
           debug: %{enabled: false}
         }
   """

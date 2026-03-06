@@ -45,10 +45,6 @@ Each tool has a detailed doc in `docs/tools/`:
 - [**ask_user**](tools/user-input.md) — User input with question escalation for sub-agents
 - [**debug_state**](tools/debug.md) — Runtime self-introspection snapshot for troubleshooting
 
-## MCP Tools
-
-External tools from MCP servers are discovered at session start and wrapped as runtime modules implementing `Opal.Tool`. They appear alongside built-in tools — the agent and LLM treat them identically. See [mcp.md](mcp.md).
-
 ## Encoding Layer
 
 `Opal.FileIO` handles two invisible artifacts that cause tool failures:

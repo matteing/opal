@@ -142,7 +142,6 @@ export const SESSION_DEFAULTS = {
   session_dir: "/tmp/s1",
   context_files: [],
   available_skills: [],
-  mcp_servers: [],
   node_name: "opal@test",
   auth: { provider: "copilot", providers: [], status: "ready" },
 };

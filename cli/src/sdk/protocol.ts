@@ -104,12 +104,7 @@ export type OpalConfigGetResult = {
   /** Erlang distribution info if active (node name and cookie), or null if not distributed. */
   distribution: { cookie: string; node: string } | null;
   /** Current runtime feature flags. */
-  features: {
-    debug: boolean;
-    mcp: boolean;
-    skills: boolean;
-    subAgents: boolean;
-  };
+  features: { debug: boolean; skills: boolean; subAgents: boolean };
   /** Tool availability for the session. */
   tools: { all: string[]; disabled: string[]; enabled: string[] };
 };
@@ -118,12 +113,7 @@ export type OpalConfigSetParams = {
   /** Start or stop Erlang distribution. Pass {name, cookie?} to start, null to stop. */
   distribution?: { cookie?: string; name: string } | null;
   /** Feature flags to update. */
-  features?: {
-    debug: boolean;
-    mcp: boolean;
-    skills: boolean;
-    subAgents: boolean;
-  };
+  features?: { debug: boolean; skills: boolean; subAgents: boolean };
   /** Target session ID. */
   sessionId: string;
   /** Exact list of enabled tool names. */
@@ -134,12 +124,7 @@ export type OpalConfigSetResult = {
   /** Erlang distribution info if active (node name and cookie), or null if not distributed. */
   distribution: { cookie: string; node: string } | null;
   /** Current runtime feature flags. */
-  features: {
-    debug: boolean;
-    mcp: boolean;
-    skills: boolean;
-    subAgents: boolean;
-  };
+  features: { debug: boolean; skills: boolean; subAgents: boolean };
   /** Tool availability for the session. */
   tools: { all: string[]; disabled: string[]; enabled: string[] };
 };
@@ -204,14 +189,7 @@ export type SessionListResult = {
 
 export type SessionStartParams = {
   /** Boot-time feature toggles. */
-  features?: {
-    debug: boolean;
-    mcp: boolean;
-    skills: boolean;
-    subAgents: boolean;
-  };
-  /** MCP server configurations. */
-  mcpServers?: Record<string, unknown>[];
+  features?: { debug: boolean; skills: boolean; subAgents: boolean };
   /** Model to use. Defaults to config default. */
   model?: { id: string; provider: string; thinkingLevel?: string };
   /** If true, enable session persistence. */
@@ -231,8 +209,6 @@ export type SessionStartResult = {
   availableSkills: string[];
   /** Paths of loaded context files. */
   contextFiles: string[];
-  /** Names of connected MCP servers. */
-  mcpServers: string[];
   /** Erlang node name of the server (for debugging). */
   nodeName: string;
   /** Filesystem path to the session's data directory. */

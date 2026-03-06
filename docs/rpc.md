@@ -1,6 +1,6 @@
 # JSON-RPC Protocol
 
-The CLI communicates with the Elixir server over JSON-RPC 2.0 on stdio (stdin/stdout). This is the same transport pattern used by LSP and MCP.
+The CLI communicates with the Elixir server over JSON-RPC 2.0 on stdio (stdin/stdout). This is the same transport pattern used by LSP.
 
 ## Wire Format
 
@@ -46,7 +46,7 @@ Client → Server requests:
 
 `session/start` also accepts optional boot-time controls:
 
-- `features`: `{ sub_agents?: boolean, skills?: boolean, mcp?: boolean, debug?: boolean }`
+- `features`: `{ sub_agents?: boolean, skills?: boolean, debug?: boolean }`
 - `tools`: explicit enabled tool names for the session
 
 Server → Client requests:

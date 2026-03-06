@@ -52,8 +52,6 @@ defmodule Opal.Agent do
           | {:config, Opal.Config.t()}
           | {:session, boolean() | pid()}
           | {:sub_agent_supervisor, Supervisor.supervisor()}
-          | {:mcp_supervisor, Supervisor.supervisor() | nil}
-          | {:mcp_servers, [map()]}
         ]
 
   @doc "Starts the agent state machine."
@@ -125,14 +123,14 @@ defmodule Opal.Agent do
     provider = Keyword.get(opts, :provider, config.provider)
 
     %{entries: entries, files: files, skills: skills} = discover_context(config, working_dir)
-    %{native: native, mcp: mcp} = resolve_tools(opts)
+    tools = Keyword.get(opts, :tools, [])
 
     state =
       %State{
         session_id: session_id,
         system_prompt: Keyword.get(opts, :system_prompt, ""),
         model: model,
-        tools: native ++ mcp,
+        tools: tools,
         disabled_tools: Keyword.get(opts, :disabled_tools, []),
         working_dir: working_dir,
         config: config,
@@ -140,8 +138,6 @@ defmodule Opal.Agent do
         session: resolve_session(session_id, opts),
         tool_supervisor: Keyword.fetch!(opts, :tool_supervisor),
         sub_agent_supervisor: Keyword.get(opts, :sub_agent_supervisor),
-        mcp_supervisor: Keyword.get(opts, :mcp_supervisor),
-        mcp_servers: Keyword.get(opts, :mcp_servers, []),
         context_entries: entries,
         context_files: files,
         available_skills: skills,
@@ -161,8 +157,8 @@ defmodule Opal.Agent do
 
     Logger.debug(
       "Agent ready session=#{session_id} " <>
-        "tools=[#{Enum.map_join(native, ", ", & &1.name())}] " <>
-        "mcp=#{length(mcp)} skills=#{length(skills)}"
+        "tools=[#{Enum.map_join(tools, ", ", & &1.name())}] " <>
+        "skills=#{length(skills)}"
     )
 
     {:ok, :idle, state}
@@ -546,7 +542,7 @@ defmodule Opal.Agent do
 
   # ── Configuration ─────────────────────────────────────────────────────
 
-  @feature_keys [:sub_agents, :skills, :mcp, :debug]
+  @feature_keys [:sub_agents, :skills, :debug]
 
   defp apply_config(state, attrs) do
     state
@@ -613,13 +609,6 @@ defmodule Opal.Agent do
     %{entries: entries, files: Enum.map(entries, & &1.path), skills: skills}
   end
 
-  defp resolve_tools(opts) do
-    native = Keyword.get(opts, :tools, [])
-    mcp_servers = Keyword.get(opts, :mcp_servers, [])
-    native_names = native |> Enum.map(& &1.name()) |> MapSet.new()
-    %{native: native, mcp: discover_mcp(mcp_servers, native_names)}
-  end
-
   defp maybe_recover_session(%State{session: nil} = state), do: state
 
   defp maybe_recover_session(%State{session: session} = state) do
@@ -637,15 +626,5 @@ defmodule Opal.Agent do
 
   defp auto_save(%{session: session, config: config}) do
     if config.auto_save, do: Opal.Session.save(session, Opal.Config.sessions_dir(config))
-  end
-
-  defp discover_mcp([], _names), do: []
-
-  defp discover_mcp(servers, names) do
-    Opal.MCP.Bridge.discover_tool_modules(servers, names)
-  catch
-    kind, reason ->
-      Logger.warning("MCP discovery failed: #{inspect(kind)} #{inspect(reason)}")
-      []
   end
 end

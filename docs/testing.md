@@ -32,8 +32,6 @@ graph TD
     Integration --> Agent["Agent loop<br/><small>full turn cycle with test providers</small>"]
     Integration --> RPC["RPC stack<br/><small>JSON-RPC encode → dispatch → response</small>"]
     Integration --> Session["Session tree<br/><small>append, branch, compaction</small>"]
-    Integration --> MCP["MCP bridge<br/><small>tool discovery, dynamic modules</small>"]
-
     Live --> Record["Record fixtures<br/><small>save real API responses to JSON</small>"]
     Live --> Verify["Verify against live API<br/><small>end-to-end with GitHub Copilot</small>"]
 ```
@@ -166,7 +164,6 @@ end
 |-----|---------|---------|
 | `:live` | Real GitHub Copilot API calls | Excluded |
 | `:save_fixtures` | Record API responses to fixture files (checked conditionally inside the test, not excluded by ExUnit) | Included |
-| `:mcp` | MCP integration tests | Included |
 | `:tmp_dir` | ExUnit auto-creates/cleans temp directory | Included |
 
 ## Live Recording

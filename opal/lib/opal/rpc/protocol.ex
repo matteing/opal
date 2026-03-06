@@ -118,19 +118,12 @@ defmodule Opal.RPC.Protocol do
           description: "Working directory. Defaults to server cwd."
         },
         %{
-          name: "mcp_servers",
-          type: {:array, :object},
-          required: false,
-          description: "MCP server configurations."
-        },
-        %{
           name: "features",
           type:
             {:object,
              %{
                "sub_agents" => :boolean,
                "skills" => :boolean,
-               "mcp" => :boolean,
                "debug" => :boolean
              }},
           required: false,
@@ -166,11 +159,6 @@ defmodule Opal.RPC.Protocol do
           name: "available_skills",
           type: {:array, :string},
           description: "Names of discovered skills (not yet loaded)."
-        },
-        %{
-          name: "mcp_servers",
-          type: {:array, :string},
-          description: "Names of connected MCP servers."
         },
         %{
           name: "node_name",
@@ -443,7 +431,6 @@ defmodule Opal.RPC.Protocol do
              %{
                "sub_agents" => :boolean,
                "skills" => :boolean,
-               "mcp" => :boolean,
                "debug" => :boolean
              }},
           description: "Current runtime feature flags."
@@ -486,7 +473,6 @@ defmodule Opal.RPC.Protocol do
              %{
                "sub_agents" => :boolean,
                "skills" => :boolean,
-               "mcp" => :boolean,
                "debug" => :boolean
              }},
           required: false,
@@ -520,7 +506,6 @@ defmodule Opal.RPC.Protocol do
              %{
                "sub_agents" => :boolean,
                "skills" => :boolean,
-               "mcp" => :boolean,
                "debug" => :boolean
              }},
           description: "Current runtime feature flags."

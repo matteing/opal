@@ -18,7 +18,7 @@ defmodule Opal.Agent.State do
   - **Token tracking** — `token_usage`, `last_prompt_tokens`, `last_usage_msg_index`
   - **Context** — `context_entries` (raw discovered file data), `context_files` (paths for UI)
   - **Skills** — `available_skills`, `active_skills`
-  - **Sub-agents / MCP** — `sub_agent_supervisor`, `mcp_supervisor`, `mcp_servers`
+  - **Sub-agents** — `sub_agent_supervisor`
   - **Resilience** — `retry_count`, `max_retries`, `retry_base_delay_ms`, `retry_max_delay_ms`,
     `overflow_detected`
   - **Interaction** — `pending_messages`
@@ -48,7 +48,7 @@ defmodule Opal.Agent.State do
           session: pid() | nil,
 
           # ── Tool registry ────────────────────────────────────────────
-          # Full pool of registered tool modules (built-in + MCP + custom).
+          # Full pool of registered tool modules (built-in + custom).
           # ⚠ Do NOT read directly for availability — use
           #   `Opal.Agent.ToolRunner.active_tools/1` which applies
           #   feature gates and the disabled list.
@@ -127,13 +127,9 @@ defmodule Opal.Agent.State do
           # Names of skills that have been loaded into the conversation.
           active_skills: [String.t()],
 
-          # ── Sub-agents / MCP ─────────────────────────────────────────
+          # ── Sub-agents ───────────────────────────────────────────────
           # Supervisor for child agent processes.
           sub_agent_supervisor: atom() | pid(),
-          # Supervisor for MCP server connections.
-          mcp_supervisor: atom() | pid() | nil,
-          # MCP server configs (used for connection management).
-          mcp_servers: [map()],
 
           # ── Resilience ───────────────────────────────────────────────
           # Consecutive retry count for the current turn.
@@ -214,10 +210,8 @@ defmodule Opal.Agent.State do
     available_skills: [],
     active_skills: [],
 
-    # Sub-agents / MCP
+    # Sub-agents
     sub_agent_supervisor: nil,
-    mcp_supervisor: nil,
-    mcp_servers: [],
 
     # Resilience
     retry_count: 0,
