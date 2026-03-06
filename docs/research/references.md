@@ -58,7 +58,9 @@ Compiled from `## References` sections across docs, plus README and ongoing rese
 
 ## Context & Token Efficiency
 
-- [Context Mode](https://mksg.lu/blog/context-mode) — Mert Köseoğlu, 2026. MCP server that compresses tool outputs before they enter the context window, achieving 98% reduction. Inspired Opal's native context mode spec. ([context-mode](../context-mode.md))
+- [Context Mode](https://mksg.lu/blog/context-mode) — Mert Köseoğlu, 2026. MCP server that compresses tool outputs before they enter the context window, achieving 98% reduction. Reference implementation for Smoosh Knowledge Base: dual FTS5 tables (Porter + trigram), BM25 ranking, 3-layer fallback search, chunking strategies. Source: [github.com/mksglu/claude-context-mode](https://github.com/mksglu/claude-context-mode). ([smoosh](../smoosh.md))
+- [exqlite](https://github.com/elixir-sqlite/exqlite) — Direct SQLite3 NIF driver for Elixir. Used by KnowledgeBase for FTS5/BM25 without Ecto. Requires `SQLITE_ENABLE_FTS5=1` compile flag. ([smoosh](../smoosh.md))
+- [SQLite FTS5 Extension](https://sqlite.org/fts5.html) — Official SQLite docs for FTS5 virtual tables, `bm25()` ranking function, `highlight()`, and tokenizer configuration (`porter`, `unicode61`, `trigram`). ([smoosh](../smoosh.md))
 
 ## TODO
 
