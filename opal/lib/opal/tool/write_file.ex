@@ -44,9 +44,6 @@ defmodule Opal.Tool.WriteFile do
   end
 
   @impl true
-  def smoosh, do: :skip
-
-  @impl true
   @spec execute(map(), map()) ::
           {:ok, String.t(), map()} | {:error, String.t()}
   def execute(args, %{working_dir: working_dir} = context) when is_map(args) do

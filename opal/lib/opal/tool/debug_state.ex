@@ -53,9 +53,6 @@ defmodule Opal.Tool.DebugState do
   def meta(_), do: "Inspect runtime state"
 
   @impl true
-  def smoosh, do: :skip
-
-  @impl true
   @spec execute(map(), map()) :: {:ok, String.t()} | {:error, String.t()}
   def execute(args, %{agent_state: %Opal.Agent.State{} = state}) do
     event_limit = clamp_int(Map.get(args, "event_limit"), 50, @max_event_limit)

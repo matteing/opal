@@ -11,7 +11,6 @@ defmodule Opal.Config.Features do
     * `:context` — walk-up context file discovery (AGENTS.md, OPAL.md, etc.)
     * `:skills` — skill directory discovery and progressive disclosure
     * `:debug` — internal debug/introspection tooling (disabled by default)
-    * `:smoosh` — tool output compression via sub-agent (disabled by default)
 
   ## Usage
 
@@ -35,8 +34,7 @@ defmodule Opal.Config.Features do
           sub_agents: sub_agents_config(),
           context: context_config(),
           skills: skills_config(),
-          debug: debug_config(),
-          smoosh: smoosh_config()
+          debug: debug_config()
         }
 
   @typedoc """
@@ -75,36 +73,10 @@ defmodule Opal.Config.Features do
   """
   @type debug_config :: %{enabled: boolean()}
 
-  @typedoc """
-  Smoosh (tool output compression) configuration.
-
-    * `:enabled` — whether tool output compression is active. Default: `false`.
-    * `:threshold_bytes` — outputs larger than this are compressed. Default: `4096` (4 KB).
-    * `:hard_limit_bytes` — outputs larger than this are indexed only (not sent to
-      the compressor sub-agent). Default: `102_400` (100 KB).
-    * `:compressor_model` — model to use for compression sub-agent. `nil` means
-      auto-select the cheapest available. Default: `nil`.
-    * `:index_enabled` — whether the FTS5 knowledge base is active. Default: `true`.
-  """
-  @type smoosh_config :: %{
-          enabled: boolean(),
-          threshold_bytes: pos_integer(),
-          hard_limit_bytes: pos_integer(),
-          compressor_model: String.t() | nil,
-          index_enabled: boolean()
-        }
-
   defstruct sub_agents: %{enabled: true},
             context: %{enabled: true, filenames: ["AGENTS.md", "OPAL.md"]},
             skills: %{enabled: true, extra_dirs: []},
-            debug: %{enabled: false},
-            smoosh: %{
-              enabled: true,
-              threshold_bytes: 4_096,
-              hard_limit_bytes: 102_400,
-              compressor_model: nil,
-              index_enabled: true
-            }
+            debug: %{enabled: false}
 
   @doc """
   Builds a Features struct from a map or keyword list.
@@ -133,7 +105,6 @@ defmodule Opal.Config.Features do
     |> merge_subsystem(:context, attrs)
     |> merge_subsystem(:skills, attrs)
     |> merge_subsystem(:debug, attrs)
-    |> merge_subsystem(:smoosh, attrs)
   end
 
   defp merge_subsystem(features, key, attrs) do
@@ -202,7 +173,7 @@ defmodule Opal.Config do
       subsystems. Each subsystem has an `:enabled` toggle and subsystem-specific
       options. See `Opal.Config.Features` for full documentation.
 
-      Subsystems: `:sub_agents`, `:context`, `:skills`, `:debug`, `:smoosh`.
+      Subsystems: `:sub_agents`, `:context`, `:skills`, `:debug`.
 
   ## Application config example
 

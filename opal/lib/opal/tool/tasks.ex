@@ -133,9 +133,6 @@ defmodule Opal.Tool.Tasks do
   end
 
   @impl true
-  def smoosh, do: :skip
-
-  @impl true
   def execute(%{"action" => "insert"} = params, context) when is_map(context),
     do: run_insert(scope_key(context), params)
 

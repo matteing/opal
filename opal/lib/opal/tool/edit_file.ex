@@ -59,9 +59,6 @@ defmodule Opal.Tool.EditFile do
   end
 
   @impl true
-  def smoosh, do: :skip
-
-  @impl true
   def execute(
         %{"path" => path, "start" => start_anchor} = args,
         %{working_dir: working_dir}

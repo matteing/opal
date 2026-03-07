@@ -43,9 +43,6 @@ defmodule Opal.Agent.ToolRunner do
   end
 
   def collect_result(ref, tc, result, %State{} = state) do
-    tool_mod = find_tool(tc.name, active_tools(state))
-    {result, state} = Opal.Agent.Smoosh.maybe_compress(tool_mod, result, state)
-
     Emitter.broadcast(state, {:tool_execution_end, tc.name, tc.call_id, result})
 
     state = %{
@@ -79,18 +76,14 @@ defmodule Opal.Agent.ToolRunner do
         tools: tools,
         disabled_tools: disabled_tools,
         config: config,
-        available_skills: skills,
-        session_id: session_id
+        available_skills: skills
       }) do
     disabled = MapSet.new(disabled_tools)
-    smoosh = config.features.smoosh
-    kb_active = smoosh.enabled and smoosh.index_enabled and kb_has_content?(session_id)
 
     gates = [
       {not config.features.sub_agents.enabled, &(&1 == Opal.Tool.SubAgent)},
       {not config.features.debug.enabled, &(&1 == Opal.Tool.DebugState)},
-      {not (config.features.skills.enabled and skills != []), &(&1 == Opal.Tool.UseSkill)},
-      {not kb_active, &(&1 == Opal.Tool.KbSearch)}
+      {not (config.features.skills.enabled and skills != []), &(&1 == Opal.Tool.UseSkill)}
     ]
 
     rejectors = for {true, pred} <- gates, do: pred
@@ -221,11 +214,4 @@ defmodule Opal.Agent.ToolRunner do
   @spec to_text(term()) :: String.t()
   defp to_text(output) when is_binary(output), do: output
   defp to_text(output), do: Opal.Util.Json.encode_or_inspect(output)
-
-  defp kb_has_content?(session_id) do
-    case Opal.Agent.Smoosh.KnowledgeBase.lookup(session_id) do
-      {:ok, pid} -> Opal.Agent.Smoosh.KnowledgeBase.has_content?(pid)
-      :not_started -> false
-    end
-  end
 end

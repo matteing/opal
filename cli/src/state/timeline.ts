@@ -18,8 +18,6 @@ import type {
   AgentEvent,
   ToolExecutionStartEvent,
   ToolExecutionEndEvent,
-  SmooshCompressEvent,
-  SmooshIndexEvent,
 } from "../sdk/protocol.js";
 import type { TimelineEntry, ToolCall, AgentView, TokenUsage, StatusLevel } from "./types.js";
 
@@ -128,11 +126,6 @@ function updateToolEntry(
 
 // ── View-level reducer (shared across all agents) ────────────────
 
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${bytes} B`;
-}
-
 interface ViewFields {
   entries: readonly TimelineEntry[];
   thinking: string | null;
@@ -240,39 +233,6 @@ function reduceView(view: ViewFields, event: Record<string, unknown>): ViewField
     case "statusUpdate":
       return { ...view, statusMessage: (event.message as string) ?? null };
 
-    case "smooshCompress": {
-      const e = event as unknown as SmooshCompressEvent;
-      const ratio = ((1 - e.compressedBytes / e.rawBytes) * 100).toFixed(0);
-      return {
-        ...view,
-        statusMessage: null,
-        entries: [
-          ...view.entries,
-          {
-            kind: "status",
-            text: `Compressed ${e.tool} output (${formatBytes(e.rawBytes)} → ${formatBytes(e.compressedBytes)}, ${ratio}% reduction)`,
-            level: "info" as StatusLevel,
-          },
-        ],
-      };
-    }
-
-    case "smooshIndex": {
-      const e = event as unknown as SmooshIndexEvent;
-      return {
-        ...view,
-        statusMessage: null,
-        entries: [
-          ...view.entries,
-          {
-            kind: "status",
-            text: `Indexed ${e.tool} output (${formatBytes(e.rawBytes)}) into knowledge base`,
-            level: "info" as StatusLevel,
-          },
-        ],
-      };
-    }
-
     default:
       return view;
   }
@@ -318,8 +278,6 @@ export function applyEvent(state: TimelineSnapshot, event: AgentEvent): Timeline
     case "toolExecutionEnd":
     case "toolOutput":
     case "statusUpdate":
-    case "smooshCompress":
-    case "smooshIndex":
       return {
         ...state,
         agents: reduceAgentView(

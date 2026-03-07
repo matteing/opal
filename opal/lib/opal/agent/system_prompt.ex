@@ -344,13 +344,6 @@ defmodule Opal.Agent.SystemPrompt do
          | format_available_models(state)
        ]},
 
-      # Smoosh knowledge base: tell the agent about compressed outputs
-      # and how to retrieve details from the FTS5 index.
-      {has?.("kb_search"),
-       "Some tool outputs were compressed or indexed to save context. " <>
-         "The full data is searchable via `kb_search`. Use it when a compressed " <>
-         "summary is insufficient or you need specific details from a previous tool output."},
-
       # Status tags let the TUI show progress during multi-step work.
       # Active whenever the agent has any tools (i.e. can do real work).
       {MapSet.size(names) > 0,

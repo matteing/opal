@@ -15,7 +15,6 @@ import { useHotkeys } from "./use-hotkeys.js";
 import { useCommands, type CommandRegistry } from "./use-commands.js";
 import { copyToClipboard, openPath } from "../lib/desktop.js";
 import type { Overlay } from "./use-overlay.js";
-import type { OpalConfigSetParams } from "../sdk/protocol.js";
 
 export interface UseOpalCommandsReturn {
   readonly cmds: ReturnType<typeof useCommands>;
@@ -75,43 +74,6 @@ export function useOpalCommands(
         description: "Configure features and tools",
         execute: () => {
           setOverlay("opal");
-        },
-      },
-      smoosh: {
-        description: "Toggle smoosh compression or show status",
-        args: "[on|off]",
-        execute: async ({ arg }) => {
-          if (!session) return "No active session.";
-
-          if (arg === "on" || arg === "off") {
-            const enabled = arg === "on";
-            try {
-              await session.config.setRuntime({
-                features: { smoosh: enabled } as OpalConfigSetParams["features"],
-              });
-              pushStatus(`Smoosh ${enabled ? "enabled" : "disabled"}`, "success");
-            } catch (e: unknown) {
-              pushStatus(
-                `Failed to toggle smoosh: ${e instanceof Error ? e.message : String(e)}`,
-                "error",
-              );
-            }
-            return;
-          }
-
-          try {
-            const config = await session.config.getRuntime();
-            const enabled = config.features.smoosh;
-            const hasKb = config.tools.enabled.includes("kb_search");
-            const status = enabled ? "enabled" : "disabled";
-            const kb = hasKb ? "active (kb_search available)" : "no indexed content";
-            pushStatus(`Smoosh: ${status} · Knowledge base: ${kb}`, "info");
-          } catch (e: unknown) {
-            pushStatus(
-              `Failed to get smoosh status: ${e instanceof Error ? e.message : String(e)}`,
-              "error",
-            );
-          }
         },
       },
     }),

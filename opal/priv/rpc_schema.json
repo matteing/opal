@@ -277,69 +277,6 @@
         ],
         "type": "object"
       },
-      "smoosh_compress": {
-        "description": "A tool output was compressed by the smoosh sub-agent to save context window space.",
-        "properties": {
-          "compressed_bytes": {
-            "description": "Compressed output size in bytes.",
-            "type": "integer"
-          },
-          "raw_bytes": {
-            "description": "Original output size in bytes.",
-            "type": "integer"
-          },
-          "session_id": {
-            "description": "Session this event belongs to.",
-            "type": "string"
-          },
-          "tool": {
-            "description": "Tool that produced the output.",
-            "type": "string"
-          },
-          "type": {
-            "const": "smoosh_compress",
-            "description": "Event type discriminator.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "session_id",
-          "tool",
-          "raw_bytes",
-          "compressed_bytes"
-        ],
-        "type": "object"
-      },
-      "smoosh_index": {
-        "description": "A tool output was indexed into the session knowledge base because it exceeded the compression threshold.",
-        "properties": {
-          "raw_bytes": {
-            "description": "Original output size in bytes.",
-            "type": "integer"
-          },
-          "session_id": {
-            "description": "Session this event belongs to.",
-            "type": "string"
-          },
-          "tool": {
-            "description": "Tool that produced the output.",
-            "type": "string"
-          },
-          "type": {
-            "const": "smoosh_index",
-            "description": "Event type discriminator.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "session_id",
-          "tool",
-          "raw_bytes"
-        ],
-        "type": "object"
-      },
       "status_update": {
         "description": "Short status message describing what the agent is currently working on.",
         "properties": {
@@ -957,9 +894,6 @@
                 "skills": {
                   "type": "boolean"
                 },
-                "smoosh": {
-                  "type": "boolean"
-                },
                 "sub_agents": {
                   "type": "boolean"
                 }
@@ -967,7 +901,6 @@
               "required": [
                 "debug",
                 "skills",
-                "smoosh",
                 "sub_agents"
               ],
               "type": "object"
@@ -1039,9 +972,6 @@
                 "skills": {
                   "type": "boolean"
                 },
-                "smoosh": {
-                  "type": "boolean"
-                },
                 "sub_agents": {
                   "type": "boolean"
                 }
@@ -1049,7 +979,6 @@
               "required": [
                 "debug",
                 "skills",
-                "smoosh",
                 "sub_agents"
               ],
               "type": "object"
@@ -1099,9 +1028,6 @@
                 "skills": {
                   "type": "boolean"
                 },
-                "smoosh": {
-                  "type": "boolean"
-                },
                 "sub_agents": {
                   "type": "boolean"
                 }
@@ -1109,7 +1035,6 @@
               "required": [
                 "debug",
                 "skills",
-                "smoosh",
                 "sub_agents"
               ],
               "type": "object"
@@ -1326,9 +1251,6 @@
                 "skills": {
                   "type": "boolean"
                 },
-                "smoosh": {
-                  "type": "boolean"
-                },
                 "sub_agents": {
                   "type": "boolean"
                 }
@@ -1336,7 +1258,6 @@
               "required": [
                 "debug",
                 "skills",
-                "smoosh",
                 "sub_agents"
               ],
               "type": "object"

@@ -1,6 +1,6 @@
 # Smoosh!
 
-> **Status**: Implemented
+> **Status**: Idea (rolled back — not yet implemented)
 > **Scope**: `Opal.Agent.Smoosh.*`, `Opal.Tool.KbSearch`, `Opal.Agent.ToolRunner`
 
 ## The Algorithm at a Glance

@@ -133,7 +133,6 @@ defmodule Opal.MixProject do
       {:nimble_options, "~> 1.1"},
       {:glob_ex, "~> 0.1"},
       {:yaml_elixir, "~> 2.11"},
-      {:exqlite, "~> 0.27"},
       {:ex_doc, "~> 0.35", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]

@@ -124,8 +124,7 @@ defmodule Opal.RPC.Protocol do
              %{
                "sub_agents" => :boolean,
                "skills" => :boolean,
-               "debug" => :boolean,
-               "smoosh" => :boolean
+               "debug" => :boolean
              }},
           required: false,
           description: "Boot-time feature toggles."
@@ -432,8 +431,7 @@ defmodule Opal.RPC.Protocol do
              %{
                "sub_agents" => :boolean,
                "skills" => :boolean,
-               "debug" => :boolean,
-               "smoosh" => :boolean
+               "debug" => :boolean
              }},
           description: "Current runtime feature flags."
         },
@@ -475,8 +473,7 @@ defmodule Opal.RPC.Protocol do
              %{
                "sub_agents" => :boolean,
                "skills" => :boolean,
-               "debug" => :boolean,
-               "smoosh" => :boolean
+               "debug" => :boolean
              }},
           required: false,
           description: "Feature flags to update."
@@ -509,8 +506,7 @@ defmodule Opal.RPC.Protocol do
              %{
                "sub_agents" => :boolean,
                "skills" => :boolean,
-               "debug" => :boolean,
-               "smoosh" => :boolean
+               "debug" => :boolean
              }},
           description: "Current runtime feature flags."
         },
@@ -870,29 +866,6 @@ defmodule Opal.RPC.Protocol do
       description:
         "Agent process crashed and was restarted by the supervisor. Conversation history was reloaded from the surviving session.",
       fields: []
-    },
-    %{
-      type: "smoosh_compress",
-      description:
-        "A tool output was compressed by the smoosh sub-agent to save context window space.",
-      fields: [
-        %{name: "tool", type: :string, description: "Tool that produced the output."},
-        %{name: "raw_bytes", type: :integer, description: "Original output size in bytes."},
-        %{
-          name: "compressed_bytes",
-          type: :integer,
-          description: "Compressed output size in bytes."
-        }
-      ]
-    },
-    %{
-      type: "smoosh_index",
-      description:
-        "A tool output was indexed into the session knowledge base because it exceeded the compression threshold.",
-      fields: [
-        %{name: "tool", type: :string, description: "Tool that produced the output."},
-        %{name: "raw_bytes", type: :integer, description: "Original output size in bytes."}
-      ]
     }
   ]
 
