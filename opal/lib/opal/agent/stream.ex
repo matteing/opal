@@ -58,6 +58,12 @@ defmodule Opal.Agent.Stream do
   - `"{…"` — raw JSON (some error responses omit the SSE prefix)
   - anything else — SSE comments / event-type lines, ignored
 
+  HTTP body chunks can arrive at arbitrary byte boundaries, splitting
+  an SSE line across two consecutive chunks.  We use `state.sse_buffer`
+  to carry trailing fragments: the last line of each chunk (which may
+  be incomplete) is buffered, and on the next call it is prepended to
+  the incoming data so the line is reassembled before parsing.
+
   ## Example
 
       iex> raw = "data: {\\"type\\":\\"text_delta\\",\\"delta\\":\\"hi\\"}\\ndata: [DONE]\\n"
@@ -67,15 +73,34 @@ defmodule Opal.Agent.Stream do
   """
   @spec parse_sse_data(binary(), State.t()) :: State.t()
   def parse_sse_data(data, state) do
-    binary = IO.iodata_to_binary(data)
+    binary = state.sse_buffer <> IO.iodata_to_binary(data)
 
     Logger.debug(
       "SSE raw data (#{byte_size(binary)} bytes): #{inspect(String.slice(binary, 0, 300))}"
     )
 
-    binary
-    |> String.split("\n", trim: true)
-    |> Enum.reduce(state, fn
+    # If the chunk ends with \n, every line is complete.
+    # Otherwise the last segment is a partial line that must be buffered.
+    # Exception: raw JSON lines (starting with "{" and ending with "}") are
+    # always complete — some providers send error responses without a trailing \n.
+    {lines, carry} =
+      if String.ends_with?(binary, "\n") do
+        {String.split(binary, "\n", trim: true), ""}
+      else
+        parts = String.split(binary, "\n")
+        all_but_last = Enum.slice(parts, 0..-2//1) |> Enum.reject(&(&1 == ""))
+        last = List.last(parts)
+
+        if complete_json_line?(last) do
+          {all_but_last ++ [last], ""}
+        else
+          {all_but_last, last}
+        end
+      end
+
+    state = %{state | sse_buffer: carry}
+
+    Enum.reduce(lines, state, fn
       "data: [DONE]", acc ->
         acc
 
@@ -90,6 +115,14 @@ defmodule Opal.Agent.Stream do
         acc
     end)
   end
+
+  # A trailing segment without \n is normally buffered. However, raw JSON
+  # lines (e.g. gateway error responses) may arrive without a trailing \n.
+  # We recognise them by the `data: {…}` or bare `{…}` shape and process
+  # them immediately instead of buffering.
+  defp complete_json_line?("data: {" <> _ = line), do: String.ends_with?(line, "}")
+  defp complete_json_line?("{" <> _ = line), do: String.ends_with?(line, "}")
+  defp complete_json_line?(_), do: false
 
   @doc """
   Decodes a single JSON line into provider events and folds them into state.

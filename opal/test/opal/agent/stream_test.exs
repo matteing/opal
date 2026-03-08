@@ -634,6 +634,82 @@ defmodule Opal.Agent.StreamTest do
       result = Stream.parse_sse_data("event: ping\n: comment\n", state)
       assert result.current_text == ""
     end
+
+    test "buffers partial line split across HTTP chunks" do
+      state = base_state() |> Map.put(:provider, Opal.Provider.Copilot)
+
+      # Chunk 1: complete line + start of a second line cut mid-JSON
+      chunk1 =
+        ~s|data: {"choices":[{"index":0,"delta":{"content":"hi","role":"assistant"}}],"created":1}\n| <>
+          ~s|data: {"choices":[{"index":0,"del|
+
+      state = Stream.parse_sse_data(chunk1, state)
+      # The first complete line was processed
+      assert state.current_text == "hi"
+      # The partial second line is buffered
+      assert state.sse_buffer == ~s|data: {"choices":[{"index":0,"del|
+
+      # Chunk 2: completes the partial line
+      chunk2 = ~s|ta":{"content":"lo","role":"assistant"}}],"created":2}\n|
+
+      state = Stream.parse_sse_data(chunk2, state)
+      # Now both lines were processed
+      assert state.current_text == "hilo"
+      assert state.sse_buffer == ""
+    end
+
+    test "handles chunk ending with newline (no carry-over)" do
+      state = base_state() |> Map.put(:provider, Opal.Provider.Copilot)
+
+      chunk =
+        ~s|data: {"choices":[{"index":0,"delta":{"content":"ok","role":"assistant"}}],"created":1}\n|
+
+      state = Stream.parse_sse_data(chunk, state)
+      assert state.current_text == "ok"
+      assert state.sse_buffer == ""
+    end
+
+    test "buffers tool_call arguments split across chunks" do
+      state = base_state() |> Map.put(:provider, Opal.Provider.Copilot)
+
+      # Chunk 1: tool_call_start with id/name (complete line), then a partial delta line
+      start_line =
+        ~s|data: {"choices":[{"index":0,"delta":{"tool_calls":[{"id":"call_1","index":0,"type":"function","function":{"name":"shell","arguments":""}}],"role":"assistant"}}],"created":1}\n|
+
+      # A valid delta line, split in the middle
+      delta_line =
+        ~s|data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"{\\"command\\": \\"ls\\"}"},"index":0,"type":"function"}]},"index":0}],"created":2}\n|
+
+      split_at = 40
+      partial_delta = String.slice(delta_line, 0, split_at)
+      rest = String.slice(delta_line, split_at, byte_size(delta_line))
+
+      state = Stream.parse_sse_data(start_line <> partial_delta, state)
+      # tool_call_start created the entry
+      assert length(state.current_tool_calls) == 1
+      assert hd(state.current_tool_calls).name == "shell"
+      # Arguments should still be empty (delta was partial, buffered)
+      assert hd(state.current_tool_calls).arguments_json == ""
+      assert state.sse_buffer != ""
+
+      # Chunk 2: completes the delta line
+      state = Stream.parse_sse_data(rest, state)
+      assert hd(state.current_tool_calls).arguments_json == ~s|{"command": "ls"}|
+      assert state.sse_buffer == ""
+    end
+
+    test "multiple complete lines in one chunk all processed" do
+      state = base_state() |> Map.put(:provider, Opal.Provider.Copilot)
+
+      chunk =
+        ~s|data: {"choices":[{"index":0,"delta":{"content":"a","role":"assistant"}}],"created":1}\n| <>
+          ~s|data: {"choices":[{"index":0,"delta":{"content":"b"}}],"created":2}\n| <>
+          ~s|data: {"choices":[{"index":0,"delta":{"content":"c"}}],"created":3}\n|
+
+      state = Stream.parse_sse_data(chunk, state)
+      assert state.current_text == "abc"
+      assert state.sse_buffer == ""
+    end
   end
 
   defp apply_event(state, event), do: Stream.handle_stream_event(event, state)

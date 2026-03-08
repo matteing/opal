@@ -85,6 +85,11 @@ defmodule Opal.Agent.State do
           # Keyed by tag name atom; each value is the buffered partial text.
           tag_buffers: %{atom() => String.t()},
 
+          # Partial SSE line carried across HTTP chunks.  HTTP body
+          # chunks can split SSE `data:` lines mid-JSON; this buffer
+          # holds the trailing fragment so the next chunk can complete it.
+          sse_buffer: String.t(),
+
           # ── Stream transport ─────────────────────────────────────
           # HTTP/SSE: Req.Response for async SSE streams (Provider.Copilot).
           streaming_resp: Req.Response.t() | nil,
@@ -182,6 +187,7 @@ defmodule Opal.Agent.State do
     current_thinking: nil,
     message_started: false,
     tag_buffers: %{},
+    sse_buffer: "",
 
     # Stream transport
     streaming_resp: nil,

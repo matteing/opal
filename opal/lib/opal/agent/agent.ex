@@ -350,6 +350,7 @@ defmodule Opal.Agent do
         current_tool_calls: [],
         current_thinking: nil,
         message_started: false,
+        sse_buffer: "",
         last_chunk_at: System.monotonic_time(:second),
         stream_watchdog: nil
     }
