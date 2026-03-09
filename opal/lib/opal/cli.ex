@@ -13,15 +13,17 @@ defmodule Opal.CLI do
 
   alias Opal.CLI.Renderer
 
+  require Logger
+
   @default_model "claude-sonnet-4.5"
 
   def main(argv \\ []) do
     opts = parse_args(argv)
 
+    # Suppress debug/info noise in the CLI — only show warnings and errors
+    Logger.configure(level: :warn)
+
     # Ensure crypto NIF can find the bundled OpenSSL dylibs.
-    # When running as an escript, the code path may not include the OTP
-    # lib directory. We add it explicitly and pre-start crypto before
-    # the full app tree boots.
     ensure_crypto_loaded()
 
     # Ensure the OTP app is started (handles both escript and mix run)
