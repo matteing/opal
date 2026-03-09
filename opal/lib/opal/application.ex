@@ -39,7 +39,7 @@ defmodule Opal.Application do
   @doc """
   Starts Erlang distribution so remote nodes can connect.
 
-  Writes the node name to `~/.opal/node` for discovery by `pnpm inspect`.
+  Writes the node name to `data_dir/node` for discovery by `pnpm inspect`.
   No-op if distribution is already started. Returns `{:ok, node_name}` or `{:error, reason}`.
 
   The distribution cookie is read from `config :opal, :distribution_cookie`.
@@ -54,10 +54,10 @@ defmodule Opal.Application do
       Logger.debug("Distribution already active: #{Node.self()}")
       {:ok, Node.self()}
     else
-      node_name = :"opal_#{System.pid()}"
+      node_name = :"opal_#{:os.getpid()}"
       cookie = distribution_cookie()
 
-      case Node.start(node_name, name_domain: :shortnames) do
+      case Node.start(node_name, :shortnames) do
         {:ok, _pid} ->
           Node.set_cookie(cookie)
           write_node_file(Node.self(), cookie)
@@ -82,30 +82,15 @@ defmodule Opal.Application do
   end
 
   defp setup_file_logger do
-    data_dir =
-      Application.get_env(:opal, :data_dir) ||
-        Opal.Config.default_data_dir()
-
-    logs_dir = Path.join(Path.expand(data_dir), "logs")
+    config = Opal.Config.new()
+    logs_dir = Opal.Config.logs_dir(config)
     log_file = Path.join(logs_dir, "server.log")
 
-    with :ok <- File.mkdir_p(logs_dir),
-         :ok <-
-           :logger.add_handler(:file_log, :logger_std_h, %{
-             config: %{
-               file: String.to_charlist(log_file),
-               max_no_bytes: 5_000_000,
-               max_no_files: 3
-             },
-             formatter:
-               {:logger_formatter,
-                %{
-                  single_line: true,
-                  template: [:time, " [", :level, "] ", :msg, "\n"]
-                }}
-           }) do
-      :ok
-    else
+    case File.mkdir_p(logs_dir) do
+      :ok ->
+        Logger.add_backend({Opal.FileLogger, :file_log})
+        Logger.configure_backend({Opal.FileLogger, :file_log}, path: log_file)
+
       {:error, reason} ->
         Logger.warning("Could not set up file logging: #{inspect(reason)}")
     end
@@ -119,7 +104,7 @@ defmodule Opal.Application do
   end
 
   @doc """
-  Reads the node name and cookie from `~/.opal/node`.
+  Reads the node name and cookie from `data_dir/node`.
   Returns `{:ok, node_name, cookie}` or `:error`.
   """
   @spec read_node_file() :: {:ok, node(), atom()} | :error
@@ -161,6 +146,6 @@ defmodule Opal.Application do
   end
 
   defp node_file_path do
-    Path.join([System.user_home!(), ".opal", "node"])
+    Path.join(Opal.Config.data_dir(Opal.Config.new()), "node")
   end
 end

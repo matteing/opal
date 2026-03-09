@@ -71,20 +71,23 @@ defmodule Opal.Agent.Emitter do
   defp debug_enabled?(_), do: false
 
   defp ensure_table do
-    if :ets.whereis(@table) == :undefined do
-      try do
-        :ets.new(@table, [
-          :named_table,
-          :public,
-          :duplicate_bag,
-          {:read_concurrency, true},
-          {:write_concurrency, true}
-        ])
-      rescue
-        ArgumentError -> :ok
-      end
-    end
+    # :ets.whereis/1 is OTP 21+; use :ets.info/1 for OTP 19 compat
+    case :ets.info(@table) do
+      :undefined ->
+        try do
+          :ets.new(@table, [
+            :named_table,
+            :public,
+            :duplicate_bag,
+            {:read_concurrency, true},
+            {:write_concurrency, true}
+          ])
+        rescue
+          ArgumentError -> :ok
+        end
 
-    :ok
+      _ ->
+        :ok
+    end
   end
 end
