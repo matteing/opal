@@ -135,8 +135,8 @@ defmodule Opal.Config do
   ## Priority (highest wins)
 
   1. Session overrides — keys passed to `Opal.Config.new/1` or `Opal.start_session/1`
-  2. Application config — `config :opal, ...` in your `config.exs`
-  3. Environment variables — via `config/runtime.exs`
+  2. Environment variables — `OPAL_DATA_DIR`, `OPAL_SHELL`, `OPAL_COPILOT_DOMAIN`
+  3. Application config — `config :opal, ...` in your `config.exs`
   4. Built-in defaults in this struct
 
   ## Fields
@@ -180,7 +180,7 @@ defmodule Opal.Config do
       config :opal,
         data_dir: "~/.opal",
         shell: :zsh,
-        default_model: {"copilot", "claude-sonnet-4-5"},
+        default_model: {"copilot", "claude-sonnet-4.5"},
         default_tools: [Opal.Tool.ReadFile, Opal.Tool.WriteFile, Opal.Tool.EditFile, Opal.Tool.Grep,
                         Opal.Tool.Shell, Opal.Tool.SubAgent, Opal.Tool.Tasks,
                         Opal.Tool.UseSkill, Opal.Tool.AskUser, Opal.Tool.DebugState],
@@ -248,24 +248,13 @@ defmodule Opal.Config do
     # 2. Layer on Application env
     app_env = Application.get_all_env(:opal)
 
-    merged =
-      Enum.reduce(app_env, base, fn
-        {:features, val}, acc when is_map(val) ->
-          %{acc | features: Opal.Config.Features.new(val)}
+    merged = merge_attrs(base, app_env)
 
-        {key, val}, acc ->
-          if Map.has_key?(acc, key), do: %{acc | key => val}, else: acc
-      end)
+    # 3. Layer on environment overrides
+    merged = merge_attrs(merged, env_overrides())
 
-    # 3. Layer on session overrides (highest priority)
-    merged =
-      Enum.reduce(overrides, merged, fn
-        {:features, val}, acc when is_map(val) ->
-          %{acc | features: Opal.Config.Features.new(val)}
-
-        {key, val}, acc ->
-          if Map.has_key?(acc, key) and val != nil, do: %{acc | key => val}, else: acc
-      end)
+    # 4. Layer on session overrides (highest priority)
+    merged = merge_attrs(merged, overrides)
 
     # 4. Resolve runtime defaults
     merged = %{merged | shell: merged.shell || Opal.Tool.Shell.default_shell()}
@@ -284,12 +273,62 @@ defmodule Opal.Config do
   """
   @spec default_data_dir() :: String.t()
   def default_data_dir do
-    if Opal.Platform.windows?() do
-      :filename.basedir(:user_data, ~c"opal") |> to_string()
+    if data_dir = env_data_dir() do
+      data_dir
     else
-      Path.join(System.user_home!(), ".opal")
+      if Opal.Platform.windows?() do
+        :filename.basedir(:user_data, String.to_charlist("opal")) |> to_string()
+      else
+        Path.join(System.user_home!(), ".opal")
+      end
     end
   end
+
+  defp merge_attrs(acc, attrs) when is_list(attrs), do: merge_attrs(acc, Map.new(attrs))
+
+  defp merge_attrs(acc, attrs) when is_map(attrs) do
+    Enum.reduce(attrs, acc, fn
+      {:features, val}, current when is_map(val) ->
+        %{current | features: Opal.Config.Features.new(val)}
+
+      {key, val}, current ->
+        if Map.has_key?(current, key) and val != nil, do: %{current | key => val}, else: current
+    end)
+  end
+
+  defp env_overrides do
+    %{}
+    |> maybe_put(:data_dir, env_data_dir())
+    |> maybe_put(:shell, env_shell())
+    |> maybe_put(:copilot_domain, env_copilot_domain())
+  end
+
+  defp env_data_dir do
+    case System.get_env("OPAL_DATA_DIR") do
+      nil -> nil
+      "" -> nil
+      dir -> dir
+    end
+  end
+
+  defp env_shell do
+    case System.get_env("OPAL_SHELL") do
+      nil -> nil
+      "" -> nil
+      shell -> String.to_atom(shell)
+    end
+  end
+
+  defp env_copilot_domain do
+    case System.get_env("OPAL_COPILOT_DOMAIN") do
+      nil -> nil
+      "" -> nil
+      domain -> domain
+    end
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   # -- Derived paths (all from data_dir) --
 

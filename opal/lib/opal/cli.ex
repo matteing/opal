@@ -13,7 +13,7 @@ defmodule Opal.CLI do
 
   alias Opal.CLI.Renderer
 
-  @default_model "gpt-4o"
+  @default_model "claude-sonnet-4.5"
 
   def main(argv \\ []) do
     opts = parse_args(argv)

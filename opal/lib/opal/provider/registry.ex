@@ -1,135 +1,64 @@
 defmodule Opal.Provider.Registry do
   @moduledoc """
-  Model discovery backed by LLMDB.
+  Hardcoded model registry for Snow Leopard edition.
 
-  Provides auto-discovery of available models from LLMDB's database, which
-  includes metadata like context windows, aliases, and capabilities. This
-  replaces hardcoded model lists and context window pattern matching.
-
-  ## Copilot Naming Quirks
-
-  The Copilot API uses its own model ID scheme that differs from upstream
-  providers. Notably, Copilot uses dots where upstream uses dashes:
-
-  | Copilot ID | Upstream ID |
-  |------------|-------------|
-  | `claude-opus-4.6` | `claude-opus-4-6` |
-  | `claude-sonnet-4.5` | `claude-sonnet-4-5-20250929` |
-  | `claude-haiku-4.5` | `claude-haiku-4-5-20251001` |
-
-  LLMDB's `github_copilot` provider maps these correctly, so callers don't
-  need to worry about the translation.
+  Replaces LLMDB with a static map of Copilot models and their metadata.
   """
 
   @default_context_window 128_000
 
-  require Logger
+  @models %{
+    "claude-sonnet-4.5" => %{context: 200_000, thinking: true, name: "Claude Sonnet 4.5"},
+    "claude-sonnet-4" => %{context: 200_000, thinking: true, name: "Claude Sonnet 4"},
+    "claude-opus-4.6" => %{context: 200_000, thinking: true, name: "Claude Opus 4.6"},
+    "claude-haiku-4.5" => %{context: 200_000, thinking: true, name: "Claude Haiku 4.5"},
+    "gpt-4o" => %{context: 128_000, thinking: false, name: "GPT-4o"},
+    "gpt-4.1" => %{context: 128_000, thinking: false, name: "GPT-4.1"},
+    "gpt-5" => %{context: 200_000, thinking: true, name: "GPT-5"},
+    "gpt-5.1" => %{context: 200_000, thinking: true, name: "GPT-5.1"},
+    "gpt-5.2" => %{context: 200_000, thinking: true, name: "GPT-5.2"},
+    "o3" => %{context: 200_000, thinking: true, name: "o3"},
+    "o4-mini" => %{context: 200_000, thinking: true, name: "o4-mini"},
+    "gemini-2.5-pro" => %{context: 1_000_000, thinking: true, name: "Gemini 2.5 Pro"}
+  }
 
-  @doc """
-  Lists models available via GitHub Copilot.
-
-  Returns a list of `%{id, name, supports_thinking}` maps sourced from LLMDB's
-  `github_copilot` provider. Falls back to an empty list if LLMDB is unavailable.
-  """
-  @spec list_copilot() :: [%{id: String.t(), name: String.t(), supports_thinking: boolean()}]
-  def list_copilot do
-    LLMDB.models()
-    |> Enum.filter(&(&1.provider == :github_copilot and not &1.deprecated and not &1.retired))
-    |> Enum.map(&to_model_info/1)
-    |> Enum.sort_by(& &1.id)
-  rescue
-    e ->
-      Logger.warning("LLMDB list_copilot failed: #{Exception.message(e)}")
-      []
-  end
-
-  @doc """
-  Lists models available for a specific provider.
-
-  Since Opal normalizes all providers to GitHub Copilot, this returns the same
-  models as `list_copilot/0` regardless of the provider argument.
-
-  ## Examples
-
-      iex> Opal.Provider.Registry.list_provider(:anthropic)
-      [%{id: "claude-opus-4.6", ...}, ...]
-
-  """
-  @spec list_provider(atom()) :: [
-          %{id: String.t(), name: String.t(), supports_thinking: boolean()}
-        ]
-  def list_provider(_provider) do
-    list_copilot()
-  end
-
-  @doc """
-  Returns the context window size for a model.
-
-  Looks up the model in LLMDB via the `github_copilot` provider.
-  Falls back to #{@default_context_window} if the model is not found.
-
-  ## Examples
-
-      iex> Opal.Provider.Registry.context_window(%Opal.Provider.Model{id: "claude-opus-4.6"})
-      128_000
-  """
-  @spec context_window(Opal.Provider.Model.t()) :: pos_integer()
-  def context_window(%{id: id}) do
-    case LLMDB.model("github_copilot:#{id}") do
-      {:ok, %{limits: %{context: ctx}}} when is_integer(ctx) and ctx > 0 -> ctx
-      _ -> @default_context_window
-    end
-  rescue
-    e ->
-      Logger.warning("LLMDB context_window lookup failed: #{Exception.message(e)}")
-      @default_context_window
-  end
-
-  @doc """
-  Resolves a model spec to its LLMDB metadata.
-
-  Returns `{:ok, model}` with full LLMDB model data, or `{:error, :not_found}`.
-  Useful for checking aliases, capabilities, and other metadata.
-  """
-  @spec resolve(Opal.Provider.Model.t()) :: {:ok, LLMDB.Model.t()} | {:error, :not_found}
-  def resolve(%{id: id}) do
-    case LLMDB.model("github_copilot:#{id}") do
-      {:ok, _model} = result -> result
-      _ -> {:error, :not_found}
-    end
-  rescue
-    e ->
-      Logger.warning("LLMDB resolve failed: #{Exception.message(e)}")
-      {:error, :not_found}
-  end
-
-  # Supported thinking levels per model family.
-  # OpenAI: low/medium/high per their reasoning docs.
-  # Anthropic: low/medium/high mapped to budget_tokens.
-  # Anthropic Opus 4.6+: low/medium/high/max via adaptive thinking.
   @standard_thinking_levels ["low", "medium", "high"]
   @max_thinking_levels ["low", "medium", "high", "max"]
 
-  # Opus 4.6+ supports adaptive thinking with "max" effort level
-  defp supports_max_thinking?(id) do
-    String.contains?(id, "opus-4.6") or String.contains?(id, "opus-4-6")
+  def list_copilot do
+    @models
+    |> Enum.map(fn {id, m} ->
+      %{
+        id: id,
+        name: m.name,
+        supports_thinking: m.thinking,
+        thinking_levels: thinking_levels(id, m.thinking)
+      }
+    end)
+    |> Enum.sort_by(& &1.id)
   end
 
-  defp to_model_info(m) do
-    supports_thinking = get_in(m.capabilities, [:reasoning, :enabled]) == true
+  def list_provider(_provider), do: list_copilot()
 
-    thinking_levels =
-      cond do
-        not supports_thinking -> []
-        supports_max_thinking?(m.id) -> @max_thinking_levels
-        true -> @standard_thinking_levels
-      end
-
-    %{
-      id: m.id,
-      name: m.name,
-      supports_thinking: supports_thinking,
-      thinking_levels: thinking_levels
-    }
+  def context_window(%{id: id}) do
+    case Map.get(@models, id) do
+      %{context: ctx} -> ctx
+      nil -> @default_context_window
+    end
   end
+
+  def resolve(%{id: id}) do
+    case Map.get(@models, id) do
+      nil -> {:error, :not_found}
+      m -> {:ok, m}
+    end
+  end
+
+  defp thinking_levels(id, true) do
+    if String.contains?(id, "opus-4.6") or String.contains?(id, "opus-4-6"),
+      do: @max_thinking_levels,
+      else: @standard_thinking_levels
+  end
+
+  defp thinking_levels(_id, false), do: []
 end
