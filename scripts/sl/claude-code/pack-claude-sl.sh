@@ -51,7 +51,7 @@ export SSL_CERT_FILE="$DIR/cacert.pem"
 if [ -z "$ANTHROPIC_API_KEY" ]; then
   [ -f "$HOME/.anthropic_key" ] && export ANTHROPIC_API_KEY="$(cat "$HOME/.anthropic_key")"
 fi
-exec "$DIR/node" "$DIR/cli.cjs" "$@"
+exec "$DIR/node" --single-threaded "$DIR/cli.cjs" "$@"
 LAUNCHER
 chmod +x "$BUNDLE/claude"
 
