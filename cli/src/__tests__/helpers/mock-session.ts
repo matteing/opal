@@ -4,7 +4,7 @@
  */
 import { vi } from "vitest";
 import { EventEmitter } from "node:events";
-import type { AgentEvent } from "../../sdk/protocol.js";
+import type { AgentEvent } from "@unfinite/opal-sdk";
 
 export interface MockSession {
   sessionId: string;

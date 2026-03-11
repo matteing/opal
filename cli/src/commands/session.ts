@@ -3,9 +3,7 @@
  * `opal session show <id>` — Show session details.
  * `opal session delete <id>` — Delete a saved session.
  */
-import { OpalClient } from "../sdk/client.js";
-import { RpcConnection } from "../sdk/rpc/connection.js";
-import { StdioTransport } from "../sdk/transport/stdio.js";
+import { OpalClient, RpcConnection, StdioTransport } from "@unfinite/opal-sdk";
 
 function connectClient(): OpalClient {
   const transport = new StdioTransport();

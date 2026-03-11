@@ -9,9 +9,8 @@
  */
 
 import type { StateCreator } from "zustand";
-import { createSession } from "../sdk/session.js";
-import type { Session, SessionOptions } from "../sdk/session.js";
-import type { AgentEvent } from "../sdk/protocol.js";
+import { createSession } from "@unfinite/opal-sdk";
+import type { Session, SessionOptions, AgentEvent } from "@unfinite/opal-sdk";
 import type { SessionStatus } from "./types.js";
 import type { TimelineSlice } from "./timeline.js";
 import type { ModelsSlice } from "./models.js";

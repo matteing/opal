@@ -13,7 +13,7 @@
 #
 
 defmodule Codegen.TS do
-  @output_path "../cli/src/sdk/protocol.ts"
+  @output_path "../packages/opal-sdk/src/protocol.ts"
   @schema_path "priv/rpc_schema.json"
 
   def run(args) do

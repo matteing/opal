@@ -20,14 +20,20 @@ dir = "opal"
 depends = ["build:core"]
 run = "mix run ../scripts/codegen_ts.exs"
 
+[tasks."build:sdk"]
+description = "Compile TypeScript SDK"
+depends = ["codegen"]
+dir = "packages/opal-sdk"
+run = "pnpm build"
+
 [tasks."build:cli"]
 description = "Compile TypeScript CLI"
-depends = ["codegen"]
+depends = ["build:sdk"]
 dir = "cli"
-run = "npx tsc -p tsconfig.build.json"
+run = "pnpm build"
 
 [tasks.build]
-description = "Full build: core → codegen → CLI"
+description = "Full build: core → codegen → SDK → CLI"
 depends = ["build:cli"]
 
 # ── Test (independent — wildcard runs them in parallel) ───────
@@ -36,6 +42,11 @@ depends = ["build:cli"]
 description = "Run Elixir tests"
 dir = "opal"
 run = "mix test"
+
+[tasks."test:sdk"]
+description = "Run SDK tests"
+dir = "packages/opal-sdk"
+run = "pnpm test"
 
 [tasks."test:cli"]
 description = "Run CLI tests"
@@ -52,6 +63,11 @@ depends = ["test:*"]
 description = "Check Elixir formatting and types"
 dir = "opal"
 run = ["mix format --check-formatted", "mix dialyzer"]
+
+[tasks."lint:sdk"]
+description = "Lint and format-check SDK"
+dir = "packages/opal-sdk"
+run = ["pnpm format:check"]
 
 [tasks."lint:cli"]
 description = "Lint and format-check CLI"
@@ -84,8 +100,8 @@ dir = "opal"
 run = "mix deps.get"
 
 [tasks."deps:cli"]
-description = "Install CLI dependencies"
-dir = "cli"
+description = "Install all JS dependencies"
+dir = "."
 run = "pnpm install"
 
 [tasks.deps]

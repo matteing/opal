@@ -5,7 +5,7 @@
  * with sensible defaults so tests stay concise.
  */
 
-import type { AgentEvent } from "../../sdk/protocol.js";
+import type { AgentEvent } from "@unfinite/opal-sdk";
 
 export const ev = {
   agentStart: (): AgentEvent => ({ type: "agentStart" }) as AgentEvent,

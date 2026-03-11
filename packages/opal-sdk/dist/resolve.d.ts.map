@@ -1,0 +1,1 @@
+{"version":3,"file":"resolve.d.ts","sourceRoot":"","sources":["../src/resolve.ts"],"names":[],"mappings":"AAMA,MAAM,WAAW,gBAAgB;IAC/B,wDAAwD;IACxD,OAAO,EAAE,MAAM,CAAC;IAChB,uCAAuC;IACvC,IAAI,EAAE,MAAM,EAAE,CAAC;IACf,gDAAgD;IAChD,GAAG,CAAC,EAAE,MAAM,CAAC;CACd;AAmCD;;;;;;GAMG;AACH,wBAAgB,aAAa,IAAI,gBAAgB,CAwChD"}

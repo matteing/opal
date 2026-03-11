@@ -26,7 +26,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import type { Session } from "../sdk/session.js";
+import type { Session } from "@unfinite/opal-sdk";
 
 // ---------------------------------------------------------------------------
 // Types

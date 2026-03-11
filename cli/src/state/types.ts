@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { TokenUsage } from "../sdk/protocol.js";
+import type { TokenUsage } from "@unfinite/opal-sdk";
 
 // ── Timeline ──────────────────────────────────────────────────────
 

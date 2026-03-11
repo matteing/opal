@@ -3,7 +3,7 @@ import { createStore } from "zustand/vanilla";
 import { createCliStateSlice, type CliStateSlice } from "../../state/cli.js";
 
 // Mock file-based modules
-vi.mock("../../sdk/cli-state.js", () => ({
+vi.mock("../../cli-state.js", () => ({
   readCliState: vi.fn().mockReturnValue({
     lastModel: { id: "gpt-4", provider: "copilot", thinkingLevel: "off" },
     preferences: { autoConfirm: false, verbose: false },
@@ -16,7 +16,7 @@ vi.mock("../../sdk/cli-state.js", () => ({
   })),
 }));
 
-vi.mock("../../sdk/cli-history.js", () => ({
+vi.mock("../../cli-history.js", () => ({
   readHistory: vi.fn().mockReturnValue([
     { text: "ls -la", timestamp: "2026-01-01T00:00:00Z" },
     { text: "git status", timestamp: "2026-01-01T00:01:00Z" },
@@ -28,8 +28,8 @@ vi.mock("../../sdk/cli-history.js", () => ({
   ]),
 }));
 
-import { readCliState, writeCliState } from "../../sdk/cli-state.js";
-import { readHistory, appendHistory } from "../../sdk/cli-history.js";
+import { readCliState, writeCliState } from "../../cli-state.js";
+import { readHistory, appendHistory } from "../../cli-history.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 

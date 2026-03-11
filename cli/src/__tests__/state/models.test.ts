@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createStore } from "zustand/vanilla";
 import { createModelsSlice, type ModelsSlice } from "../../state/models.js";
 import { createCliStateSlice, type CliStateSlice } from "../../state/cli.js";
-import type { Session } from "../../sdk/session.js";
+import type { Session } from "@unfinite/opal-sdk";
 
 type TestStore = ModelsSlice & CliStateSlice;
 

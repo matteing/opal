@@ -18,7 +18,7 @@ import type {
   AgentEvent,
   ToolExecutionStartEvent,
   ToolExecutionEndEvent,
-} from "../sdk/protocol.js";
+} from "@unfinite/opal-sdk";
 import type { TimelineEntry, ToolCall, AgentView, TokenUsage, StatusLevel } from "./types.js";
 
 // ── Constants ────────────────────────────────────────────────────

@@ -7,7 +7,7 @@
  */
 
 import type { StateCreator } from "zustand";
-import type { Session } from "../sdk/session.js";
+import type { Session } from "@unfinite/opal-sdk";
 import type { AuthStatus } from "./types.js";
 
 // ── Slice state + actions ────────────────────────────────────────

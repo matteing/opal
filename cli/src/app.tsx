@@ -1,5 +1,5 @@
 import { FC, useEffect, useMemo } from "react";
-import { SessionOptions } from "./sdk/index.js";
+import type { SessionOptions } from "@unfinite/opal-sdk";
 import { ViewportProvider } from "./hooks/use-viewport.js";
 import { StartingView } from "./views/starting-view.js";
 import { ErrorView } from "./views/error-view.js";

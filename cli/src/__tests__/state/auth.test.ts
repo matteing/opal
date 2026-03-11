@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createStore } from "zustand/vanilla";
 import { createAuthSlice, type AuthSlice } from "../../state/auth.js";
-import type { Session } from "../../sdk/session.js";
+import type { Session } from "@unfinite/opal-sdk";
 
 function makeStore() {
   return createStore<AuthSlice>()(createAuthSlice);

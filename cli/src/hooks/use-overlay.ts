@@ -13,7 +13,7 @@ import type {
   OpalConfigSetParams,
   OpalConfigGetResult,
   OpalConfigSetResult,
-} from "../sdk/protocol.js";
+} from "@unfinite/opal-sdk";
 
 export type Overlay = "models" | "agents" | "opal" | null;
 

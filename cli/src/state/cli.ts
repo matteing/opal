@@ -12,8 +12,8 @@
  */
 
 import type { StateCreator } from "zustand";
-import { type CliState, readCliState, writeCliState } from "../sdk/cli-state.js";
-import { type HistoryEntry, readHistory, appendHistory } from "../sdk/cli-history.js";
+import { type CliState, readCliState, writeCliState } from "../cli-state.js";
+import { type HistoryEntry, readHistory, appendHistory } from "../cli-history.js";
 
 // ── History container (matches old CliHistoryGetResult shape) ─────
 

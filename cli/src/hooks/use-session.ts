@@ -25,9 +25,8 @@
  */
 
 import { useState, useEffect, useRef } from "react";
-import { createSession } from "../sdk/session.js";
-import type { Session, SessionOptions } from "../sdk/session.js";
-import type { AgentEvent } from "../sdk/protocol.js";
+import { createSession } from "@unfinite/opal-sdk";
+import type { Session, SessionOptions, AgentEvent } from "@unfinite/opal-sdk";
 
 // ---------------------------------------------------------------------------
 // Types

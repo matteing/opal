@@ -1,9 +1,7 @@
 /**
  * `opal --version` — Print CLI and server versions, then exit.
  */
-import { OpalClient } from "../sdk/client.js";
-import { RpcConnection } from "../sdk/rpc/connection.js";
-import { StdioTransport } from "../sdk/transport/stdio.js";
+import { OpalClient, RpcConnection, StdioTransport } from "@unfinite/opal-sdk";
 
 export async function runVersion(): Promise<void> {
   const pkg = await import("../../package.json", { with: { type: "json" } });

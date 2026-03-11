@@ -14,7 +14,7 @@ import type {
   OpalConfigGetResult,
   OpalConfigSetParams,
   OpalConfigSetResult,
-} from "../sdk/protocol.js";
+} from "@unfinite/opal-sdk";
 import { OverlayPanel, Indicator } from "./overlay-panel.js";
 
 // ── Types ────────────────────────────────────────────────────
