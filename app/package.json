@@ -10,7 +10,10 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist dist-electron"
+    "lint": "echo 'no linter configured yet'",
+    "format": "prettier --write electron/ src/",
+    "format:check": "prettier --check electron/ src/",
+    "clean": "rm -rf out"
   },
   "dependencies": {
     "@unfinite/opal-sdk": "workspace:*",
