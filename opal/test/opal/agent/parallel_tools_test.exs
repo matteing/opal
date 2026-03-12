@@ -229,11 +229,9 @@ defmodule Opal.Agent.ParallelToolsTest do
 
       %{pid: pid, session_id: session_id} = start_agent(tool_calls)
 
-      start_time = System.monotonic_time(:millisecond)
       Agent.prompt(pid, "Run three tools")
 
       events = collect_tool_events(session_id)
-      elapsed = System.monotonic_time(:millisecond) - start_time
 
       # Verify all 3 tools started and completed
       starts = Enum.filter(events, &match?({:tool_execution_start, _, _, _, _}, &1))
@@ -242,10 +240,20 @@ defmodule Opal.Agent.ParallelToolsTest do
       assert length(starts) == 3
       assert length(ends) == 3
 
-      # Parallel: ~200ms + overhead. Sequential would be ~600ms+.
-      # Use 500ms as threshold — generous for CI but proves parallelism.
-      assert elapsed < 500,
-             "Tools took #{elapsed}ms — expected < 500ms for parallel execution of 3×200ms tools"
+      # Prove parallelism via event ordering: all 3 starts must appear before any end.
+      # With sequential execution, events would interleave as start-end-start-end-start-end.
+      first_end_idx =
+        Enum.find_index(events, &match?({:tool_execution_end, _, _, _}, &1))
+
+      start_indices =
+        events
+        |> Enum.with_index()
+        |> Enum.filter(fn {ev, _} -> match?({:tool_execution_start, _, _, _, _}, ev) end)
+        |> Enum.map(fn {_, idx} -> idx end)
+
+      assert Enum.all?(start_indices, &(&1 < first_end_idx)),
+             "Expected all tool starts before any tool end (parallel), " <>
+               "but got start indices #{inspect(start_indices)} vs first end at #{first_end_idx}"
     end
 
     test "all tool results are returned to the LLM" do

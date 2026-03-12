@@ -162,18 +162,14 @@ defmodule Opal.Tool.Tasks do
   @spec clear(String.t()) :: :ok
   def clear(scope) do
     key = scope_key(scope)
-    path = dets_path(key)
     table = table_name(key)
 
-    case :dets.open_file(table, file: path, type: :set) do
-      {:ok, ^table} ->
-        :dets.delete_all_objects(table)
-        :dets.close(table)
-        :ok
-
-      {:error, _} ->
-        :ok
+    with :ok <- ensure_open(table, key) do
+      :dets.delete_all_objects(table)
+      :dets.sync(table)
     end
+
+    :ok
   end
 
   @doc """
@@ -376,21 +372,32 @@ defmodule Opal.Tool.Tasks do
   end
 
   defp with_dets(working_dir, fun) do
-    path = dets_path(working_dir)
     table = table_name(working_dir)
 
-    case :dets.open_file(table, file: path, type: :set) do
-      {:ok, ^table} ->
-        try do
-          ensure_counter(table)
-          fun.(table)
-        after
-          :dets.sync(table)
-          :dets.close(table)
+    with :ok <- ensure_open(table, working_dir) do
+      ensure_counter(table)
+      result = fun.(table)
+      :dets.sync(table)
+      result
+    end
+  end
+
+  # Opens the DETS table if not already open. Tables are kept open for the
+  # lifetime of the BEAM — process exit automatically decrements the internal
+  # ref-count. This eliminates the race where one process's close() invalidates
+  # the table for a concurrent user.
+  defp ensure_open(table, working_dir) do
+    case :dets.info(table) do
+      :undefined ->
+        path = dets_path(working_dir)
+
+        case :dets.open_file(table, file: path, type: :set) do
+          {:ok, ^table} -> :ok
+          {:error, reason} -> {:error, "Failed to open tasks database: #{inspect(reason)}"}
         end
 
-      {:error, reason} ->
-        {:error, "Failed to open tasks database: #{inspect(reason)}"}
+      _info ->
+        :ok
     end
   end
 
