@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@unfinite/opal-sdk": "workspace:*",
+    "ansi-to-html": "^0.7.2",
+    "marked": "^15.0.12",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zustand": "^5.0.0"
