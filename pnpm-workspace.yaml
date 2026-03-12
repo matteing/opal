@@ -1,3 +1,9 @@
 packages:
-  - "packages/*"
-  - "cli"
+  - packages/*
+  - cli
+  - app
+ignoredBuiltDependencies:
+  - electron-winstaller
+  - esbuild
+onlyBuiltDependencies:
+  - electron

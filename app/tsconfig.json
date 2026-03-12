@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "outDir": "dist-electron",
+    "rootDir": "."
+  },
+  "include": ["electron", "src"],
+  "exclude": ["node_modules", "dist", "dist-electron"]
+}

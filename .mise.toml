@@ -113,6 +113,18 @@ description = "Build and launch the CLI"
 depends = ["build"]
 run = "node cli/dist/bin.js --expose opal#opal"
 
+[tasks."app:dev"]
+description = "Run desktop app in dev mode"
+depends = ["build:sdk"]
+dir = "app"
+run = "npx electron-vite dev"
+
+[tasks."app:build"]
+description = "Build desktop app for distribution"
+depends = ["build:sdk"]
+dir = "app"
+run = "npx electron-vite build"
+
 [tasks.inspect]
 description = "Connect to a running dev instance via iex --remsh"
 run = "bash scripts/inspect.sh"
