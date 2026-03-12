@@ -1,15 +1,15 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import path from "node:path";
-import { createSession, type Session, type AgentEvent } from "@unfinite/opal-sdk";
+import { SessionManager } from "./session-manager.js";
 
 let mainWindow: BrowserWindow | null = null;
-let session: Session | null = null;
+let manager: SessionManager | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 960,
+    width: 1100,
     height: 720,
-    minWidth: 480,
+    minWidth: 600,
     minHeight: 400,
     title: "Opal Desktop",
     webPreferences: {
@@ -29,80 +29,109 @@ function createWindow(): void {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+
+  manager = new SessionManager((channel, ...args) => {
+    mainWindow?.webContents.send(channel, ...args);
+  });
 }
 
-// ── IPC handlers ─────────────────────────────────────────────
+// ── Session lifecycle IPC ────────────────────────────────────
 
-function send(channel: string, ...args: unknown[]): void {
-  mainWindow?.webContents.send(channel, ...args);
-}
-
-ipcMain.handle("opal:session:start", async (_, opts: { workingDir?: string }) => {
+ipcMain.handle("opal:sessions:create", async (_, opts: { workingDir?: string }) => {
+  if (!manager) throw new Error("app not ready");
   const workingDir =
     typeof opts?.workingDir === "string" ? opts.workingDir : process.cwd();
-
-  session = await createSession({
-    workingDir,
-    callbacks: {
-      onConfirm: async (params) => {
-        send("opal:agent:confirm", params);
-        return new Promise((resolve) => {
-          ipcMain.handleOnce("opal:session:resolve-confirm", (_, _id, action) => {
-            resolve({ action });
-          });
-        });
-      },
-      onAskUser: async (params) => {
-        send("opal:agent:ask-user", params);
-        return new Promise((resolve) => {
-          ipcMain.handleOnce("opal:session:resolve-ask-user", (_, _id, answer) => {
-            resolve(answer);
-          });
-        });
-      },
-    },
-  });
-
-  session.onEvent((event: AgentEvent) => {
-    send("opal:agent:event", event);
-  });
-
-  return { sessionId: session.id, workingDir };
+  return manager.create({ workingDir });
 });
+
+ipcMain.handle("opal:sessions:resume", async (_, id: string, opts: { workingDir?: string }) => {
+  if (!manager) throw new Error("app not ready");
+  if (typeof id !== "string") throw new Error("session id must be a string");
+  return manager.resume(id, opts ?? {});
+});
+
+ipcMain.handle("opal:sessions:list", async () => {
+  if (!manager) throw new Error("app not ready");
+  return manager.list();
+});
+
+ipcMain.handle("opal:sessions:delete", async (_, id: string) => {
+  if (!manager) throw new Error("app not ready");
+  if (typeof id !== "string") throw new Error("session id must be a string");
+  return manager.delete(id);
+});
+
+ipcMain.handle("opal:sessions:switch", async (_, id: string) => {
+  if (!manager) throw new Error("app not ready");
+  if (typeof id !== "string") throw new Error("session id must be a string");
+  return manager.switchTo(id);
+});
+
+ipcMain.handle("opal:session:history", async (_, id: string) => {
+  if (!manager) throw new Error("app not ready");
+  if (typeof id !== "string") throw new Error("session id must be a string");
+  return manager.getHistory(id);
+});
+
+ipcMain.handle("opal:session:branch", async (_, id: string, messageId: string) => {
+  if (!manager) throw new Error("app not ready");
+  if (typeof id !== "string" || typeof messageId !== "string") {
+    throw new Error("session id and message id must be strings");
+  }
+  return manager.branch(id, messageId);
+});
+
+ipcMain.handle("opal:dialog:open-directory", async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ["openDirectory"],
+  });
+  return result.canceled ? null : result.filePaths[0] ?? null;
+});
+
+// ── Active session IPC (prompt / steer / abort) ──────────────
 
 ipcMain.handle("opal:session:prompt", async (_, text: unknown) => {
   if (typeof text !== "string" || text.length === 0) {
     throw new Error("prompt text must be a non-empty string");
   }
-  if (!session) throw new Error("no active session");
-
-  for await (const _event of session.prompt(text)) {
-    // events forwarded by onEvent handler above
-  }
+  if (!manager) throw new Error("app not ready");
+  await manager.prompt(text);
 });
 
 ipcMain.handle("opal:session:steer", async (_, text: unknown) => {
   if (typeof text !== "string") throw new Error("steer text must be a string");
-  if (!session) throw new Error("no active session");
-  return session.steer(text);
+  if (!manager) throw new Error("app not ready");
+  return manager.steer(text);
 });
 
 ipcMain.handle("opal:session:abort", async () => {
-  if (!session) return;
-  await session.abort();
+  if (!manager) return;
+  await manager.abort();
 });
 
-ipcMain.handle("opal:session:state", async () => {
-  if (!session) return null;
-  return session.state();
-});
+// ── Confirm / AskUser resolution ─────────────────────────────
+
+ipcMain.handle(
+  "opal:session:resolve-confirm",
+  async (_, requestId: string, action: string) => {
+    manager?.resolveConfirm(requestId, action);
+  },
+);
+
+ipcMain.handle(
+  "opal:session:resolve-ask-user",
+  async (_, requestId: string, answer: string) => {
+    manager?.resolveAskUser(requestId, answer);
+  },
+);
 
 // ── Lifecycle ────────────────────────────────────────────────
 
 app.whenReady().then(createWindow);
 
 app.on("window-all-closed", () => {
-  session?.close();
+  manager?.closeAll();
   if (process.platform !== "darwin") app.quit();
 });
 

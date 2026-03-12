@@ -1,4 +1,4 @@
-/* Opal Desktop — Phase 1 minimal layout styles.
+/* Opal Desktop — minimal layout styles.
    Semantic HTML only, no framework. Just enough for structure. */
 
 :root {
@@ -17,14 +17,175 @@
 
 body {
   height: 100vh;
-  display: flex;
-  flex-direction: column;
+  overflow: hidden;
 }
 
 #root {
+  height: 100vh;
+}
+
+/* ── Two-pane layout ─────────────────────────────────────── */
+
+#app-layout {
+  display: flex;
+  height: 100vh;
+}
+
+#app-content {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  min-width: 0;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+
+nav[aria-label="Sessions"] {
+  width: 240px;
+  min-width: 180px;
+  border-right: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  background: #151515;
+  overflow-y: auto;
+}
+
+nav[aria-label="Sessions"] > button:first-child {
+  margin: 0.75rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #252525;
+  color: #e0e0e0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+nav[aria-label="Sessions"] > button:first-child:hover {
+  background: #333;
+}
+
+nav[aria-label="Sessions"] > input[type="search"] {
+  margin: 0 0.75rem 0.5rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+nav[aria-label="Sessions"] > input[type="search"]:focus {
+  outline: none;
+  border-color: #556;
+}
+
+nav[aria-label="Sessions"] p[data-role="empty"] {
+  padding: 1rem;
+  color: #666;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+nav[aria-label="Sessions"] ul {
+  list-style: none;
+  flex: 1;
+}
+
+nav[aria-label="Sessions"] li {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #222;
+}
+
+nav[aria-label="Sessions"] li[data-active] {
+  background: #1e2a3a;
+}
+
+nav[aria-label="Sessions"] li > button:first-child {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: 0.85rem;
+  min-width: 0;
+}
+
+nav[aria-label="Sessions"] li > button:first-child:hover {
+  background: #222;
+}
+
+nav[aria-label="Sessions"] li [data-role="icon"] {
+  display: inline;
+  margin-right: 0.3rem;
+}
+
+nav[aria-label="Sessions"] li [data-role="title"] {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+nav[aria-label="Sessions"] li [data-role="dir"] {
+  font-size: 0.75rem;
+  color: #777;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+nav[aria-label="Sessions"] li button[data-role="delete"] {
+  padding: 0.25rem 0.5rem;
+  background: none;
+  border: none;
+  color: #555;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+nav[aria-label="Sessions"] li button[data-role="delete"]:hover {
+  color: #ee5555;
+}
+
+/* ── Empty state ─────────────────────────────────────────── */
+
+div[data-role="empty-state"] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 1rem;
+  color: #888;
+}
+
+div[data-role="empty-state"] h2 {
+  color: #bb88ff;
+  font-size: 1.5rem;
+}
+
+div[data-role="empty-state"] button {
+  padding: 0.5rem 1.25rem;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #252525;
+  color: #e0e0e0;
+  cursor: pointer;
+  font: inherit;
+}
+
+div[data-role="empty-state"] button:hover {
+  background: #333;
 }
 
 /* ── Header ─────────────────────────────────────────────── */
