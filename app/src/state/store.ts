@@ -77,7 +77,8 @@ export interface AppState {
   branchSession: (messageId: string) => Promise<void>;
 
   // Overlays (only one open at a time)
-  overlay: "settings" | "models" | "runtime-config" | null;
+  overlay: "settings" | "models" | "runtime-config" | "schedule-editor" | null;
+  editingSchedule: unknown | null; // the schedule being edited, or null for new
   setOverlay: (overlay: AppState["overlay"]) => void;
 
   // Slash commands
@@ -96,6 +97,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   workingDir: "",
   error: null,
   overlay: null,
+  editingSchedule: null,
 
   // ── Session lifecycle ────────────────────────────────────
 

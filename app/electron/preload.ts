@@ -44,6 +44,20 @@ contextBridge.exposeInMainWorld("opal", {
   getVersion: () => ipcRenderer.invoke("opal:version"),
   openPlan: () => ipcRenderer.invoke("opal:plan:open"),
 
+  // ── Schedules ──────────────────────────────────────────────
+  listSchedules: () => ipcRenderer.invoke("opal:schedules:list"),
+  getSchedule: (id: string) => ipcRenderer.invoke("opal:schedules:get", id),
+  saveSchedule: (schedule: unknown) => ipcRenderer.invoke("opal:schedules:save", schedule),
+  deleteSchedule: (id: string) => ipcRenderer.invoke("opal:schedules:delete", id),
+  toggleSchedule: (id: string, enabled: boolean) =>
+    ipcRenderer.invoke("opal:schedules:toggle", id, enabled),
+  testSchedule: (id: string) => ipcRenderer.invoke("opal:schedules:test", id),
+  onScheduleExecuted: (cb: (data: unknown) => void) => {
+    const handler = (_: unknown, data: unknown) => cb(data);
+    ipcRenderer.on("opal:schedule:executed", handler);
+    return () => { ipcRenderer.removeListener("opal:schedule:executed", handler); };
+  },
+
   // ── Events (main → renderer) ──────────────────────────────
   onEvent: (cb: (event: unknown) => void) => {
     const handler = (_: unknown, event: unknown) => cb(event);

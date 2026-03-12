@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { useAppStore } from "./state/store.js";
 import {
   useCurrentView,
@@ -12,6 +12,7 @@ import {
   useDialogActions,
 } from "./state/selectors.js";
 import { bridge } from "./sdk/bridge.js";
+import type { ScheduleInfo } from "./sdk/bridge.js";
 import { AppHeader } from "./components/AppHeader.js";
 import { Conversation } from "./components/Conversation.js";
 import { ThinkingIndicator } from "./components/ThinkingIndicator.js";
@@ -20,6 +21,7 @@ import { ConfirmDialog, AskUserDialog } from "./components/Dialogs.js";
 import { ErrorBanner } from "./components/ErrorBanner.js";
 import { Sidebar } from "./components/sidebar/index.js";
 import { ModelPicker, SettingsPanel, RuntimeConfigPanel } from "./components/settings/index.js";
+import { ScheduleList, ScheduleEditor } from "./components/schedules/index.js";
 
 export default function App() {
   const sessions = useSessions();
@@ -28,6 +30,7 @@ export default function App() {
   const { workingDir, model, tokenUsage } = useHeaderData();
   const error = useError();
   const overlay = useOverlay();
+  const [editingSchedule, setEditingSchedule] = useState<ScheduleInfo | null>(null);
 
   const { createSession, resumeSession, switchSession, deleteSession, refreshSessionList } =
     useSessionActions();
@@ -163,7 +166,14 @@ export default function App() {
         onResumeSession={(id) => resumeSession(id)}
         onSwitchSession={(id) => switchSession(id)}
         onDeleteSession={(id) => deleteSession(id)}
-      />
+      >
+        <ScheduleList
+          onEdit={(s) => {
+            setEditingSchedule(s);
+            setOverlay("schedule-editor");
+          }}
+        />
+      </Sidebar>
 
       <div id="app-content">
         {currentView ? (
@@ -224,6 +234,15 @@ export default function App() {
       )}
       {overlay === "runtime-config" && (
         <RuntimeConfigPanel onClose={() => setOverlay(null)} />
+      )}
+      {overlay === "schedule-editor" && (
+        <ScheduleEditor
+          initial={editingSchedule}
+          onClose={() => {
+            setOverlay(null);
+            setEditingSchedule(null);
+          }}
+        />
       )}
     </div>
   );

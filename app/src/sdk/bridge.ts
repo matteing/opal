@@ -36,6 +36,15 @@ export interface OpalBridge {
   getVersion: () => Promise<{ serverVersion: string; protocolVersion: string }>;
   openPlan: () => Promise<{ opened: boolean; reason?: string }>;
 
+  // Schedules
+  listSchedules: () => Promise<ScheduleInfo[]>;
+  getSchedule: (id: string) => Promise<ScheduleInfo | null>;
+  saveSchedule: (schedule: ScheduleInfo) => Promise<ScheduleInfo>;
+  deleteSchedule: (id: string) => Promise<void>;
+  toggleSchedule: (id: string, enabled: boolean) => Promise<void>;
+  testSchedule: (id: string) => Promise<void>;
+  onScheduleExecuted: (cb: (data: { schedule: ScheduleInfo; execution: ScheduleExecutionInfo }) => void) => () => void;
+
   // Events
   onEvent: (cb: (event: AgentEventWire) => void) => () => void;
   onConfirm: (cb: (params: ConfirmParams) => void) => () => void;
@@ -101,6 +110,28 @@ export interface AskUserParams {
   sessionId: string;
   question: string;
   choices?: string[];
+}
+
+export interface ScheduleInfo {
+  id: string;
+  name: string;
+  enabled: boolean;
+  target: { type: "new"; prompt: string; workingDir: string; model?: string; autoConfirm?: boolean }
+        | { type: "wake"; sessionId: string; prompt: string };
+  recurrence: { type: string; [key: string]: unknown };
+  createdAt: string;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  missedBehavior: "run_on_open" | "skip";
+  executionHistory: ScheduleExecutionInfo[];
+}
+
+export interface ScheduleExecutionInfo {
+  scheduledAt: string;
+  executedAt: string;
+  sessionId: string;
+  status: "completed" | "error";
+  error?: string;
 }
 
 declare global {

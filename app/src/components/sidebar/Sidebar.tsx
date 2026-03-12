@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { SessionListEntry } from "../../state/store.js";
 import { SessionList } from "./SessionList.js";
 
@@ -9,6 +9,7 @@ export function Sidebar({
   onResumeSession,
   onSwitchSession,
   onDeleteSession,
+  children,
 }: {
   sessions: SessionListEntry[];
   activeSessionId: string | null;
@@ -16,6 +17,7 @@ export function Sidebar({
   onResumeSession: (id: string) => void;
   onSwitchSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
+  children?: ReactNode;
 }) {
   const [search, setSearch] = useState("");
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
@@ -71,6 +73,8 @@ export function Sidebar({
           </menu>
         </dialog>
       )}
+
+      {children}
     </nav>
   );
 }

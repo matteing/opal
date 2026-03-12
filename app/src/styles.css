@@ -840,3 +840,121 @@ div[data-role="auth-steps"] code {
 div[data-role="auth-steps"] a {
   color: #88aaff;
 }
+
+/* ── Schedules ───────────────────────────────────────────── */
+
+section[data-role="schedule-list"] {
+  border-top: 1px solid #333;
+  padding: 0.5rem 0.75rem;
+}
+
+section[data-role="schedule-list"] h4 {
+  font-size: 0.75rem;
+  color: #777;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+section[data-role="schedule-list"] > button {
+  width: 100%;
+  padding: 0.3rem;
+  margin-bottom: 0.5rem;
+  border: 1px dashed #444;
+  border-radius: 4px;
+  background: none;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+section[data-role="schedule-list"] > button:hover {
+  border-color: #666;
+  color: #ccc;
+}
+
+section[data-role="schedule-list"] ul {
+  list-style: none;
+}
+
+section[data-role="schedule-list"] li {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid #222;
+  font-size: 0.8rem;
+}
+
+section[data-role="schedule-list"] li label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+}
+
+section[data-role="schedule-list"] li small {
+  display: block;
+  color: #666;
+  padding-left: 1.5rem;
+  font-size: 0.75rem;
+}
+
+span[data-role="schedule-actions"] {
+  display: flex;
+  gap: 0.25rem;
+  padding-left: 1.5rem;
+  margin-top: 0.2rem;
+}
+
+span[data-role="schedule-actions"] button {
+  padding: 0.1rem 0.4rem;
+  background: none;
+  border: 1px solid #333;
+  border-radius: 3px;
+  color: #888;
+  cursor: pointer;
+  font-size: 0.7rem;
+}
+
+span[data-role="schedule-actions"] button:hover {
+  color: #ccc;
+  border-color: #555;
+}
+
+/* Schedule editor form */
+dialog label {
+  display: block;
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+}
+
+dialog label input[type="text"],
+dialog label textarea,
+dialog label select {
+  display: block;
+  width: 100%;
+  margin-top: 0.2rem;
+  padding: 0.4rem;
+  background: #222;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+span[data-role="dir-picker"] {
+  display: flex;
+  gap: 0.25rem;
+}
+
+span[data-role="dir-picker"] input {
+  flex: 1;
+}
+
+span[data-role="dir-picker"] button {
+  padding: 0.3rem 0.5rem;
+  background: #333;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ccc;
+  cursor: pointer;
+}

@@ -1,9 +1,12 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import path from "node:path";
 import { SessionManager } from "./session-manager.js";
+import { Scheduler } from "./scheduler.js";
+import type { Schedule } from "./schedule-types.js";
 
 let mainWindow: BrowserWindow | null = null;
 let manager: SessionManager | null = null;
+let scheduler: Scheduler | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -33,6 +36,11 @@ function createWindow(): void {
   manager = new SessionManager((channel, ...args) => {
     mainWindow?.webContents.send(channel, ...args);
   });
+
+  scheduler = new Scheduler((schedule, execution) => {
+    mainWindow?.webContents.send("opal:schedule:executed", { schedule, execution });
+  });
+  scheduler.start();
 }
 
 // ── Session lifecycle IPC ────────────────────────────────────
@@ -225,11 +233,46 @@ ipcMain.handle("opal:plan:open", async () => {
   return { opened: true };
 });
 
+// ── Schedules ────────────────────────────────────────────────
+
+ipcMain.handle("opal:schedules:list", () => {
+  return scheduler?.list() ?? [];
+});
+
+ipcMain.handle("opal:schedules:get", (_, id: string) => {
+  return scheduler?.get(id) ?? null;
+});
+
+ipcMain.handle("opal:schedules:save", (_, schedule: Schedule) => {
+  if (!scheduler) throw new Error("app not ready");
+  if (!schedule.id) {
+    schedule.id = `sched_${Date.now().toString(36)}`;
+    schedule.createdAt = new Date().toISOString();
+    schedule.executionHistory = [];
+  }
+  scheduler.save(schedule);
+  return schedule;
+});
+
+ipcMain.handle("opal:schedules:delete", (_, id: string) => {
+  scheduler?.delete(id);
+});
+
+ipcMain.handle("opal:schedules:toggle", (_, id: string, enabled: boolean) => {
+  scheduler?.toggle(id, enabled);
+});
+
+ipcMain.handle("opal:schedules:test", async (_, id: string) => {
+  if (!scheduler) throw new Error("app not ready");
+  await scheduler.testNow(id);
+});
+
 // ── Lifecycle ────────────────────────────────────────────────
 
 app.whenReady().then(createWindow);
 
 app.on("window-all-closed", () => {
+  scheduler?.stop();
   manager?.closeAll();
   if (process.platform !== "darwin") app.quit();
 });
