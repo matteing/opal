@@ -126,6 +126,105 @@ ipcMain.handle(
   },
 );
 
+// ── Models ───────────────────────────────────────────────────
+
+ipcMain.handle("opal:models:list", async () => {
+  const session = manager?.active;
+  if (!session) throw new Error("no active session");
+  return session.models();
+});
+
+ipcMain.handle("opal:model:set", async (_, model: string, thinkingLevel?: string) => {
+  const session = manager?.active;
+  if (!session) throw new Error("no active session");
+  const spec = thinkingLevel ? { id: model, thinkingLevel } : model;
+  return session.setModel(spec);
+});
+
+ipcMain.handle("opal:thinking:set", async (_, level: string) => {
+  const session = manager?.active;
+  if (!session) throw new Error("no active session");
+  return session.setThinking(level);
+});
+
+// ── Auth ─────────────────────────────────────────────────────
+
+ipcMain.handle("opal:auth:status", async () => {
+  const session = manager?.active;
+  if (!session) throw new Error("no active session");
+  return session.auth_.status();
+});
+
+ipcMain.handle("opal:auth:login", async () => {
+  const session = manager?.active;
+  if (!session) throw new Error("no active session");
+  return session.auth_.login();
+});
+
+ipcMain.handle("opal:auth:poll", async (_, deviceCode: string, interval: number) => {
+  const session = manager?.active;
+  if (!session) throw new Error("no active session");
+  return session.auth_.poll(deviceCode, interval);
+});
+
+// ── Settings & Config ────────────────────────────────────────
+
+ipcMain.handle("opal:settings:get", async () => {
+  const session = manager?.active;
+  if (!session) throw new Error("no active session");
+  return session.config.getSettings();
+});
+
+ipcMain.handle("opal:settings:save", async (_, settings: Record<string, unknown>) => {
+  const session = manager?.active;
+  if (!session) throw new Error("no active session");
+  return session.config.saveSettings(settings);
+});
+
+ipcMain.handle("opal:config:get", async () => {
+  const session = manager?.active;
+  if (!session) throw new Error("no active session");
+  return session.config.getRuntime();
+});
+
+ipcMain.handle("opal:config:set", async (_, config: Record<string, unknown>) => {
+  const session = manager?.active;
+  if (!session) throw new Error("no active session");
+  return session.config.setRuntime(config);
+});
+
+// ── Compact & Version ────────────────────────────────────────
+
+ipcMain.handle("opal:session:compact", async () => {
+  const session = manager?.active;
+  if (!session) throw new Error("no active session");
+  return session.compact();
+});
+
+ipcMain.handle("opal:version", async () => {
+  const session = manager?.active;
+  if (!session) throw new Error("no active session");
+  return session.version();
+});
+
+// ── Plan (open in external editor) ───────────────────────────
+
+ipcMain.handle("opal:plan:open", async () => {
+  const session = manager?.active;
+  if (!session) return { opened: false, reason: "no session" };
+
+  const planPath = path.join(session.dir, "plan.md");
+  try {
+    await import("node:fs/promises").then((fs) => fs.access(planPath));
+  } catch {
+    return { opened: false, reason: "no plan" };
+  }
+
+  const { shell } = await import("electron");
+  shell.openPath(planPath);
+  return { opened: true };
+});
+
 // ── Lifecycle ────────────────────────────────────────────────
 
 app.whenReady().then(createWindow);

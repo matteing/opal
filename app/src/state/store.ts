@@ -76,6 +76,13 @@ export interface AppState {
   resolveAskUser: (answer: string) => void;
   branchSession: (messageId: string) => Promise<void>;
 
+  // Overlays (only one open at a time)
+  overlay: "settings" | "models" | "runtime-config" | null;
+  setOverlay: (overlay: AppState["overlay"]) => void;
+
+  // Slash commands
+  runCommand: (input: string) => boolean;
+
   // General
   setError: (error: string | null) => void;
 }
@@ -88,6 +95,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sessionViews: {},
   workingDir: "",
   error: null,
+  overlay: null,
 
   // ── Session lifecycle ────────────────────────────────────
 
@@ -326,6 +334,67 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     } catch (e) {
       set({ error: `Branch failed: ${e}` });
+    }
+  },
+
+  // ── Overlays ──────────────────────────────────────────────
+
+  setOverlay: (overlay) => set({ overlay }),
+
+  // ── Slash commands ───────────────────────────────────────
+  // Returns true if the input was handled as a command (not a prompt).
+
+  runCommand: (input: string): boolean => {
+    const trimmed = input.trim();
+    if (!trimmed.startsWith("/")) return false;
+
+    const [cmd, ...rest] = trimmed.split(" ");
+    const arg = rest.join(" ").trim();
+
+    switch (cmd) {
+      case "/models":
+        set({ overlay: "models" });
+        return true;
+      case "/model":
+        if (arg) {
+          bridge.setModel(arg).catch((e) => set({ error: `Model switch failed: ${e}` }));
+        } else {
+          set({ overlay: "models" });
+        }
+        return true;
+      case "/compact":
+        bridge.compact().catch((e) => set({ error: `Compact failed: ${e}` }));
+        return true;
+      case "/opal":
+        set({ overlay: "runtime-config" });
+        return true;
+      case "/settings":
+        set({ overlay: "settings" });
+        return true;
+      case "/new":
+        get().createSession();
+        return true;
+      case "/clear": {
+        const { activeSessionId } = get();
+        if (activeSessionId) {
+          set((s) => ({
+            sessionViews: {
+              ...s.sessionViews,
+              [activeSessionId]: { ...s.sessionViews[activeSessionId]!, timeline: [] },
+            },
+          }));
+        }
+        return true;
+      }
+      case "/plan":
+        bridge.openPlan().catch(() => {});
+        return true;
+      case "/help":
+        // Add a status entry listing available commands
+        get().submitPrompt("/help");
+        return false; // let it go through as a prompt — the agent will respond
+      default:
+        return false;
     }
   },
 

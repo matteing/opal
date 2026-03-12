@@ -5,11 +5,13 @@ export function InputArea({
   onSubmit,
   onSteer,
   onAbort,
+  onCommand,
 }: {
   isRunning: boolean;
   onSubmit: (text: string) => void;
   onSteer: (text: string) => void;
   onAbort: () => void;
+  onCommand: (input: string) => boolean;
 }) {
   const [text, setText] = useState("");
 
@@ -19,6 +21,12 @@ export function InputArea({
       const trimmed = text.trim();
       if (!trimmed) return;
 
+      // Try slash commands first
+      if (trimmed.startsWith("/") && onCommand(trimmed)) {
+        setText("");
+        return;
+      }
+
       if (isRunning) {
         onSteer(trimmed);
       } else {
@@ -26,7 +34,7 @@ export function InputArea({
       }
       setText("");
     },
-    [text, isRunning, onSubmit, onSteer],
+    [text, isRunning, onSubmit, onSteer, onCommand],
   );
 
   const handleKeyDown = useCallback(
@@ -46,7 +54,7 @@ export function InputArea({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={isRunning ? "Steer the agent…" : "Ask Opal anything…"}
+          placeholder={isRunning ? "Steer the agent…" : "Ask Opal anything… (/ for commands)"}
           rows={1}
           autoFocus
         />

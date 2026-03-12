@@ -717,3 +717,126 @@ aside[role="alert"] button {
   cursor: pointer;
   font-size: 1rem;
 }
+
+/* ── Settings / Model Picker / Auth ──────────────────────── */
+
+div[data-role="model-list"] {
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0.75rem 0;
+}
+
+div[data-role="model-list"] fieldset {
+  border: none;
+  margin: 0.5rem 0;
+  padding: 0;
+}
+
+div[data-role="model-list"] legend {
+  font-weight: 600;
+  color: #aaa;
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+}
+
+div[data-role="model-list"] label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+div[data-role="model-list"] label:hover {
+  background: #333;
+}
+
+div[data-role="model-list"] label[data-selected] {
+  background: #1e2a3a;
+}
+
+fieldset[data-role="thinking-level"] {
+  border: none;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.5rem 0;
+}
+
+fieldset[data-role="thinking-level"] legend {
+  float: left;
+  margin-right: 1rem;
+  font-size: 0.85rem;
+  color: #aaa;
+}
+
+fieldset[data-role="thinking-level"] label {
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* Settings panel fieldsets */
+dialog fieldset {
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+dialog fieldset legend {
+  font-size: 0.8rem;
+  color: #aaa;
+  padding: 0 0.25rem;
+}
+
+dialog fieldset label {
+  display: block;
+  padding: 0.2rem 0;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+dialog fieldset label input[type="checkbox"],
+dialog fieldset label input[type="radio"] {
+  margin-right: 0.5rem;
+}
+
+/* Auth wizard */
+div[data-role="auth-wizard"] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+div[data-role="auth-wizard"] h2 {
+  color: #bb88ff;
+  font-size: 1.5rem;
+}
+
+div[data-role="auth-steps"] {
+  background: #222;
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-align: left;
+  max-width: 400px;
+  width: 100%;
+}
+
+div[data-role="auth-steps"] code {
+  background: #333;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  font-size: 1.1em;
+  font-weight: bold;
+}
+
+div[data-role="auth-steps"] a {
+  color: #88aaff;
+}

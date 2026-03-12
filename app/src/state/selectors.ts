@@ -19,7 +19,7 @@
  */
 
 import { useShallow } from "zustand/react/shallow";
-import { useAppStore } from "./store.js";
+import { useAppStore, type AppState } from "./store.js";
 import type { SessionListEntry, SessionView } from "./types.js";
 
 // ── Current session view ─────────────────────────────────────
@@ -77,6 +77,11 @@ export function useHeaderData() {
 /** Current error message (null if no error). */
 export function useError(): string | null {
   return useAppStore((s) => s.error);
+}
+
+/** Currently open overlay panel (null if none). */
+export function useOverlay(): AppState["overlay"] {
+  return useAppStore((s) => s.overlay);
 }
 
 // ── Actions ──────────────────────────────────────────────────

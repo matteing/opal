@@ -14,6 +14,27 @@ export interface OpalBridge {
   prompt: (text: string) => Promise<void>;
   abort: () => Promise<void>;
   steer: (text: string) => Promise<{ queued: boolean }>;
+  compact: () => Promise<void>;
+
+  // Models
+  listModels: () => Promise<{ models: ModelInfo[] }>;
+  setModel: (id: string, thinkingLevel?: string) => Promise<unknown>;
+  setThinking: (level: string) => Promise<unknown>;
+
+  // Auth
+  authStatus: () => Promise<{ authenticated: boolean; auth: { status: string; provider: string } }>;
+  authLogin: () => Promise<{ userCode: string; verificationUri: string; deviceCode: string; interval: number }>;
+  authPoll: (deviceCode: string, interval: number) => Promise<{ authenticated: boolean }>;
+
+  // Settings & Config
+  getSettings: () => Promise<{ settings: Record<string, unknown> }>;
+  saveSettings: (settings: Record<string, unknown>) => Promise<{ settings: Record<string, unknown> }>;
+  getConfig: () => Promise<RuntimeConfig>;
+  setConfig: (config: Record<string, unknown>) => Promise<RuntimeConfig>;
+
+  // Version & Plan
+  getVersion: () => Promise<{ serverVersion: string; protocolVersion: string }>;
+  openPlan: () => Promise<{ opened: boolean; reason?: string }>;
 
   // Events
   onEvent: (cb: (event: AgentEventWire) => void) => () => void;
@@ -45,6 +66,20 @@ export interface HistoryMessage {
   callId?: string;
   name?: string;
   [key: string]: unknown;
+}
+
+export interface ModelInfo {
+  id: string;
+  name: string;
+  provider: string;
+  supportsThinking: boolean;
+  thinkingLevels?: string[];
+}
+
+export interface RuntimeConfig {
+  features: { subAgents: boolean; skills: boolean; debug: boolean };
+  tools: { all: string[]; enabled: string[]; disabled: string[] };
+  distribution: { node: string; cookie: string } | null;
 }
 
 export interface AgentEventWire {

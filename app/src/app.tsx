@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import { useAppStore } from "./state/store.js";
 import {
   useCurrentView,
@@ -6,6 +6,7 @@ import {
   useActiveSessionId,
   useHeaderData,
   useError,
+  useOverlay,
   useSessionActions,
   useConversationActions,
   useDialogActions,
@@ -18,6 +19,7 @@ import { InputArea } from "./components/InputArea.js";
 import { ConfirmDialog, AskUserDialog } from "./components/Dialogs.js";
 import { ErrorBanner } from "./components/ErrorBanner.js";
 import { Sidebar } from "./components/sidebar/index.js";
+import { ModelPicker, SettingsPanel, RuntimeConfigPanel } from "./components/settings/index.js";
 
 export default function App() {
   const sessions = useSessions();
@@ -25,15 +27,18 @@ export default function App() {
   const currentView = useCurrentView();
   const { workingDir, model, tokenUsage } = useHeaderData();
   const error = useError();
+  const overlay = useOverlay();
 
   const { createSession, resumeSession, switchSession, deleteSession, refreshSessionList } =
     useSessionActions();
   const { submitPrompt, submitSteer, abort } = useConversationActions();
   const { resolveConfirmation, resolveAskUser } = useDialogActions();
   const setError = useAppStore((s) => s.setError);
+  const setOverlay = useAppStore((s) => s.setOverlay);
   const applyEvent = useAppStore((s) => s.applyEvent);
+  const runCommand = useAppStore((s) => s.runCommand);
 
-  // Wire up IPC event listeners on mount
+  // ── IPC event listeners ────────────────────────────────────
   useEffect(() => {
     const unsubEvent = bridge.onEvent((event) => applyEvent(event));
 
@@ -85,6 +90,70 @@ export default function App() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Keyboard shortcuts ─────────────────────────────────────
+  const handleKeyboard = useCallback(
+    (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+
+      switch (e.key) {
+        case "n":
+          e.preventDefault();
+          createSession();
+          break;
+        case "k":
+          e.preventDefault();
+          setOverlay(overlay === "models" ? null : "models");
+          break;
+        case ",":
+          e.preventDefault();
+          setOverlay(overlay === "settings" ? null : "settings");
+          break;
+        case ".":
+          e.preventDefault();
+          abort();
+          break;
+        case "y":
+          e.preventDefault();
+          bridge.openPlan().catch(() => {});
+          break;
+        case "[":
+          e.preventDefault();
+          switchToPrev();
+          break;
+        case "]":
+          e.preventDefault();
+          switchToNext();
+          break;
+      }
+
+      if (e.key === "Escape") {
+        setOverlay(null);
+      }
+    },
+    [overlay], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyboard);
+    return () => window.removeEventListener("keydown", handleKeyboard);
+  }, [handleKeyboard]);
+
+  // ── Session navigation helpers ─────────────────────────────
+  const switchToPrev = useCallback(() => {
+    const { sessions: s, activeSessionId: id } = useAppStore.getState();
+    const activeSessions = s.filter((se) => se.active);
+    const idx = activeSessions.findIndex((se) => se.id === id);
+    if (idx > 0) switchSession(activeSessions[idx - 1].id);
+  }, [switchSession]);
+
+  const switchToNext = useCallback(() => {
+    const { sessions: s, activeSessionId: id } = useAppStore.getState();
+    const activeSessions = s.filter((se) => se.active);
+    const idx = activeSessions.findIndex((se) => se.id === id);
+    if (idx < activeSessions.length - 1) switchSession(activeSessions[idx + 1].id);
+  }, [switchSession]);
+
   return (
     <div id="app-layout">
       <Sidebar
@@ -119,6 +188,7 @@ export default function App() {
               onSubmit={submitPrompt}
               onSteer={submitSteer}
               onAbort={abort}
+              onCommand={runCommand}
             />
 
             {currentView.confirmation && (
@@ -144,6 +214,17 @@ export default function App() {
 
         {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
       </div>
+
+      {/* ── Overlay panels ── */}
+      {overlay === "models" && (
+        <ModelPicker currentModel={model} onClose={() => setOverlay(null)} />
+      )}
+      {overlay === "settings" && (
+        <SettingsPanel onClose={() => setOverlay(null)} />
+      )}
+      {overlay === "runtime-config" && (
+        <RuntimeConfigPanel onClose={() => setOverlay(null)} />
+      )}
     </div>
   );
 }
