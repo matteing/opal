@@ -3,7 +3,7 @@
  *
  * @example Quick start
  * ```ts
- * import { createSession } from "./sdk2/index.js";
+ * import { createSession } from "@unfinite/opal-sdk";
  *
  * const session = await createSession({ workingDir: "." });
  *
@@ -72,7 +72,6 @@ export type {
   AgentEvent,
   MethodTypes,
   TokenUsage,
-  ToolResult,
   ConfirmRequest,
   InputRequest,
 

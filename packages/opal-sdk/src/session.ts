@@ -126,7 +126,17 @@ export class Session {
   readonly #rpc: RpcConnection;
   #activeStream: AgentStream | null = null;
 
-  /** @internal Use {@link createSession} instead. */
+  /** @internal Use {@link createSession} instead of calling this directly. */
+  static _create(
+    client: OpalClient,
+    transport: Transport,
+    rpc: RpcConnection,
+    result: SessionStartResult,
+    distributionNode?: string | null,
+  ): Session {
+    return new Session(client, transport, rpc, result, distributionNode);
+  }
+
   private constructor(
     client: OpalClient,
     transport: Transport,
@@ -506,12 +516,5 @@ export async function createSession(opts: SessionOptions = {}): Promise<Session>
     }
   }
 
-  // Session constructor is private but accessible within this module.
-  return new (Session as unknown as new (
-    client: OpalClient,
-    transport: Transport,
-    rpc: RpcConnection,
-    result: SessionStartResult,
-    distributionNode?: string | null,
-  ) => Session)(client, transport, rpc, result, distributionNode);
+  return Session._create(client, transport, rpc, result, distributionNode);
 }

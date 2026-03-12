@@ -45,7 +45,7 @@ dir = "opal"
 run = "mix compile --warnings-as-errors"
 
 [tasks.codegen]
-description = "Generate TS types from Elixir protocol definitions"
+description = "Regenerate JSON Schema + TypeScript types from Elixir protocol"
 dir = "opal"
 depends = ["build:core"]
 run = "mix run ../scripts/codegen_ts.exs"

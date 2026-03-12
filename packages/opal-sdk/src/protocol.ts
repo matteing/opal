@@ -545,32 +545,14 @@ export const Methods = {
 
 // --- Helper types ---
 
-export type TokenUsage = {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-  contextWindow: number;
-  currentContextTokens: number;
-};
+/** Convenience alias for the usage object shape (from UsageUpdateEvent / AgentEndEvent). */
+export type TokenUsage = NonNullable<UsageUpdateEvent["usage"]>;
 
-export type ToolResult = {
-  ok: boolean;
-  output?: unknown;
-  error?: string;
-};
+/** Convenience alias for tool approval requests (from ClientConfirmParams). */
+export type ConfirmRequest = Omit<ClientConfirmParams, "sessionId">;
 
-export type ConfirmRequest = {
-  sessionId: string;
-  title: string;
-  message: string;
-  actions: string[];
-};
-
-export type InputRequest = {
-  sessionId: string;
-  prompt: string;
-  sensitive?: boolean;
-};
+/** Convenience alias for freeform input requests (from ClientInputParams). */
+export type InputRequest = Omit<ClientInputParams, "sessionId">;
 
 // --- Method type mapping ---
 

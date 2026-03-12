@@ -17,6 +17,14 @@ defmodule Codegen.TS do
   @schema_path "priv/rpc_schema.json"
 
   def run(args) do
+    # Step 1: Regenerate the JSON Schema from Elixir protocol definitions.
+    # This ensures the intermediate schema is always fresh — no need for a
+    # separate `mix opal.gen.json_schema` step.
+    unless "--check" in args do
+      Mix.Task.run("opal.gen.json_schema")
+    end
+
+    # Step 2: Generate TypeScript from the JSON Schema.
     schema = @schema_path |> File.read!() |> Jason.decode!()
     ts = generate(schema) |> prettier()
 
@@ -26,7 +34,7 @@ defmodule Codegen.TS do
       if existing != ts do
         IO.puts(
           :stderr,
-          "protocol.ts is out of date. Run: mix run scripts/codegen_ts.exs"
+          "protocol.ts is out of date. Run: cd opal && mise exec -- mix run ../scripts/codegen_ts.exs"
         )
 
         System.halt(1)
@@ -238,33 +246,17 @@ defmodule Codegen.TS do
   end
 
   defp helper_types do
+    # Convenience aliases derived from generated types — NOT hardcoded copies.
+    # If the protocol changes, these stay in sync automatically.
     """
-    export type TokenUsage = {
-      promptTokens: number;
-      completionTokens: number;
-      totalTokens: number;
-      contextWindow: number;
-      currentContextTokens: number;
-    };
+    /** Convenience alias for the usage object shape (from UsageUpdateEvent / AgentEndEvent). */
+    export type TokenUsage = NonNullable<UsageUpdateEvent["usage"]>;
 
-    export type ToolResult = {
-      ok: boolean;
-      output?: unknown;
-      error?: string;
-    };
+    /** Convenience alias for tool approval requests (from ClientConfirmParams). */
+    export type ConfirmRequest = Omit<ClientConfirmParams, "sessionId">;
 
-    export type ConfirmRequest = {
-      sessionId: string;
-      title: string;
-      message: string;
-      actions: string[];
-    };
-
-    export type InputRequest = {
-      sessionId: string;
-      prompt: string;
-      sensitive?: boolean;
-    };
+    /** Convenience alias for freeform input requests (from ClientInputParams). */
+    export type InputRequest = Omit<ClientInputParams, "sessionId">;
     """
   end
 
