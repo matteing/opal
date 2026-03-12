@@ -1,29 +1,41 @@
+/**
+ * Opal Desktop — Zustand store.
+ *
+ * Architecture:
+ *
+ *   AppState
+ *   ├── sessions: SessionListEntry[]        — sidebar list (saved + active)
+ *   ├── activeSessionId: string | null      — which session is focused
+ *   ├── sessionViews: { [id]: SessionView } — per-session conversation state
+ *   ├── workingDir: string                  — active session's working directory
+ *   ├── error: string | null                — global error banner
+ *   └── actions                             — session lifecycle + conversation
+ *
+ * Key design decisions:
+ *
+ *   1. `sessionViews` is the source of truth for conversation state.
+ *      There is no duplicated `currentView` field — components derive it
+ *      via `useCurrentView()` (see selectors.ts).
+ *
+ *   2. Events arrive tagged with `sessionId` from the main process.
+ *      `applyEvent` routes each event to the correct session's view,
+ *      so background sessions update independently.
+ *
+ *   3. The event reducer (`applyEventToView`) is a pure function in its
+ *      own file for testability. The store just calls it and merges the
+ *      result.
+ *
+ *   4. Components use selector hooks (selectors.ts) instead of destructuring
+ *      the full store — this prevents re-renders when unrelated state changes.
+ */
+
 import { create } from "zustand";
-import {
-  bridge,
-  type AgentEventWire,
-  type SessionListItem,
-  type HistoryMessage,
-} from "../sdk/bridge.js";
-import type {
-  TimelineEntry,
-  TokenUsage,
-  ConfirmRequest,
-  AskUserRequest,
-} from "./types.js";
+import { bridge, type AgentEventWire, type SessionListItem } from "../sdk/bridge.js";
+import type { SessionListEntry, SessionView } from "./types.js";
+import { applyEventToView } from "./event-reducer.js";
+import { historyToTimeline, autoTitle } from "./history.js";
 
-// ── Per-session view state ───────────────────────────────────
-
-export interface SessionView {
-  timeline: TimelineEntry[];
-  isRunning: boolean;
-  thinkingText: string;
-  statusMessage: string;
-  tokenUsage: TokenUsage | null;
-  currentModel: string | null;
-  confirmation: ConfirmRequest | null;
-  askUser: AskUserRequest | null;
-}
+// ── Helpers ──────────────────────────────────────────────────
 
 function emptyView(): SessionView {
   return {
@@ -38,37 +50,24 @@ function emptyView(): SessionView {
   };
 }
 
-// ── Session list entry ───────────────────────────────────────
-
-export interface SessionListEntry {
-  id: string;
-  title: string;
-  workingDir: string;
-  createdAt: string;
-  active: boolean; // loaded in memory
-}
-
-// ── Root state ───────────────────────────────────────────────
+// ── State shape ──────────────────────────────────────────────
 
 export interface AppState {
-  // Session management
+  // Data
   sessions: SessionListEntry[];
   activeSessionId: string | null;
   sessionViews: Record<string, SessionView>;
-
-  // Derived convenience (null if no active session)
-  currentView: SessionView | null;
   workingDir: string;
   error: string | null;
 
-  // Actions — session lifecycle
+  // Session lifecycle
   createSession: (workingDir?: string) => Promise<void>;
   resumeSession: (id: string, workingDir?: string) => Promise<void>;
   switchSession: (id: string) => void;
   deleteSession: (id: string) => Promise<void>;
   refreshSessionList: () => Promise<void>;
 
-  // Actions — active session
+  // Active session conversation
   applyEvent: (event: AgentEventWire) => void;
   submitPrompt: (text: string) => void;
   submitSteer: (text: string) => void;
@@ -77,59 +76,8 @@ export interface AppState {
   resolveAskUser: (answer: string) => void;
   branchSession: (messageId: string) => Promise<void>;
 
-  // Actions — general
+  // General
   setError: (error: string | null) => void;
-}
-
-// ── Auto-title from first prompt ─────────────────────────────
-
-function autoTitle(text: string): string {
-  const firstLine = text.split("\n")[0] ?? text;
-  return firstLine.length > 50 ? firstLine.slice(0, 47) + "…" : firstLine;
-}
-
-// ── History → timeline conversion ────────────────────────────
-
-function historyToTimeline(messages: HistoryMessage[]): TimelineEntry[] {
-  const entries: TimelineEntry[] = [];
-
-  for (const msg of messages) {
-    switch (msg.role) {
-      case "user":
-        if (msg.content) entries.push({ type: "user", text: msg.content });
-        break;
-      case "assistant":
-        if (msg.content) {
-          entries.push({ type: "assistant", text: msg.content, isStreaming: false });
-        }
-        if (msg.toolCalls) {
-          for (const tc of msg.toolCalls) {
-            entries.push({
-              type: "tool",
-              name: tc.name,
-              callId: tc.callId,
-              args: tc.arguments,
-              output: null,
-              status: "done",
-            });
-          }
-        }
-        break;
-      case "tool_result":
-        // Match to existing tool entry and fill in output
-        if (msg.callId) {
-          for (let i = entries.length - 1; i >= 0; i--) {
-            const e = entries[i];
-            if (e.type === "tool" && e.callId === msg.callId) {
-              entries[i] = { ...e, output: msg.content ?? null };
-              break;
-            }
-          }
-        }
-        break;
-    }
-  }
-  return entries;
 }
 
 // ── Store ────────────────────────────────────────────────────
@@ -138,41 +86,37 @@ export const useAppStore = create<AppState>((set, get) => ({
   sessions: [],
   activeSessionId: null,
   sessionViews: {},
-  currentView: null,
   workingDir: "",
   error: null,
 
-  // ── Session lifecycle ──────────────────────────────────────
+  // ── Session lifecycle ────────────────────────────────────
 
   createSession: async (workingDir?: string) => {
     try {
+      // If no dir provided, prompt user with native OS directory picker
       let dir = workingDir;
       if (!dir) {
-        dir = await bridge.openDirectoryPicker() ?? undefined;
-        if (!dir) return; // user cancelled
+        dir = (await bridge.openDirectoryPicker()) ?? undefined;
+        if (!dir) return; // user cancelled picker
       }
+
       const entry = await bridge.createSession({ workingDir: dir });
       const view = emptyView();
+      const sessionEntry: SessionListEntry = {
+        id: entry.id,
+        title: "New conversation",
+        workingDir: entry.workingDir,
+        createdAt: new Date().toISOString(),
+        active: true,
+      };
 
-      set((s) => {
-        const sessionEntry: SessionListEntry = {
-          id: entry.id,
-          title: "New conversation",
-          workingDir: entry.workingDir,
-          createdAt: new Date().toISOString(),
-          active: true,
-        };
-        const sessions = [...s.sessions, sessionEntry];
-        const sessionViews = { ...s.sessionViews, [entry.id]: view };
-        return {
-          sessions,
-          activeSessionId: entry.id,
-          sessionViews,
-          currentView: view,
-          workingDir: entry.workingDir,
-          error: null,
-        };
-      });
+      set((s) => ({
+        sessions: [...s.sessions, sessionEntry],
+        activeSessionId: entry.id,
+        sessionViews: { ...s.sessionViews, [entry.id]: view },
+        workingDir: entry.workingDir,
+        error: null,
+      }));
     } catch (e) {
       set({ error: `Failed to create session: ${e}` });
     }
@@ -180,71 +124,60 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   resumeSession: async (id: string, workingDir?: string) => {
     try {
-      // If already loaded, just switch
-      const existing = get().sessionViews[id];
-      if (existing) {
+      // Already loaded? Just switch focus.
+      if (get().sessionViews[id]) {
         get().switchSession(id);
         return;
       }
 
+      // Load from disk via SDK, then fetch history for timeline replay
       const entry = await bridge.resumeSession(id, { workingDir });
       const historyResult = await bridge.getHistory(id);
       const timeline = historyToTimeline(historyResult.messages ?? []);
       const view: SessionView = { ...emptyView(), timeline };
+      const resolvedDir = entry.workingDir || workingDir || "";
 
-      set((s) => {
-        const sessions = s.sessions.map((se) =>
+      set((s) => ({
+        sessions: s.sessions.map((se) =>
           se.id === id ? { ...se, active: true } : se,
-        );
-        const sessionViews = { ...s.sessionViews, [id]: view };
-        return {
-          sessions,
-          activeSessionId: id,
-          sessionViews,
-          currentView: view,
-          workingDir: entry.workingDir || workingDir || "",
-          error: null,
-        };
-      });
+        ),
+        activeSessionId: id,
+        sessionViews: { ...s.sessionViews, [id]: view },
+        workingDir: resolvedDir,
+        error: null,
+      }));
     } catch (e) {
       set({ error: `Failed to resume session: ${e}` });
     }
   },
 
   switchSession: (id: string) => {
-    const view = get().sessionViews[id];
-    if (!view) return;
-
+    if (!get().sessionViews[id]) return;
     bridge.switchSession(id);
-
     const session = get().sessions.find((s) => s.id === id);
-    set({
-      activeSessionId: id,
-      currentView: view,
-      workingDir: session?.workingDir ?? "",
-    });
+    set({ activeSessionId: id, workingDir: session?.workingDir ?? "" });
   },
 
   deleteSession: async (id: string) => {
     try {
       await bridge.deleteSession(id);
+
       set((s) => {
         const sessions = s.sessions.filter((se) => se.id !== id);
         const { [id]: _, ...sessionViews } = s.sessionViews;
 
-        let activeSessionId = s.activeSessionId;
-        let currentView = s.currentView;
-        let workingDir = s.workingDir;
-
-        if (activeSessionId === id) {
-          // Switch to next available or clear
-          const nextActive = sessions.find((se) => se.active);
-          activeSessionId = nextActive?.id ?? null;
-          currentView = activeSessionId ? sessionViews[activeSessionId] ?? null : null;
-          workingDir = nextActive?.workingDir ?? "";
+        // If we deleted the active session, switch to next available
+        if (s.activeSessionId === id) {
+          const next = sessions.find((se) => se.active);
+          return {
+            sessions,
+            sessionViews,
+            activeSessionId: next?.id ?? null,
+            workingDir: next?.workingDir ?? "",
+          };
         }
 
-        return { sessions, sessionViews, activeSessionId, currentView, workingDir };
+        return { sessions, sessionViews };
       });
     } catch (e) {
       set({ error: `Failed to delete session: ${e}` });
@@ -255,8 +188,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const result = await bridge.listSessions();
       const items: SessionListItem[] = result.sessions ?? [];
-      set((s) => {
-        const sessions: SessionListEntry[] = items.map((item) => {
+
+      set((s) => ({
+        sessions: items.map((item) => {
+          // Preserve local state (workingDir, active) for sessions we already know
           const existing = s.sessions.find((se) => se.id === item.id);
           return {
             id: item.id,
@@ -265,76 +200,76 @@ export const useAppStore = create<AppState>((set, get) => ({
             createdAt: (item.modified as string) ?? existing?.createdAt ?? "",
             active: !!s.sessionViews[item.id],
           };
-        });
-        return { sessions };
-      });
+        }),
+      }));
     } catch {
-      // Silently fail — list is best-effort
+      // Session list is best-effort — don't show errors for this
     }
   },
 
-  // ── Active session actions ─────────────────────────────────
+  // ── Event handling ───────────────────────────────────────
 
   applyEvent: (event: AgentEventWire) => {
+    // Events arrive tagged with sessionId from the main process.
+    // Route to the correct session view (may differ from the active one
+    // if a background session is still running).
     const sessionId = event.sessionId ?? get().activeSessionId;
     if (!sessionId) return;
+
+    // Global errors go to root state, not per-session
+    if (event.type === "error") {
+      set({ error: (event.message as string) ?? "An error occurred" });
+      return;
+    }
 
     set((s) => {
       const view = s.sessionViews[sessionId] ?? emptyView();
       const updated = applyEventToView(view, event);
       const sessionViews = { ...s.sessionViews, [sessionId]: updated };
 
-      // Update session title from first user message
+      // Auto-title: when the agent finishes its first turn, derive the
+      // session title from the first user message
+      let { sessions } = s;
       if (event.type === "agentEnd") {
         const firstUser = updated.timeline.find((e) => e.type === "user");
-        if (firstUser && firstUser.type === "user") {
-          const sessions = s.sessions.map((se) =>
+        if (firstUser?.type === "user") {
+          sessions = sessions.map((se) =>
             se.id === sessionId && se.title === "New conversation"
               ? { ...se, title: autoTitle(firstUser.text) }
               : se,
           );
-          return {
-            sessionViews,
-            sessions,
-            currentView: sessionId === s.activeSessionId ? updated : s.currentView,
-          };
         }
       }
 
-      return {
-        sessionViews,
-        currentView: sessionId === s.activeSessionId ? updated : s.currentView,
-      };
+      return { sessionViews, sessions };
     });
   },
 
+  // ── Active session conversation ──────────────────────────
+
   submitPrompt: (text: string) => {
-    const { activeSessionId, sessionViews } = get();
+    const { activeSessionId } = get();
     if (!activeSessionId) return;
 
-    const view = sessionViews[activeSessionId];
-    if (!view) return;
-
-    const updated = {
-      ...view,
-      timeline: [...view.timeline, { type: "user" as const, text }],
-    };
-
-    set((s) => ({
-      sessionViews: { ...s.sessionViews, [activeSessionId]: updated },
-      currentView: updated,
-      error: null,
-    }));
-
-    bridge.prompt(text).catch((e) => {
-      set({ error: `Prompt failed: ${e}` });
+    // Optimistically add user message to timeline before sending
+    set((s) => {
+      const view = s.sessionViews[activeSessionId];
+      if (!view) return s;
+      const updated = {
+        ...view,
+        timeline: [...view.timeline, { type: "user" as const, text }],
+      };
+      return {
+        sessionViews: { ...s.sessionViews, [activeSessionId]: updated },
+        error: null,
+      };
     });
+
+    bridge.prompt(text).catch((e) => set({ error: `Prompt failed: ${e}` }));
   },
 
   submitSteer: (text: string) => {
-    bridge.steer(text).catch((e) => {
-      set({ error: `Steer failed: ${e}` });
-    });
+    bridge.steer(text).catch((e) => set({ error: `Steer failed: ${e}` }));
   },
 
   abort: () => {
@@ -342,31 +277,37 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   resolveConfirmation: (action: string) => {
-    const { activeSessionId, sessionViews } = get();
+    const { activeSessionId } = get();
     if (!activeSessionId) return;
-    const view = sessionViews[activeSessionId];
-    if (!view?.confirmation) return;
 
-    bridge.resolveConfirm(view.confirmation.id, action);
-    const updated = { ...view, confirmation: null };
-    set((s) => ({
-      sessionViews: { ...s.sessionViews, [activeSessionId]: updated },
-      currentView: updated,
-    }));
+    set((s) => {
+      const view = s.sessionViews[activeSessionId];
+      if (!view?.confirmation) return s;
+      bridge.resolveConfirm(view.confirmation.id, action);
+      return {
+        sessionViews: {
+          ...s.sessionViews,
+          [activeSessionId]: { ...view, confirmation: null },
+        },
+      };
+    });
   },
 
   resolveAskUser: (answer: string) => {
-    const { activeSessionId, sessionViews } = get();
+    const { activeSessionId } = get();
     if (!activeSessionId) return;
-    const view = sessionViews[activeSessionId];
-    if (!view?.askUser) return;
 
-    bridge.resolveAskUser(view.askUser.id, answer);
-    const updated = { ...view, askUser: null };
-    set((s) => ({
-      sessionViews: { ...s.sessionViews, [activeSessionId]: updated },
-      currentView: updated,
-    }));
+    set((s) => {
+      const view = s.sessionViews[activeSessionId];
+      if (!view?.askUser) return s;
+      bridge.resolveAskUser(view.askUser.id, answer);
+      return {
+        sessionViews: {
+          ...s.sessionViews,
+          [activeSessionId]: { ...view, askUser: null },
+        },
+      };
+    });
   },
 
   branchSession: async (messageId: string) => {
@@ -374,14 +315,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!activeSessionId) return;
     try {
       await bridge.branchSession(activeSessionId, messageId);
-      // Reload history to get the branched state
+      // Reload history to get the new branch's timeline
       const historyResult = await bridge.getHistory(activeSessionId);
       const timeline = historyToTimeline(historyResult.messages ?? []);
       set((s) => {
         const view = { ...(s.sessionViews[activeSessionId] ?? emptyView()), timeline };
         return {
           sessionViews: { ...s.sessionViews, [activeSessionId]: view },
-          currentView: view,
         };
       });
     } catch (e) {
@@ -391,135 +331,3 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setError: (error: string | null) => set({ error }),
 }));
-
-// ── Event reducer (operates on a single SessionView) ─────────
-
-function applyEventToView(view: SessionView, event: AgentEventWire): SessionView {
-  const { type } = event;
-
-  switch (type) {
-    case "agentStart":
-      return { ...view, isRunning: true, statusMessage: "", thinkingText: "" };
-
-    case "messageStart":
-      return {
-        ...view,
-        timeline: [
-          ...view.timeline,
-          { type: "assistant", text: "", isStreaming: true },
-        ],
-      };
-
-    case "messageDelta": {
-      const delta = (event.delta as string) ?? "";
-      const tl = [...view.timeline];
-      const last = tl[tl.length - 1];
-      if (last?.type === "assistant") {
-        tl[tl.length - 1] = { ...last, text: last.text + delta };
-      }
-      return { ...view, timeline: tl };
-    }
-
-    case "thinkingStart":
-      return { ...view, thinkingText: "" };
-
-    case "thinkingDelta": {
-      const delta = (event.delta as string) ?? "";
-      return { ...view, thinkingText: view.thinkingText + delta };
-    }
-
-    case "statusUpdate":
-      return { ...view, statusMessage: (event.message as string) ?? "" };
-
-    case "toolExecutionStart": {
-      const entry: TimelineEntry = {
-        type: "tool",
-        name: (event.tool as string) ?? "unknown",
-        callId: (event.callId as string) ?? "",
-        args:
-          typeof event.args === "string"
-            ? event.args
-            : JSON.stringify(event.args ?? {}),
-        output: null,
-        status: "running",
-      };
-      return { ...view, timeline: [...view.timeline, entry] };
-    }
-
-    case "toolExecutionEnd": {
-      const callId = (event.callId as string) ?? "";
-      const tl = view.timeline.map((e) => {
-        if (e.type === "tool" && e.callId === callId) {
-          return {
-            ...e,
-            output:
-              typeof event.result === "string"
-                ? event.result
-                : JSON.stringify(event.result ?? ""),
-            status: "done" as const,
-          };
-        }
-        return e;
-      });
-      return { ...view, timeline: tl };
-    }
-
-    case "usageUpdate": {
-      const usage = event.usage as Record<string, number> | undefined;
-      return {
-        ...view,
-        currentModel: (event.model as string) ?? view.currentModel,
-        tokenUsage: usage
-          ? {
-              current: usage.currentContextTokens ?? usage.totalTokens ?? 0,
-              contextWindow: usage.contextWindow ?? 128000,
-            }
-          : view.tokenUsage,
-      };
-    }
-
-    case "agentEnd": {
-      const tl = view.timeline.map((e) =>
-        e.type === "assistant" && e.isStreaming ? { ...e, isStreaming: false } : e,
-      );
-      return { ...view, timeline: tl, isRunning: false, thinkingText: "", statusMessage: "" };
-    }
-
-    case "agentAbort": {
-      const tl = view.timeline.map((e) =>
-        e.type === "assistant" && e.isStreaming ? { ...e, isStreaming: false } : e,
-      );
-      return {
-        ...view,
-        timeline: [...tl, { type: "status", message: "Cancelled" }],
-        isRunning: false,
-        thinkingText: "",
-        statusMessage: "",
-      };
-    }
-
-    case "error":
-      return view; // errors go to root state, not per-view
-
-    case "contextDiscovered": {
-      const files = (event.files as string[]) ?? [];
-      const entries: TimelineEntry[] = files.map((f) => ({
-        type: "context" as const,
-        label: f,
-      }));
-      return { ...view, timeline: [...view.timeline, ...entries] };
-    }
-
-    case "skillLoaded":
-      return {
-        ...view,
-        timeline: [
-          ...view.timeline,
-          { type: "skill", name: (event.name as string) ?? "unknown" },
-        ],
-      };
-
-    default:
-      return view;
-  }
-}

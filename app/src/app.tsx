@@ -1,5 +1,15 @@
 import { useEffect } from "react";
 import { useAppStore } from "./state/store.js";
+import {
+  useCurrentView,
+  useSessions,
+  useActiveSessionId,
+  useHeaderData,
+  useError,
+  useSessionActions,
+  useConversationActions,
+  useDialogActions,
+} from "./state/selectors.js";
 import { bridge } from "./sdk/bridge.js";
 import { AppHeader } from "./components/AppHeader.js";
 import { Conversation } from "./components/Conversation.js";
@@ -10,70 +20,62 @@ import { ErrorBanner } from "./components/ErrorBanner.js";
 import { Sidebar } from "./components/sidebar/index.js";
 
 export default function App() {
-  const {
-    sessions,
-    activeSessionId,
-    currentView,
-    workingDir,
-    error,
-    applyEvent,
-    createSession,
-    resumeSession,
-    switchSession,
-    deleteSession,
-    refreshSessionList,
-    submitPrompt,
-    submitSteer,
-    abort,
-    resolveConfirmation,
-    resolveAskUser,
-    setError,
-  } = useAppStore();
+  const sessions = useSessions();
+  const activeSessionId = useActiveSessionId();
+  const currentView = useCurrentView();
+  const { workingDir, model, tokenUsage } = useHeaderData();
+  const error = useError();
 
-  // Wire up event listeners on mount
+  const { createSession, resumeSession, switchSession, deleteSession, refreshSessionList } =
+    useSessionActions();
+  const { submitPrompt, submitSteer, abort } = useConversationActions();
+  const { resolveConfirmation, resolveAskUser } = useDialogActions();
+  const setError = useAppStore((s) => s.setError);
+  const applyEvent = useAppStore((s) => s.applyEvent);
+
+  // Wire up IPC event listeners on mount
   useEffect(() => {
-    const unsubEvent = bridge.onEvent((event) => {
-      applyEvent(event);
-    });
+    const unsubEvent = bridge.onEvent((event) => applyEvent(event));
 
     const unsubConfirm = bridge.onConfirm((params) => {
-      const sessionId = params.sessionId;
+      const { sessionId } = params;
       const view = useAppStore.getState().sessionViews[sessionId];
       if (!view) return;
-      const updated = {
-        ...view,
-        confirmation: {
-          id: params.requestId,
-          tool: params.tool,
-          args: params.args ?? {},
-          message: params.message,
-        },
-      };
       useAppStore.setState((s) => ({
-        sessionViews: { ...s.sessionViews, [sessionId]: updated },
-        currentView: sessionId === s.activeSessionId ? updated : s.currentView,
+        sessionViews: {
+          ...s.sessionViews,
+          [sessionId]: {
+            ...view,
+            confirmation: {
+              id: params.requestId,
+              tool: params.tool,
+              args: params.args ?? {},
+              message: params.message,
+            },
+          },
+        },
       }));
     });
 
     const unsubAsk = bridge.onAskUser((params) => {
-      const sessionId = params.sessionId;
+      const { sessionId } = params;
       const view = useAppStore.getState().sessionViews[sessionId];
       if (!view) return;
-      const updated = {
-        ...view,
-        askUser: {
-          id: params.requestId,
-          question: params.question,
-          choices: params.choices,
-        },
-      };
       useAppStore.setState((s) => ({
-        sessionViews: { ...s.sessionViews, [sessionId]: updated },
-        currentView: sessionId === s.activeSessionId ? updated : s.currentView,
+        sessionViews: {
+          ...s.sessionViews,
+          [sessionId]: {
+            ...view,
+            askUser: {
+              id: params.requestId,
+              question: params.question,
+              choices: params.choices,
+            },
+          },
+        },
       }));
     });
 
-    // Load saved sessions list
     refreshSessionList();
 
     return () => {
@@ -82,8 +84,6 @@ export default function App() {
       unsubAsk();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const hasSession = activeSessionId !== null && currentView !== null;
 
   return (
     <div id="app-layout">
@@ -97,20 +97,15 @@ export default function App() {
       />
 
       <div id="app-content">
-        {hasSession ? (
+        {currentView ? (
           <>
-            <AppHeader
-              workingDir={workingDir}
-              model={currentView.currentModel}
-              tokenUsage={currentView.tokenUsage}
-            />
+            <AppHeader workingDir={workingDir} model={model} tokenUsage={tokenUsage} />
 
             <main>
               <Conversation
                 timeline={currentView.timeline}
                 isRunning={currentView.isRunning}
               />
-
               {currentView.isRunning && (
                 <ThinkingIndicator
                   text={currentView.thinkingText}
