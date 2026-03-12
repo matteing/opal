@@ -15,8 +15,8 @@
 min_version = "2025.1"
 
 [tools]
-erlang = "28.3.1"
-elixir = "1.19-otp-28"
+erlang = "28.4"
+elixir = "1.19.5-otp-28"
 node = { version = "22", postinstall = "corepack enable" }
 
 # ── Dependencies ──────────────────────────────────────────────

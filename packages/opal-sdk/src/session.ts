@@ -27,8 +27,10 @@ import { AgentStream } from "./stream.js";
 import type {
   SessionStartParams,
   SessionStartResult,
-  AgentStateResult,
+  SessionListResult,
+  SessionDeleteResult,
   SessionHistoryResult,
+  AgentStateResult,
   ModelsListResult,
   ModelSetResult,
   OpalConfigGetResult,
@@ -244,6 +246,18 @@ export class Session {
   /** Get the current agent state. */
   async state(): Promise<AgentStateResult> {
     return this.#client.request("agent/state", { sessionId: this.id });
+  }
+
+  // ── Session management (cross-session) ──────────────────────
+
+  /** List all saved sessions on disk. */
+  async listSessions(): Promise<SessionListResult> {
+    return this.#client.request("session/list");
+  }
+
+  /** Delete a saved session by ID. */
+  async deleteSession(sessionId: string): Promise<SessionDeleteResult> {
+    return this.#client.request("session/delete", { sessionId });
   }
 
   // ── Models ───────────────────────────────────────────────────

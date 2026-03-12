@@ -218,7 +218,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     // Global errors go to root state, not per-session
     if (event.type === "error") {
-      set({ error: (event.message as string) ?? "An error occurred" });
+      set({ error: (event.reason as string) ?? "An error occurred" });
       return;
     }
 

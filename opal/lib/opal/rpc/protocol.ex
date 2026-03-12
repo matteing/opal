@@ -231,8 +231,9 @@ defmodule Opal.RPC.Protocol do
       result: [
         %{
           name: "sessions",
-          type: {:array, :object},
-          description: "Array of {id, title, modified}."
+          type:
+            {:array, {:object, %{"id" => :string, "title" => :string, "modified" => :string}}},
+          description: "Saved session entries."
         }
       ]
     },
@@ -274,8 +275,17 @@ defmodule Opal.RPC.Protocol do
       result: [
         %{
           name: "models",
-          type: {:array, :object},
-          description: "Array of {id, name, provider, supports_thinking}."
+          type:
+            {:array,
+             {:object,
+              %{
+                "id" => :string,
+                "name" => :string,
+                "provider" => :string,
+                "supports_thinking" => :boolean,
+                "thinking_levels" => {:array, :string}
+              }}},
+          description: "Available models with metadata."
         }
       ]
     },
@@ -388,7 +398,25 @@ defmodule Opal.RPC.Protocol do
         %{name: "session_id", type: :string, required: true, description: "Target session ID."}
       ],
       result: [
-        %{name: "tasks", type: {:array, :object}, description: "Array of task objects."}
+        %{
+          name: "tasks",
+          type:
+            {:array,
+             {:object,
+              %{
+                "id" => :string,
+                "label" => :string,
+                "status" => :string,
+                "notes" => :string,
+                "blocked_by" => {:array, :string},
+                "parent_id" => :string,
+                "prompt" => :string,
+                "result" => :string,
+                "created_at" => :string,
+                "updated_at" => :string
+              }, MapSet.new(["id", "label", "status"])}},
+          description: "Active tasks (open, in_progress, blocked)."
+        }
       ]
     },
     %{
@@ -571,9 +599,23 @@ defmodule Opal.RPC.Protocol do
       result: [
         %{
           name: "messages",
-          type: {:array, :object},
-          description:
-            "Ordered list of messages from root to current leaf. Each message has id, role, content, thinking, tool_calls, call_id, name, is_error, and metadata."
+          type:
+            {:array,
+             {:object,
+              %{
+                "id" => :string,
+                "role" => :string,
+                "content" => :string,
+                "is_error" => :boolean,
+                "thinking" => :string,
+                "call_id" => :string,
+                "name" => :string,
+                "metadata" => :object,
+                "tool_calls" =>
+                  {:array,
+                   {:object, %{"call_id" => :string, "name" => :string, "arguments" => :string}}}
+              }, MapSet.new(["id", "role"])}},
+          description: "Ordered list of messages from root to current leaf."
         }
       ]
     },

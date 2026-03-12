@@ -1,6 +1,6 @@
 # scripts/codegen_ts.exs
 #
-# Generates cli/src/sdk/protocol.ts from priv/rpc_schema.json.
+# Generates packages/opal-sdk/src/protocol.ts from priv/rpc_schema.json.
 #
 # The schema is the intermediate artifact — this script does NOT depend
 # on the Elixir compilation of Opal.RPC.Protocol. To update the schema,
@@ -322,7 +322,7 @@ defmodule Codegen.TS do
   defp method_to_type_name(method) do
     method
     |> String.split("/")
-    |> Enum.map(&capitalize/1)
+    |> Enum.map(&snake_to_pascal/1)
     |> Enum.join()
   end
 

@@ -91,8 +91,14 @@ export type ModelSetResult = {
 export type ModelsListParams = Record<string, never>;
 
 export type ModelsListResult = {
-  /** Array of {id, name, provider, supports_thinking}. */
-  models: Record<string, unknown>[];
+  /** Available models with metadata. */
+  models: {
+    id: string;
+    name: string;
+    provider: string;
+    supportsThinking: boolean;
+    thinkingLevels: string[];
+  }[];
 };
 
 export type OpalConfigGetParams = {
@@ -176,15 +182,25 @@ export type SessionHistoryParams = {
 };
 
 export type SessionHistoryResult = {
-  /** Ordered list of messages from root to current leaf. Each message has id, role, content, thinking, tool_calls, call_id, name, is_error, and metadata. */
-  messages: Record<string, unknown>[];
+  /** Ordered list of messages from root to current leaf. */
+  messages: {
+    callId?: string;
+    content?: string;
+    id: string;
+    isError?: boolean;
+    metadata?: Record<string, unknown>;
+    name?: string;
+    role: string;
+    thinking?: string;
+    toolCalls?: { arguments: string; callId: string; name: string }[];
+  }[];
 };
 
 export type SessionListParams = Record<string, never>;
 
 export type SessionListResult = {
-  /** Array of {id, title, modified}. */
-  sessions: Record<string, unknown>[];
+  /** Saved session entries. */
+  sessions: { id: string; modified: string; title: string }[];
 };
 
 export type SessionStartParams = {
@@ -240,8 +256,19 @@ export type TasksListParams = {
 };
 
 export type TasksListResult = {
-  /** Array of task objects. */
-  tasks: Record<string, unknown>[];
+  /** Active tasks (open, in_progress, blocked). */
+  tasks: {
+    blockedBy?: string[];
+    createdAt?: string;
+    id: string;
+    label: string;
+    notes?: string;
+    parentId?: string;
+    prompt?: string;
+    result?: string;
+    status: string;
+    updatedAt?: string;
+  }[];
 };
 
 export type ThinkingSetParams = {
@@ -256,7 +283,7 @@ export type ThinkingSetResult = {
   thinkingLevel: string;
 };
 
-export type ClientAsk_userParams = {
+export type ClientAskUserParams = {
   /** Optional multiple-choice options. */
   choices?: string[];
   /** The question to display. */
@@ -265,7 +292,7 @@ export type ClientAsk_userParams = {
   sessionId: string;
 };
 
-export type ClientAsk_userResult = {
+export type ClientAskUserResult = {
   /** The user's response text. */
   answer: string;
 };
@@ -589,8 +616,8 @@ export interface MethodTypes {
   "tasks/list": { params: TasksListParams; result: TasksListResult };
   "thinking/set": { params: ThinkingSetParams; result: ThinkingSetResult };
   "client/ask_user": {
-    params: ClientAsk_userParams;
-    result: ClientAsk_userResult;
+    params: ClientAskUserParams;
+    result: ClientAskUserResult;
   };
   "client/confirm": {
     params: ClientConfirmParams;
