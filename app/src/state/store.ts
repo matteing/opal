@@ -111,22 +111,28 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       const entry = await bridge.createSession({ workingDir: dir });
-      const view = emptyView();
-      const sessionEntry: SessionListEntry = {
-        id: entry.id,
-        title: "New conversation",
-        workingDir: entry.workingDir,
-        createdAt: new Date().toISOString(),
-        active: true,
-      };
 
-      set((s) => ({
-        sessions: [...s.sessions, sessionEntry],
-        activeSessionId: entry.id,
-        sessionViews: { ...s.sessionViews, [entry.id]: view },
-        workingDir: entry.workingDir,
-        error: null,
-      }));
+      // Set up the session view. Events may have already arrived during
+      // createSession (contextDiscovered, skillLoaded) — merge them with
+      // any view that applyEvent created as a side effect.
+      set((s) => {
+        const existingView = s.sessionViews[entry.id];
+        const view = existingView ?? emptyView();
+        const sessionEntry: SessionListEntry = {
+          id: entry.id,
+          title: "New conversation",
+          workingDir: entry.workingDir,
+          createdAt: new Date().toISOString(),
+          active: true,
+        };
+        return {
+          sessions: [...s.sessions, sessionEntry],
+          activeSessionId: entry.id,
+          sessionViews: { ...s.sessionViews, [entry.id]: view },
+          workingDir: entry.workingDir,
+          error: null,
+        };
+      });
     } catch (e) {
       set({ error: `Failed to create session: ${e}` });
     }
@@ -144,18 +150,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       const entry = await bridge.resumeSession(id, { workingDir });
       const historyResult = await bridge.getHistory(id);
       const timeline = historyToTimeline(historyResult.messages ?? []);
-      const view: SessionView = { ...emptyView(), timeline };
       const resolvedDir = entry.workingDir || workingDir || "";
 
-      set((s) => ({
-        sessions: s.sessions.map((se) =>
-          se.id === id ? { ...se, active: true } : se,
-        ),
-        activeSessionId: id,
-        sessionViews: { ...s.sessionViews, [id]: view },
-        workingDir: resolvedDir,
-        error: null,
-      }));
+      // Merge with any events that arrived during resume
+      set((s) => {
+        const existingView = s.sessionViews[id];
+        const view: SessionView = {
+          ...(existingView ?? emptyView()),
+          timeline: [...timeline, ...(existingView?.timeline ?? [])],
+        };
+        return {
+          sessions: s.sessions.map((se) =>
+            se.id === id ? { ...se, active: true } : se,
+          ),
+          activeSessionId: id,
+          sessionViews: { ...s.sessionViews, [id]: view },
+          workingDir: resolvedDir,
+          error: null,
+        };
+      });
     } catch (e) {
       set({ error: `Failed to resume session: ${e}` });
     }

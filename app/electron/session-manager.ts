@@ -135,20 +135,23 @@ export class SessionManager {
     }
   }
 
-  /** Send a prompt to the active session. */
-  async prompt(text: string): Promise<void> {
+  /**
+   * Send a prompt to the active session.
+   * Uses send() (fire-and-forget) instead of prompt() (stream) because events
+   * are already forwarded to the renderer via the onEvent subscription.
+   * This avoids blocking the IPC handler for the entire agent run.
+   */
+  async prompt(text: string): Promise<{ queued: boolean }> {
     const session = this.active;
     if (!session) throw new Error("no active session");
-    for await (const _event of session.prompt(text)) {
-      // events forwarded by onEvent handler
-    }
+    return session.send(text);
   }
 
-  /** Steer the active session. */
-  async steer(text: string): Promise<unknown> {
+  /** Steer the active session (queues a message while the agent is busy). */
+  async steer(text: string): Promise<{ queued: boolean }> {
     const session = this.active;
     if (!session) throw new Error("no active session");
-    return session.steer(text);
+    return session.send(text);
   }
 
   /** Abort the active session. */
