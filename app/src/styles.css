@@ -48,10 +48,14 @@ nav[aria-label="Sessions"] {
   flex-direction: column;
   background: #151515;
   overflow-y: auto;
+  /* macOS: allow dragging the window from the sidebar top area */
+  -webkit-app-region: drag;
 }
 
+/* macOS traffic lights sit at top-left; pad the sidebar to avoid overlap */
 nav[aria-label="Sessions"] > button:first-child {
   margin: 0.75rem;
+  margin-top: 2.5rem; /* room for macOS traffic lights */
   padding: 0.4rem 0.75rem;
   border: 1px solid #444;
   border-radius: 6px;
@@ -60,6 +64,7 @@ nav[aria-label="Sessions"] > button:first-child {
   cursor: pointer;
   font: inherit;
   font-size: 0.85rem;
+  -webkit-app-region: no-drag;
 }
 
 nav[aria-label="Sessions"] > button:first-child:hover {
@@ -198,6 +203,8 @@ header {
   border-bottom: 1px solid #333;
   font-size: 0.85rem;
   color: #999;
+  /* Allow window dragging from the header bar */
+  -webkit-app-region: drag;
 }
 
 header strong {
@@ -207,6 +214,15 @@ header strong {
 header meter {
   width: 80px;
   height: 12px;
+}
+
+/* Ensure interactive elements inside draggable areas are clickable */
+nav[aria-label="Sessions"] input,
+nav[aria-label="Sessions"] button,
+nav[aria-label="Sessions"] ul,
+header button,
+header input {
+  -webkit-app-region: no-drag;
 }
 
 /* ── Main (conversation) ─────────────────────────────────── */

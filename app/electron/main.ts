@@ -9,12 +9,19 @@ let manager: SessionManager | null = null;
 let scheduler: Scheduler | null = null;
 
 function createWindow(): void {
+  const isMac = process.platform === "darwin";
+
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 720,
     minWidth: 600,
     minHeight: 400,
     title: "Opal Desktop",
+    // macOS: hide the title bar but keep native traffic lights (close/min/max)
+    // inset so they sit inside the content area alongside the sidebar
+    titleBarStyle: isMac ? "hiddenInset" : "default",
+    // Windows/Linux: keep the native frame with standard controls
+    trafficLightPosition: isMac ? { x: 12, y: 12 } : undefined,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
