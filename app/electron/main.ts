@@ -19,7 +19,7 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      preload: path.join(__dirname, "../preload/preload.mjs"),
+      preload: path.join(__dirname, "../preload/preload.js"),
     },
   });
 

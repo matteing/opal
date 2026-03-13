@@ -140,4 +140,11 @@ declare global {
   }
 }
 
-export const bridge: OpalBridge = window.opal;
+/** Lazy accessor — safe if preload hasn't run yet (returns undefined, not a crash). */
+export const bridge: OpalBridge = typeof window !== "undefined" && window.opal
+  ? window.opal
+  : new Proxy({} as OpalBridge, {
+      get(_, prop) {
+        throw new Error(`window.opal.${String(prop)} called but preload script hasn't loaded. Check electron.vite.config.ts preload output format (must be CJS, not ESM).`);
+      },
+    });
