@@ -1,128 +1,61 @@
-# .mise.toml — tool versions + task orchestration (replaces Nx)
+# .mise.toml — tool versions + task orchestration
 min_version = "2025.1"
 
 [tools]
 erlang = "28.3.1"
 elixir = "1.19-otp-28"
-node = { version = "22", postinstall = "corepack enable" }
 
-# ── Build pipeline ────────────────────────────────────────────
-# sources/outputs enable skip-if-unchanged
+# ── Build ─────────────────────────────────────────────────────
 
-[tasks."build:core"]
-description = "Compile Elixir core"
+[tasks.build]
+description = "Compile Elixir"
 dir = "opal"
 run = "mix compile --warnings-as-errors"
 
-[tasks.codegen]
-description = "Generate TS types from Elixir schemas"
+[tasks.release]
+description = "Build a production release (opal binary)"
 dir = "opal"
-depends = ["build:core"]
-run = "mix run ../scripts/codegen_ts.exs"
+run = "MIX_ENV=prod mix release opal --overwrite"
 
-[tasks."build:cli"]
-description = "Compile TypeScript CLI"
-depends = ["codegen"]
-dir = "cli"
-run = "npx tsc -p tsconfig.build.json"
+# ── Test ──────────────────────────────────────────────────────
 
-[tasks.build]
-description = "Full build: core → codegen → CLI"
-depends = ["build:cli"]
-
-# ── Test (independent — wildcard runs them in parallel) ───────
-
-[tasks."test:core"]
+[tasks.test]
 description = "Run Elixir tests"
 dir = "opal"
 run = "mix test"
 
-[tasks."test:cli"]
-description = "Run CLI tests"
-dir = "cli"
-run = "npx vitest run"
-
-[tasks.test]
-description = "Run all tests"
-depends = ["test:*"]
-
 # ── Lint & Format ─────────────────────────────────────────────
 
-[tasks."lint:core"]
+[tasks.lint]
 description = "Check Elixir formatting and types"
 dir = "opal"
 run = ["mix format --check-formatted", "mix dialyzer"]
 
-[tasks."lint:cli"]
-description = "Lint and format-check CLI"
-dir = "cli"
-run = ["pnpm lint", "pnpm format:check"]
-
-[tasks.lint]
-description = "Lint all projects"
-depends = ["lint:*"]
-
-[tasks."format:core"]
+[tasks.format]
 description = "Format Elixir code"
 dir = "opal"
 run = "mix format"
 
-[tasks."format:cli"]
-description = "Format CLI code"
-dir = "cli"
-run = ["pnpm lint:fix", "pnpm format"]
+# ── Dependencies ──────────────────────────────────────────────
 
-[tasks.format]
-description = "Format all projects"
-depends = ["format:*"]
-
-# ── Dev & Setup ───────────────────────────────────────────────
-
-[tasks."deps:core"]
+[tasks.deps]
 description = "Install Elixir dependencies"
 dir = "opal"
 run = "mix deps.get"
 
-[tasks."deps:cli"]
-description = "Install CLI dependencies"
-dir = "cli"
-run = "pnpm install"
-
-[tasks.deps]
-description = "Install all dependencies"
-depends = ["deps:*"]
-
-[tasks.dev]
-description = "Build and launch the CLI"
-depends = ["build"]
-run = "node cli/dist/bin.js --expose opal#opal"
-
-[tasks.inspect]
-description = "Connect to a running dev instance via iex --remsh"
-run = "bash scripts/inspect.sh"
-
-[tasks.release]
-description = "Bump versions, commit, and tag (e.g. mise run release -- patch)"
-run = "bash scripts/release.sh"
+# ── Dev & Ops ─────────────────────────────────────────────────
 
 [tasks.server]
-description = "Start opal-server with Erlang distribution"
+description = "Start the opal server (dev mode, no-halt)"
 dir = "opal"
-run = "elixir --sname opal -S mix run --no-halt"
+run = "mix run --no-halt"
 
-
-# ── CI Preflight ─────────────────────────────────────────────
-
-[tasks."codegen:check"]
-description = "Verify codegen is up-to-date"
-dir = "opal"
-run = "mix run ../scripts/codegen_ts.exs --check"
+# ── CI Preflight ──────────────────────────────────────────────
 
 [tasks.precommit]
-description = "Run everything CI checks: deps, codegen, lint, build, test"
+description = "Full CI preflight: deps, lint, build, test"
 depends = ["deps"]
 run = [
-  "mise run codegen:check",
   "mise run lint",
   "mise run build",
   "mise run test",

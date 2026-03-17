@@ -113,7 +113,7 @@ defmodule Opal.RPC.ServerTransportTest do
     test "tool_execution_start 5-arity" do
       event = {:tool_execution_start, "read_file", "call_1", %{"path" => "a.ex"}, %{}}
 
-      assert_serializes(event, "tool_execution_start", %{
+      assert_serializes(event, "tool_start", %{
         tool: "read_file",
         call_id: "call_1",
         args: %{"path" => "a.ex"},
@@ -124,7 +124,7 @@ defmodule Opal.RPC.ServerTransportTest do
     test "tool_execution_start 4-arity" do
       event = {:tool_execution_start, "shell", %{"command" => "ls"}, %{}}
 
-      assert_serializes(event, "tool_execution_start", %{
+      assert_serializes(event, "tool_start", %{
         tool: "shell",
         call_id: "",
         args: %{"command" => "ls"},
@@ -135,7 +135,7 @@ defmodule Opal.RPC.ServerTransportTest do
     test "tool_execution_start 3-arity" do
       event = {:tool_execution_start, "shell", %{"command" => "ls"}}
 
-      assert_serializes(event, "tool_execution_start", %{
+      assert_serializes(event, "tool_start", %{
         tool: "shell",
         call_id: "",
         args: %{"command" => "ls"},
@@ -146,7 +146,7 @@ defmodule Opal.RPC.ServerTransportTest do
     test "tool_execution_end with ok result" do
       event = {:tool_execution_end, "read_file", "call_1", {:ok, "contents"}}
 
-      assert_serializes(event, "tool_execution_end", %{
+      assert_serializes(event, "tool_end", %{
         tool: "read_file",
         call_id: "call_1",
         result: %{ok: true, output: "contents"}
@@ -156,7 +156,7 @@ defmodule Opal.RPC.ServerTransportTest do
     test "tool_execution_end with error result" do
       event = {:tool_execution_end, "read_file", "call_1", {:error, :enoent}}
 
-      assert_serializes(event, "tool_execution_end", %{
+      assert_serializes(event, "tool_end", %{
         tool: "read_file",
         call_id: "call_1",
         result: %{ok: false, error: ":enoent"}
@@ -166,7 +166,7 @@ defmodule Opal.RPC.ServerTransportTest do
     test "tool_execution_end 3-arity" do
       event = {:tool_execution_end, "shell", {:ok, "output"}}
 
-      assert_serializes(event, "tool_execution_end", %{
+      assert_serializes(event, "tool_end", %{
         tool: "shell",
         call_id: "",
         result: %{ok: true, output: "output"}
@@ -320,10 +320,10 @@ defmodule Opal.RPC.ServerTransportTest do
 
       # Simulate two request_client calls
       {state1, output1} =
-        handle_call_capture({:request_client, "client/confirm", %{q: "?"}}, state)
+        handle_call_capture({:request_client, "client/request", %{kind: "confirm", q: "?"}}, state)
 
       {state2, output2} =
-        handle_call_capture({:request_client, "client/input", %{prompt: "enter"}}, state1)
+        handle_call_capture({:request_client, "client/request", %{kind: "input", prompt: "enter"}}, state1)
 
       decoded1 = Jason.decode!(output1)
       decoded2 = Jason.decode!(output2)
@@ -586,21 +586,21 @@ defmodule Opal.RPC.ServerTransportTest do
   defp serialize_event({:thinking_delta, %{delta: d}}), do: {"thinking_delta", %{delta: d}}
 
   defp serialize_event({:tool_execution_start, tool, call_id, args, meta}),
-    do: {"tool_execution_start", %{tool: tool, call_id: call_id, args: args, meta: meta}}
+    do: {"tool_start", %{tool: tool, call_id: call_id, args: args, meta: meta}}
 
   defp serialize_event({:tool_execution_start, tool, args, meta}),
-    do: {"tool_execution_start", %{tool: tool, call_id: "", args: args, meta: meta}}
+    do: {"tool_start", %{tool: tool, call_id: "", args: args, meta: meta}}
 
   defp serialize_event({:tool_execution_start, tool, args}),
-    do: {"tool_execution_start", %{tool: tool, call_id: "", args: args, meta: tool}}
+    do: {"tool_start", %{tool: tool, call_id: "", args: args, meta: tool}}
 
   defp serialize_event({:tool_execution_end, tool, call_id, result}),
     do:
-      {"tool_execution_end",
+      {"tool_end",
        %{tool: tool, call_id: call_id, result: serialize_tool_result(result)}}
 
   defp serialize_event({:tool_execution_end, tool, result}),
-    do: {"tool_execution_end", %{tool: tool, call_id: "", result: serialize_tool_result(result)}}
+    do: {"tool_end", %{tool: tool, call_id: "", result: serialize_tool_result(result)}}
 
   defp serialize_event({:sub_agent_start, %{model: model, label: label, tools: tools}}),
     do: {"sub_agent_start", %{model: model, label: label, tools: tools}}

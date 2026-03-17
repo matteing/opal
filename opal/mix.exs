@@ -25,8 +25,6 @@ defmodule Opal.MixProject do
         ignore_modules: [
           # Application bootstrap — no unit-testable logic
           Opal.Application,
-          # Mix task — tested via CLI integration, not unit tests
-          Mix.Tasks.Opal.Gen.JsonSchema,
           # I/O-bound stdio transport — tested via RPC integration tests
           Opal.RPC.Stdio
         ]
@@ -42,7 +40,7 @@ defmodule Opal.MixProject do
   end
 
   defp description do
-    "An OTP-native coding agent SDK. Build, orchestrate, and observe AI coding agents with Elixir supervision trees, streaming events, and a JSON-RPC 2.0 interface."
+    "A local coding agent that runs on your machine and communicates exclusively via JSON-RPC 2.0 over stdio."
   end
 
   defp package do
@@ -117,7 +115,7 @@ defmodule Opal.MixProject do
 
   defp releases do
     [
-      opal_server: [
+      opal: [
         applications: [opal: :permanent],
         include_erts: true,
         strip_beams: true

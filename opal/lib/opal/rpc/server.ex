@@ -211,33 +211,6 @@ defmodule Opal.RPC.Server do
   def dispatch("session/branch", _),
     do: error(:invalid_params, "Missing required params: session_id, entry_id")
 
-  def dispatch("session/compact", %{"session_id" => sid} = params) do
-    with_agent(sid, fn agent ->
-      info = Opal.get_info(agent)
-
-      case info.session do
-        nil ->
-          error(:internal_error, "Session persistence not enabled — cannot compact")
-
-        session when is_pid(session) ->
-          keep =
-            if is_integer(params["keep_recent"]) and params["keep_recent"] > 0,
-              do: params["keep_recent"]
-
-          compact_opts =
-            [provider: info.provider, model: info.model] ++
-              if(keep, do: [keep_recent_tokens: keep], else: [])
-
-          :ok = Opal.Session.Compaction.compact(session, compact_opts)
-          Opal.sync_messages(agent, Opal.Session.get_path(session))
-          {:ok, %{}}
-      end
-    end)
-  end
-
-  def dispatch("session/compact", _),
-    do: error(:invalid_params, "Missing required param: session_id")
-
   def dispatch("session/history", %{"session_id" => sid}) do
     case find_session(sid) do
       {:ok, session} ->
@@ -340,17 +313,6 @@ defmodule Opal.RPC.Server do
   def dispatch("model/set", _),
     do: error(:invalid_params, "Missing required params: session_id, model_id")
 
-  def dispatch("thinking/set", %{"session_id" => sid, "level" => level_str}) do
-    with_agent(sid, fn agent ->
-      level = parse_thinking_level(level_str) || :high
-      Opal.set_thinking_level(agent, level)
-      {:ok, %{thinking_level: level}}
-    end)
-  end
-
-  def dispatch("thinking/set", _),
-    do: error(:invalid_params, "Missing required params: session_id, level")
-
   # -- Auth --
 
   def dispatch("auth/status", _params) do
@@ -432,8 +394,7 @@ defmodule Opal.RPC.Server do
     with {:ok, agent} <- find_agent(sid),
          {:ok, features} <- parse_features(Map.get(params, "features")),
          {:ok, tools} <- parse_string_list(Map.get(params, "tools"), "tools"),
-         :ok <- validate_tool_names(tools, fn -> Opal.Agent.get_state(agent).tools end),
-         {:ok, _} <- handle_distribution(Map.get(params, "distribution", :skip)) do
+         :ok <- validate_tool_names(tools, fn -> Opal.Agent.get_state(agent).tools end) do
       :ok = Opal.configure_session(agent, %{features: features, enabled_tools: tools})
       {:ok, serialize_runtime_config(Opal.Agent.get_state(agent))}
     else
@@ -449,8 +410,6 @@ defmodule Opal.RPC.Server do
     do: error(:invalid_params, "Missing required param: session_id")
 
   # -- Meta --
-
-  def dispatch("opal/ping", _), do: {:ok, %{}}
 
   def dispatch("opal/version", _) do
     {:ok,
@@ -615,48 +574,9 @@ defmodule Opal.RPC.Server do
         all: Enum.map(state.tools, & &1.name()),
         enabled: enabled,
         disabled: state.disabled_tools
-      },
-      distribution: distribution_info()
+      }
     }
   end
-
-  defp distribution_info do
-    if Node.alive?(),
-      do: %{node: Atom.to_string(Node.self()), cookie: Atom.to_string(Node.get_cookie())},
-      else: nil
-  end
-
-  defp handle_distribution(:skip), do: {:ok, :noop}
-
-  defp handle_distribution(nil) do
-    if Node.alive?(), do: Node.stop()
-    {:ok, nil}
-  end
-
-  defp handle_distribution(%{"name" => name} = params) when is_binary(name) do
-    cookie =
-      case params["cookie"] do
-        c when is_binary(c) and c != "" -> String.to_atom(c)
-        _ -> Opal.Application.generate_cookie()
-      end
-
-    if Node.alive?() do
-      {:ok, distribution_info()}
-    else
-      case Node.start(String.to_atom(name), name_domain: :shortnames) do
-        {:ok, _} ->
-          Node.set_cookie(cookie)
-          Opal.Application.write_node_file(Node.self(), cookie)
-          {:ok, distribution_info()}
-
-        {:error, reason} ->
-          {:error, "Failed to start distribution: #{inspect(reason)}", nil}
-      end
-    end
-  end
-
-  defp handle_distribution(_),
-    do: {:error, "Invalid distribution config: expected {name, cookie?} or null", nil}
 
   # ── Map helpers ────────────────────────────────────────────────────
 
@@ -730,22 +650,22 @@ defmodule Opal.RPC.Server do
      }}
   end
 
-  # tool_execution_start has 3 arities in the wild
+  # tool_execution_start has 3 arities — all serialize to "tool_start"
   defp serialize_event({:tool_execution_start, tool, call_id, args, meta}),
-    do: {"tool_execution_start", %{tool: tool, call_id: call_id, args: args, meta: meta}}
+    do: {"tool_start", %{tool: tool, call_id: call_id, args: args, meta: meta}}
 
   defp serialize_event({:tool_execution_start, tool, args, meta}),
-    do: {"tool_execution_start", %{tool: tool, call_id: "", args: args, meta: meta}}
+    do: {"tool_start", %{tool: tool, call_id: "", args: args, meta: meta}}
 
   defp serialize_event({:tool_execution_start, tool, args}),
-    do: {"tool_execution_start", %{tool: tool, call_id: "", args: args, meta: tool}}
+    do: {"tool_start", %{tool: tool, call_id: "", args: args, meta: tool}}
 
   defp serialize_event({:tool_execution_end, tool, call_id, result}),
     do:
-      {"tool_execution_end", %{tool: tool, call_id: call_id, result: format_tool_result(result)}}
+      {"tool_end", %{tool: tool, call_id: call_id, result: format_tool_result(result)}}
 
   defp serialize_event({:tool_execution_end, tool, result}),
-    do: {"tool_execution_end", %{tool: tool, call_id: "", result: format_tool_result(result)}}
+    do: {"tool_end", %{tool: tool, call_id: "", result: format_tool_result(result)}}
 
   defp serialize_event(other), do: {"unknown", %{raw: inspect(other)}}
 

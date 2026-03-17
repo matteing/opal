@@ -39,7 +39,6 @@ defmodule Opal.RPC.ProtocolTest do
       assert "agent/state" in names
       assert "session/list" in names
       assert "session/branch" in names
-      assert "session/compact" in names
       assert "models/list" in names
       assert "auth/status" in names
       assert "auth/login" in names
@@ -78,10 +77,9 @@ defmodule Opal.RPC.ProtocolTest do
   end
 
   describe "server_requests/0" do
-    test "includes client/confirm and client/input" do
+    test "includes client/request" do
       names = Protocol.server_request_names()
-      assert "client/confirm" in names
-      assert "client/input" in names
+      assert "client/request" in names
     end
 
     test "every server request is server_to_client direction" do
@@ -101,8 +99,8 @@ defmodule Opal.RPC.ProtocolTest do
       assert "message_delta" in types
       assert "thinking_start" in types
       assert "thinking_delta" in types
-      assert "tool_execution_start" in types
-      assert "tool_execution_end" in types
+      assert "tool_start" in types
+      assert "tool_end" in types
       assert "turn_end" in types
       assert "error" in types
     end
@@ -123,7 +121,7 @@ defmodule Opal.RPC.ProtocolTest do
   describe "spec/0" do
     test "returns a complete spec map" do
       spec = Protocol.spec()
-      assert spec.version == "0.1.0"
+      assert spec.version == "0.2.0"
       assert spec.transport == "stdio"
       assert spec.framing == "newline-delimited JSON"
       assert spec.notification_method == "agent/event"

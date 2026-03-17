@@ -57,9 +57,9 @@ defmodule Opal.RPC.ServerDispatchTest do
     end
   end
 
-  describe "handle/2 session/compact missing params" do
-    test "returns invalid_params error" do
-      assert {:error, -32602, _, nil} = Server.dispatch("session/compact", %{})
+  describe "handle/2 session/compact (removed)" do
+    test "returns method_not_found" do
+      assert {:error, -32601, _, nil} = Server.dispatch("session/compact", %{})
     end
   end
 
@@ -70,9 +70,9 @@ defmodule Opal.RPC.ServerDispatchTest do
     end
   end
 
-  describe "handle/2 session/compact with session_id" do
-    test "returns session not found for unknown session" do
-      assert {:error, -32602, "Session not found", _} =
+  describe "handle/2 session/compact with session_id (removed)" do
+    test "returns method_not_found" do
+      assert {:error, -32601, _, nil} =
                Server.dispatch("session/compact", %{"session_id" => "abc"})
     end
   end
@@ -118,15 +118,13 @@ defmodule Opal.RPC.ServerDispatchTest do
     end
   end
 
-  describe "handle/2 thinking/set missing params" do
-    test "returns invalid_params error" do
-      assert {:error, -32602, _, nil} = Server.dispatch("thinking/set", %{})
+  describe "handle/2 thinking/set (removed)" do
+    test "returns method_not_found regardless of params" do
+      assert {:error, -32601, _, nil} = Server.dispatch("thinking/set", %{})
     end
-  end
 
-  describe "handle/2 thinking/set with nonexistent session" do
-    test "returns session not found error" do
-      assert {:error, -32602, "Session not found", _} =
+    test "returns method_not_found even with valid params" do
+      assert {:error, -32601, _, nil} =
                Server.dispatch("thinking/set", %{"session_id" => "nonexistent", "level" => "high"})
     end
   end
@@ -220,9 +218,9 @@ defmodule Opal.RPC.ServerDispatchTest do
     end
   end
 
-  describe "handle/2 opal/ping" do
-    test "returns ok with empty map" do
-      assert {:ok, %{}} = Server.dispatch("opal/ping", %{})
+  describe "handle/2 opal/ping (removed)" do
+    test "returns method_not_found" do
+      assert {:error, -32601, _, nil} = Server.dispatch("opal/ping", %{})
     end
   end
 
@@ -337,9 +335,13 @@ defmodule Opal.RPC.ServerDispatchTest do
                Server.dispatch("model/set", %{"session_id" => sid, "model_id" => "gpt-4o"})
     end
 
-    test "thinking/set changes thinking level for valid session", %{sid: sid} do
-      assert {:ok, _} =
-               Server.dispatch("thinking/set", %{"session_id" => sid, "level" => "off"})
+    test "model/set with thinking_level changes thinking level for valid session", %{sid: sid} do
+      assert {:ok, %{model: %{thinking_level: :off}}} =
+               Server.dispatch("model/set", %{
+                 "session_id" => sid,
+                 "model_id" => "gpt-4o",
+                 "thinking_level" => "off"
+               })
     end
 
     test "session/branch with entry_id", %{sid: sid} do

@@ -15,7 +15,7 @@ defmodule Opal.RPCTest do
     end
 
     test "supports string ids" do
-      json = RPC.encode_request("s2c-1", "client/confirm", %{})
+      json = RPC.encode_request("s2c-1", "client/request", %{})
       decoded = Jason.decode!(json)
       assert decoded["id"] == "s2c-1"
     end

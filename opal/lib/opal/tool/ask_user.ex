@@ -62,11 +62,12 @@ defmodule Opal.Tool.AskUser do
            ) do
       params = %{
         session_id: context.session_id,
+        kind: "ask",
         question: opts[:question],
         choices: opts[:choices]
       }
 
-      case Opal.RPC.Server.request_client("client/ask_user", params, :infinity) do
+      case Opal.RPC.Server.request_client("client/request", params, :infinity) do
         {:ok, %{"answer" => answer}} -> {:ok, answer}
         {:ok, result} -> {:ok, inspect(result)}
         {:error, reason} -> {:error, "User input request failed: #{inspect(reason)}"}

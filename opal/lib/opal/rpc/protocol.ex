@@ -7,16 +7,6 @@ defmodule Opal.RPC.Protocol do
   defined here as structured data. The handler dispatches only methods
   listed here; the stdio transport serializes only event types listed here.
 
-  ## Design Goals
-
-    * **Machine-readable** — the definitions are plain Elixir data structures
-      that a code generator can traverse to produce TypeScript types, JSON
-      Schema, or documentation.
-    * **Self-documenting** — each definition carries its own description,
-      required/optional params, and result shape.
-    * **Single source of truth** — `Opal.RPC.Server`
-      reference these definitions rather than embedding protocol knowledge.
-
   ## Usage
 
       # List all method names
@@ -31,7 +21,7 @@ defmodule Opal.RPC.Protocol do
       # List server→client request methods
       Opal.RPC.Protocol.server_request_names()
 
-      # Full spec for export/codegen
+      # Full spec
       Opal.RPC.Protocol.spec()
   """
 
@@ -252,21 +242,6 @@ defmodule Opal.RPC.Protocol do
       result: []
     },
     %{
-      method: "session/compact",
-      direction: :client_to_server,
-      description: "Compact older messages in the session. (Not yet implemented.)",
-      params: [
-        %{name: "session_id", type: :string, required: true, description: "Target session ID."},
-        %{
-          name: "keep_recent",
-          type: :integer,
-          required: false,
-          description: "Number of recent messages to keep. Default: 10."
-        }
-      ],
-      result: []
-    },
-    %{
       method: "models/list",
       direction: :client_to_server,
       description: "List available LLM models from Copilot.",
@@ -299,23 +274,6 @@ defmodule Opal.RPC.Protocol do
           type: {:object, %{"provider" => :string, "id" => :string, "thinking_level" => :string}},
           description: "The new active model."
         }
-      ]
-    },
-    %{
-      method: "thinking/set",
-      direction: :client_to_server,
-      description: "Change the reasoning effort level for the current model.",
-      params: [
-        %{name: "session_id", type: :string, required: true, description: "Target session ID."},
-        %{
-          name: "level",
-          type: :string,
-          required: true,
-          description: "Reasoning effort: off, low, medium, high."
-        }
-      ],
-      result: [
-        %{name: "thinking_level", type: :string, description: "The new thinking level."}
       ]
     },
     %{
@@ -445,18 +403,6 @@ defmodule Opal.RPC.Protocol do
                "disabled" => {:array, :string}
              }},
           description: "Tool availability for the session."
-        },
-        %{
-          name: "distribution",
-          type:
-            {:nullable,
-             {:object,
-              %{
-                "node" => :string,
-                "cookie" => :string
-              }}},
-          description:
-            "Erlang distribution info if active (node name and cookie), or null if not distributed."
         }
       ]
     },
@@ -483,19 +429,6 @@ defmodule Opal.RPC.Protocol do
           type: {:array, :string},
           required: false,
           description: "Exact list of enabled tool names."
-        },
-        %{
-          name: "distribution",
-          type:
-            {:nullable,
-             {:object,
-              %{
-                "name" => :string,
-                "cookie" => :string
-              }, MapSet.new(["name"])}},
-          required: false,
-          description:
-            "Start or stop Erlang distribution. Pass {name, cookie?} to start, null to stop."
         }
       ],
       result: [
@@ -520,27 +453,8 @@ defmodule Opal.RPC.Protocol do
                "disabled" => {:array, :string}
              }},
           description: "Tool availability for the session."
-        },
-        %{
-          name: "distribution",
-          type:
-            {:nullable,
-             {:object,
-              %{
-                "node" => :string,
-                "cookie" => :string
-              }}},
-          description:
-            "Erlang distribution info if active (node name and cookie), or null if not distributed."
         }
       ]
-    },
-    %{
-      method: "opal/ping",
-      direction: :client_to_server,
-      description: "Liveness check. Returns immediately.",
-      params: [],
-      result: []
     },
     %{
       method: "opal/version",
@@ -597,93 +511,74 @@ defmodule Opal.RPC.Protocol do
 
   @server_requests [
     %{
-      method: "client/confirm",
+      method: "client/request",
       direction: :server_to_client,
-      description: "Ask the user for confirmation (e.g., before executing a tool).",
+      description: """
+      Ask the client for interactive input. The `kind` field determines the interaction type:
+      - `confirm`: present actions (e.g. allow / deny); responds with `{action: string}`
+      - `input`: collect freeform text; responds with `{text: string}`
+      - `ask`: question with optional choices; responds with `{answer: string}`
+      """,
       params: [
         %{
           name: "session_id",
           type: :string,
           required: true,
-          description: "Session this confirmation belongs to."
+          description: "Session this request belongs to."
+        },
+        %{
+          name: "kind",
+          type: :string,
+          required: true,
+          description: "Interaction kind: confirm | input | ask."
         },
         %{
           name: "title",
           type: :string,
-          required: true,
-          description: "Short title for the confirmation dialog."
+          required: false,
+          description: "Short title (used by kind=confirm)."
         },
         %{
           name: "message",
           type: :string,
-          required: true,
-          description: "Detailed message to show."
+          required: false,
+          description: "Detailed message (used by kind=confirm)."
         },
         %{
           name: "actions",
           type: {:array, :string},
-          required: true,
-          description: "Available actions (e.g., [\"allow\", \"deny\", \"allow_session\"])."
-        }
-      ],
-      result: [
-        %{name: "action", type: :string, description: "The user's chosen action."}
-      ]
-    },
-    %{
-      method: "client/input",
-      direction: :server_to_client,
-      description: "Ask the user for freeform text input.",
-      params: [
-        %{
-          name: "session_id",
-          type: :string,
-          required: true,
-          description: "Session this input request belongs to."
+          required: false,
+          description: "Available actions for kind=confirm."
         },
         %{
           name: "prompt",
           type: :string,
-          required: true,
-          description: "Prompt to display to the user."
+          required: false,
+          description: "Prompt text for kind=input."
         },
         %{
           name: "sensitive",
           type: :boolean,
           required: false,
-          description: "If true, input should be masked (e.g., API keys)."
-        }
-      ],
-      result: [
-        %{name: "text", type: :string, description: "The user's input."}
-      ]
-    },
-    %{
-      method: "client/ask_user",
-      direction: :server_to_client,
-      description: "Ask the user a question with optional multiple-choice answers.",
-      params: [
-        %{
-          name: "session_id",
-          type: :string,
-          required: true,
-          description: "Session this question belongs to."
+          description: "Mask input (kind=input only)."
         },
         %{
           name: "question",
           type: :string,
-          required: true,
-          description: "The question to display."
+          required: false,
+          description: "Question text for kind=ask."
         },
         %{
           name: "choices",
           type: {:array, :string},
           required: false,
-          description: "Optional multiple-choice options."
+          description: "Optional multiple-choice options for kind=ask."
         }
       ],
       result: [
-        %{name: "answer", type: :string, description: "The user's response text."}
+        %{name: "action", type: :string, description: "Chosen action (kind=confirm)."},
+        %{name: "text", type: :string, description: "User input text (kind=input)."},
+        %{name: "answer", type: :string, description: "User answer (kind=ask)."}
       ]
     }
   ]
@@ -736,7 +631,7 @@ defmodule Opal.RPC.Protocol do
       ]
     },
     %{
-      type: "tool_execution_start",
+      type: "tool_start",
       description: "A tool has started executing.",
       fields: [
         %{name: "tool", type: :string, description: "Tool name."},
@@ -746,7 +641,7 @@ defmodule Opal.RPC.Protocol do
       ]
     },
     %{
-      type: "tool_execution_end",
+      type: "tool_end",
       description: "A tool has finished executing.",
       fields: [
         %{name: "tool", type: :string, description: "Tool name."},
@@ -909,13 +804,11 @@ defmodule Opal.RPC.Protocol do
 
   @doc """
   Returns the complete protocol specification as a single map.
-
-  Used by `mix opal.gen.json_schema` and the codegen pipeline.
   """
   @spec spec() :: map()
   def spec do
     %{
-      version: "0.1.0",
+      version: "0.2.0",
       transport: "stdio",
       framing: "newline-delimited JSON",
       methods: @methods,

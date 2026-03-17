@@ -209,22 +209,22 @@ defmodule Opal.RPC.IntegrationTest do
     defp serialize_event({:thinking_delta, %{delta: d}}), do: {"thinking_delta", %{delta: d}}
 
     defp serialize_event({:tool_execution_start, tool, call_id, args, meta}),
-      do: {"tool_execution_start", %{tool: tool, call_id: call_id, args: args, meta: meta}}
+      do: {"tool_start", %{tool: tool, call_id: call_id, args: args, meta: meta}}
 
     defp serialize_event({:tool_execution_start, tool, args, meta}),
-      do: {"tool_execution_start", %{tool: tool, call_id: "", args: args, meta: meta}}
+      do: {"tool_start", %{tool: tool, call_id: "", args: args, meta: meta}}
 
     defp serialize_event({:tool_execution_start, tool, args}),
-      do: {"tool_execution_start", %{tool: tool, call_id: "", args: args, meta: tool}}
+      do: {"tool_start", %{tool: tool, call_id: "", args: args, meta: tool}}
 
     defp serialize_event({:tool_execution_end, tool, call_id, result}),
       do:
-        {"tool_execution_end",
+        {"tool_end",
          %{tool: tool, call_id: call_id, result: serialize_tool_result(result)}}
 
     defp serialize_event({:tool_execution_end, tool, result}),
       do:
-        {"tool_execution_end", %{tool: tool, call_id: "", result: serialize_tool_result(result)}}
+        {"tool_end", %{tool: tool, call_id: "", result: serialize_tool_result(result)}}
 
     defp serialize_event({:turn_end, msg, _}), do: {"turn_end", %{message: serialize_msg(msg)}}
     defp serialize_event({:agent_end, _msgs}), do: {"agent_end", %{}}
@@ -691,8 +691,9 @@ defmodule Opal.RPC.IntegrationTest do
       # Spawn a task that calls request_client (it will block waiting for response)
       task =
         Task.async(fn ->
-          TestTransport.request_client(server, "client/confirm", %{
+          TestTransport.request_client(server, "client/request", %{
             session_id: "test-123",
+            kind: "confirm",
             title: "Delete file?",
             message: "Are you sure?",
             actions: ["allow", "deny"]
@@ -701,7 +702,7 @@ defmodule Opal.RPC.IntegrationTest do
 
       # Receive the server→client request
       msg = recv_raw()
-      assert msg["method"] == "client/confirm"
+      assert msg["method"] == "client/request"
       assert msg["id"] =~ "s2c-"
       assert msg["params"]["title"] == "Delete file?"
       assert msg["params"]["actions"] == ["allow", "deny"]
@@ -885,14 +886,13 @@ defmodule Opal.RPC.IntegrationTest do
   # SESSION COMPACT
   # ============================================================================
 
-  describe "session/compact" do
-    test "returns session not found for unknown session" do
+  describe "session/compact (removed)" do
+    test "returns method_not_found" do
       server = start_server()
       send_request(server, 1, "session/compact", %{"session_id" => "abc"})
 
       msg = recv_raw()
-      assert msg["error"]["code"] == -32602
-      assert msg["error"]["message"] =~ "Session not found"
+      assert msg["error"]["code"] == -32601
     end
   end
 
