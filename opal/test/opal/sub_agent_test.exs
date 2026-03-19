@@ -89,7 +89,7 @@ defmodule Opal.SubAgentTest do
 
     defp sse_line(type, fields) do
       data = Map.merge(%{"type" => type}, fields) |> Jason.encode!()
-      "data: #{data}\n"
+      [%ReqSSE.Message{data: data}]
     end
   end
 

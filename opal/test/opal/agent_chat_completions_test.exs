@@ -135,7 +135,7 @@ defmodule Opal.AgentChatCompletionsTest do
       send(caller, {ref, :done})
     end
 
-    defp cc_line(data), do: "data: #{Jason.encode!(data)}\n"
+    defp cc_line(data), do: [%ReqSSE.Message{data: Jason.encode!(data)}]
   end
 
   # Test tool

@@ -51,9 +51,9 @@ defmodule Opal.Agent.StateMachineTest do
         Process.sleep(delay)
 
         events = [
-          "data: #{Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})}\n",
-          "data: #{Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Done"})}\n",
-          "data: #{Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r1", "status" => "completed", "usage" => %{"input_tokens" => 10, "output_tokens" => 5}}})}\n"
+          [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})}],
+          [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Done"})}],
+          [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r1", "status" => "completed", "usage" => %{"input_tokens" => 10, "output_tokens" => 5}}})}]
         ]
 
         for event <- events do

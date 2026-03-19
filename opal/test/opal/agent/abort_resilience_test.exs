@@ -74,7 +74,7 @@ defmodule Opal.Agent.AbortResilienceTest do
     @impl true
     def convert_tools(tools), do: tools
 
-    defp sse(map), do: "data: #{Jason.encode!(map)}\n"
+    defp sse(map), do: [%ReqSSE.Message{data: Jason.encode!(map)}]
   end
 
   # Provider that returns tool calls, then text
@@ -181,7 +181,7 @@ defmodule Opal.Agent.AbortResilienceTest do
       send(caller, {ref, :done})
     end
 
-    defp sse(map), do: "data: #{Jason.encode!(map)}\n"
+    defp sse(map), do: [%ReqSSE.Message{data: Jason.encode!(map)}]
   end
 
   # Fast provider for quick turns

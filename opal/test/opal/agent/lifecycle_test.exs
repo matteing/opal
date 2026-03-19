@@ -59,9 +59,9 @@ defmodule Opal.Agent.LifecycleTest do
         Process.sleep(delay)
 
         events = [
-          "data: #{Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})}\n",
-          "data: #{Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Slow response"})}\n",
-          "data: #{Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "resp_slow", "status" => "completed", "usage" => %{"input_tokens" => 10, "output_tokens" => 5}}})}\n"
+          [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})}],
+          [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Slow response"})}],
+          [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "resp_slow", "status" => "completed", "usage" => %{"input_tokens" => 10, "output_tokens" => 5}}})}]
         ]
 
         for event <- events do

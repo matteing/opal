@@ -13,7 +13,7 @@ defmodule Opal.Agent.State do
   - **Tool execution** — `tool_supervisor`, `pending_tool_tasks`, `tool_results`, `tool_context`
   - **Streaming accumulator** — `current_text`, `current_tool_calls`, `current_thinking`,
     `tag_buffers` (ephemeral, reset every turn)
-  - **Stream transport** — `streaming_resp` (SSE via `Req.Response`)
+  - **Stream transport** — `streaming_resp` (SSE via `Req.Response`, parsed by `ReqSSE`)
   - **Stream health** — `last_chunk_at`, `stream_watchdog`, `stream_errored`
   - **Token tracking** — `token_usage`, `last_prompt_tokens`, `last_usage_msg_index`
   - **Context** — `context_entries` (raw discovered file data), `context_files` (paths for UI)
@@ -85,11 +85,6 @@ defmodule Opal.Agent.State do
           # Keyed by tag name atom; each value is the buffered partial text.
           tag_buffers: %{atom() => String.t()},
 
-          # Partial SSE line carried across HTTP chunks.  HTTP body
-          # chunks can split SSE `data:` lines mid-JSON; this buffer
-          # holds the trailing fragment so the next chunk can complete it.
-          sse_buffer: String.t(),
-
           # ── Stream transport ─────────────────────────────────────
           # HTTP/SSE: Req.Response for async SSE streams (Provider.Copilot).
           streaming_resp: Req.Response.t() | nil,
@@ -107,7 +102,7 @@ defmodule Opal.Agent.State do
 
           # ── Token tracking ───────────────────────────────────────────
           # Cumulative session-wide counters (prompt, completion, total,
-          # context_window, current_context_tokens). Updated every turn.
+          # context_window, last_context_tokens). Updated every turn.
           token_usage: map(),
           # Most recent turn's input token count from the provider.
           # Used as the calibrated base for hybrid estimation between
@@ -187,7 +182,6 @@ defmodule Opal.Agent.State do
     current_thinking: nil,
     message_started: false,
     tag_buffers: %{},
-    sse_buffer: "",
 
     # Stream transport
     streaming_resp: nil,
@@ -203,7 +197,7 @@ defmodule Opal.Agent.State do
       completion_tokens: 0,
       total_tokens: 0,
       context_window: 0,
-      current_context_tokens: 0
+      last_context_tokens: 0
     },
     last_prompt_tokens: 0,
     last_usage_msg_index: 0,

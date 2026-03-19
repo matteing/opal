@@ -132,7 +132,7 @@ defmodule Opal.Agent.ParallelSubAgentToolCallsTest do
       send(caller, {ref, :done})
     end
 
-    defp sse(map), do: "data: #{Jason.encode!(map)}\n"
+    defp sse(map), do: [%ReqSSE.Message{data: Jason.encode!(map)}]
   end
 
   defp start_agent(tool_calls) do

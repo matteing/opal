@@ -125,30 +125,30 @@ defmodule Opal.Agent.SystemPromptTest do
       tools = [ReadStub, WriteStub, ShellStub]
       result = SystemPrompt.build_guidelines(tools)
 
-      assert result =~ "no dependencies between the calls"
-      assert result =~ "independent calls in the same response"
+      assert result =~ "in parallel in a single response"
+      assert result =~ "depends on them"
     end
 
     test "does not emit parallel call guidance with only 2 tools" do
       tools = [ReadStub, ShellStub]
       result = SystemPrompt.build_guidelines(tools)
 
-      refute result =~ "no dependencies between the calls"
+      refute result =~ "in parallel in a single response"
     end
 
     test "includes parameter validation guidance with 3+ tools" do
       tools = [ReadStub, WriteStub, ShellStub]
       result = SystemPrompt.build_guidelines(tools)
 
-      assert result =~ "required parameters"
-      assert result =~ "DO NOT make up values"
+      assert result =~ "exact parameter values"
+      assert result =~ "do not invent optional parameters"
     end
 
     test "warns against using placeholders for dependent values" do
       tools = [ReadStub, EditStub, ShellStub]
       result = SystemPrompt.build_guidelines(tools)
 
-      assert result =~ "do NOT use placeholders"
+      assert result =~ "Wait for results only when a subsequent call depends on them"
     end
   end
 
@@ -173,7 +173,7 @@ defmodule Opal.Agent.SystemPromptTest do
       tools = [SubAgentStub, ShellStub]
       result = SystemPrompt.build_guidelines(tools)
 
-      assert result =~ "Avoid sub-agents for simple tasks"
+      assert result =~ "Do not spawn sub-agents for single tool calls"
     end
 
     test "lists available models from same provider when state is provided" do
@@ -279,16 +279,16 @@ defmodule Opal.Agent.SystemPromptTest do
       config = %{features: %{skills: %{enabled: true}}}
 
       skills = [
-        %{name: "lint", description: "Run linter."},
-        %{name: "test", description: "Run tests."}
+        %{name: "lint", description: "Run linter.", path: nil},
+        %{name: "test", description: "Run tests.", path: nil}
       ]
 
       result = SystemPrompt.format_skills(skills, config)
-      assert result =~ "<skills>"
-      assert result =~ "</skills>"
+      assert result =~ "<available_skills>"
+      assert result =~ "</available_skills>"
       assert result =~ "use_skill"
-      assert result =~ "**lint**"
-      assert result =~ "**test**"
+      assert result =~ "<name>lint</name>"
+      assert result =~ "<name>test</name>"
     end
   end
 

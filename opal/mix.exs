@@ -9,7 +9,7 @@ defmodule Opal.MixProject do
       app: :opal,
       version: @version,
       config_path: "config/config.exs",
-      elixir: "~> 1.19",
+      elixir: "~> 1.18",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -126,6 +126,7 @@ defmodule Opal.MixProject do
   defp deps do
     [
       {:req, "~> 0.5"},
+      {:req_sse, "~> 0.1"},
       {:llm_db, "~> 2026.1"},
       {:jason, "~> 1.4"},
       {:nimble_options, "~> 1.1"},

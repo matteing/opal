@@ -36,9 +36,9 @@ defmodule Opal.Agent.ConcurrentSignalsTest do
         Process.sleep(delay)
 
         events = [
-          "data: #{Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})}\n",
-          "data: #{Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Response"})}\n",
-          "data: #{Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r1", "status" => "completed", "usage" => %{"input_tokens" => 10, "output_tokens" => 5}}})}\n"
+          [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})}],
+          [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Response"})}],
+          [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r1", "status" => "completed", "usage" => %{"input_tokens" => 10, "output_tokens" => 5}}})}]
         ]
 
         for e <- events do
@@ -88,9 +88,9 @@ defmodule Opal.Agent.ConcurrentSignalsTest do
 
         if has_results do
           events = [
-            "data: #{Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})}\n",
-            "data: #{Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Done"})}\n",
-            "data: #{Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r2", "status" => "completed", "usage" => %{}}})}\n"
+            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})}],
+            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Done"})}],
+            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r2", "status" => "completed", "usage" => %{}}})}]
           ]
 
           for e <- events,
@@ -103,9 +103,9 @@ defmodule Opal.Agent.ConcurrentSignalsTest do
           send(caller, {ref, :done})
         else
           events = [
-            "data: #{Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "function_call", "id" => "i1", "call_id" => "c1", "name" => "slow_tool"}})}\n",
-            "data: #{Jason.encode!(%{"type" => "response.output_item.done", "item" => %{"type" => "function_call", "id" => "i1", "call_id" => "c1", "name" => "slow_tool", "arguments" => Jason.encode!(%{"id" => "a", "sleep_ms" => 2000})}})}\n",
-            "data: #{Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r1", "status" => "completed", "usage" => %{"input_tokens" => 20, "output_tokens" => 10}}})}\n"
+            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "function_call", "id" => "i1", "call_id" => "c1", "name" => "slow_tool"}})}],
+            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.done", "item" => %{"type" => "function_call", "id" => "i1", "call_id" => "c1", "name" => "slow_tool", "arguments" => Jason.encode!(%{"id" => "a", "sleep_ms" => 2000})}})}],
+            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r1", "status" => "completed", "usage" => %{"input_tokens" => 20, "output_tokens" => 10}}})}]
           ]
 
           for e <- events,

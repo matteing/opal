@@ -104,7 +104,7 @@ defmodule Opal.Agent.SupervisorFailureTest do
     @impl true
     def convert_tools(tools), do: tools
 
-    defp sse(map), do: "data: #{Jason.encode!(map)}\n"
+    defp sse(map), do: [%ReqSSE.Message{data: Jason.encode!(map)}]
   end
 
   defmodule TestTool do

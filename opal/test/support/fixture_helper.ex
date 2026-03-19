@@ -17,12 +17,12 @@ defmodule Opal.Test.FixtureHelper do
     |> Jason.decode!()
   end
 
-  @doc "Returns the list of SSE data lines from a fixture, formatted as 'data: ...' strings."
+  @doc "Returns the list of SSE messages from a fixture as `%ReqSSE.Message{}` structs."
   def fixture_events(name) do
     fixture = load_fixture(name)
 
     Enum.map(fixture["events"], fn event ->
-      "data: #{event["data"]}\n"
+      [%ReqSSE.Message{data: event["data"]}]
     end)
   end
 

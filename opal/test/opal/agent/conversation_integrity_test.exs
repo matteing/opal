@@ -464,7 +464,7 @@ defmodule Opal.Agent.ConversationIntegrityTest do
             }
           })
 
-        send(caller, {ref, {:data, "data: #{error_json}\n"}})
+        send(caller, {ref, {:data, [%ReqSSE.Message{data: error_json}]}})
         Process.sleep(5)
         send(caller, {ref, :done})
       end)
@@ -535,14 +535,14 @@ defmodule Opal.Agent.ConversationIntegrityTest do
               }
             })
 
-          send(caller, {ref, {:data, "data: #{error_json}\n"}})
+          send(caller, {ref, {:data, [%ReqSSE.Message{data: error_json}]}})
         else
           # Subsequent calls: succeed with text
           events = [
-            "data: #{Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message", "id" => "item_ok"}})}\n",
-            "data: #{Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Recovered!"})}\n",
-            "data: #{Jason.encode!(%{"type" => "response.output_text.done", "text" => "Recovered!"})}\n",
-            "data: #{Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r2", "status" => "completed", "usage" => %{}}})}\n"
+            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message", "id" => "item_ok"}})}],
+            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Recovered!"})}],
+            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.done", "text" => "Recovered!"})}],
+            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r2", "status" => "completed", "usage" => %{}}})}]
           ]
 
           for event <- events do

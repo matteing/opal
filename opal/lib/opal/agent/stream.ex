@@ -5,9 +5,9 @@ defmodule Opal.Agent.Stream do
   This module sits between the raw HTTP/SSE transport and the agent state
   machine.  It has three layers:
 
-  1. **SSE parsing** — `parse_sse_data/2` splits a raw binary chunk into
-     individual `data:` lines (the SSE wire format).
-  2. **Event dispatch** — `dispatch_sse_events/2` hands each JSON line to
+  1. **SSE parsing** — handled upstream by `ReqSSE`, which delivers parsed
+     `%ReqSSE.Message{}` structs via `dispatch_sse_messages/2`.
+  2. **Event dispatch** — `dispatch_sse_events/2` hands each JSON payload to
      the current provider's `parse_stream_event/1` callback, which returns
      a list of normalised `{event_type, payload}` tuples.
   3. **State updates** — `handle_stream_event/2` pattern-matches every
@@ -37,7 +37,7 @@ defmodule Opal.Agent.Stream do
   | `:tool_call_start`   | Inserts/upserts tool call in `current_tool_calls`|
   | `:tool_call_delta`   | Appends JSON fragment to matching tool call       |
   | `:tool_call_done`    | Finalises arguments on matching tool call          |
-  | `:usage`             | Delegates to `UsageTracker.update_usage/2`        |
+  | `:usage`             | Delegates to `ContextManager.update_usage/2`      |
   | `:response_done`     | Extracts inline usage if present                  |
   | `:error`             | Sets `stream_errored`, resets to `:idle`           |
   """
@@ -48,81 +48,30 @@ defmodule Opal.Agent.Stream do
   # ── SSE Parsing ──────────────────────────────────────────────────────
 
   @doc """
-  Parses raw SSE data and folds every event into `state`.
+  Folds a list of parsed SSE messages into `state`.
 
-  A single `data` chunk from the HTTP transport may contain multiple
-  newline-separated SSE lines.  Each line is classified as:
-
-  - `"data: [DONE]"` — end-of-stream sentinel, ignored
-  - `"data: <json>"` — standard SSE data line
-  - `"{…"` — raw JSON (some error responses omit the SSE prefix)
-  - anything else — SSE comments / event-type lines, ignored
-
-  HTTP body chunks can arrive at arbitrary byte boundaries, splitting
-  an SSE line across two consecutive chunks.  We use `state.sse_buffer`
-  to carry trailing fragments: the last line of each chunk (which may
-  be incomplete) is buffered, and on the next call it is prepended to
-  the incoming data so the line is reassembled before parsing.
+  Called once per HTTP chunk after `ReqSSE` has parsed the raw bytes into
+  `%ReqSSE.Message{}` structs.  Each message's `data` field is dispatched
+  to the provider's `parse_stream_event/1` callback.
 
   ## Example
 
-      iex> raw = "data: {\\"type\\":\\"text_delta\\",\\"delta\\":\\"hi\\"}\\ndata: [DONE]\\n"
-      iex> state = Stream.parse_sse_data(raw, state)
+      iex> messages = [%ReqSSE.Message{data: ~s({"type":"text_delta","delta":"hi"})}]
+      iex> state = Stream.dispatch_sse_messages(messages, state)
       %State{current_text: "hi", …}
 
   """
-  @spec parse_sse_data(binary(), State.t()) :: State.t()
-  def parse_sse_data(data, state) do
-    binary = state.sse_buffer <> IO.iodata_to_binary(data)
-
-    Logger.debug(
-      "SSE raw data (#{byte_size(binary)} bytes): #{inspect(String.slice(binary, 0, 300))}"
-    )
-
-    # If the chunk ends with \n, every line is complete.
-    # Otherwise the last segment is a partial line that must be buffered.
-    # Exception: raw JSON lines (starting with "{" and ending with "}") are
-    # always complete — some providers send error responses without a trailing \n.
-    {lines, carry} =
-      if String.ends_with?(binary, "\n") do
-        {String.split(binary, "\n", trim: true), ""}
-      else
-        parts = String.split(binary, "\n")
-        all_but_last = Enum.slice(parts, 0..-2//1) |> Enum.reject(&(&1 == ""))
-        last = List.last(parts)
-
-        if complete_json_line?(last) do
-          {all_but_last ++ [last], ""}
-        else
-          {all_but_last, last}
-        end
-      end
-
-    state = %{state | sse_buffer: carry}
-
-    Enum.reduce(lines, state, fn
-      "data: [DONE]", acc ->
+  @spec dispatch_sse_messages([ReqSSE.Message.t()], State.t()) :: State.t()
+  def dispatch_sse_messages(messages, state) do
+    Enum.reduce(messages, state, fn
+      %ReqSSE.Message{data: data}, acc when data in [nil, "", "[DONE]"] ->
         acc
 
-      "data: " <> json, acc ->
+      %ReqSSE.Message{data: json}, acc ->
+        Logger.debug("SSE message (#{byte_size(json)} bytes): #{inspect(String.slice(json, 0, 300))}")
         dispatch_sse_events(json, acc)
-
-      # Raw JSON without SSE prefix (e.g. error responses from the gateway).
-      "{" <> _ = json, acc ->
-        dispatch_sse_events(json, acc)
-
-      _comment_or_event_line, acc ->
-        acc
     end)
   end
-
-  # A trailing segment without \n is normally buffered. However, raw JSON
-  # lines (e.g. gateway error responses) may arrive without a trailing \n.
-  # We recognise them by the `data: {…}` or bare `{…}` shape and process
-  # them immediately instead of buffering.
-  defp complete_json_line?("data: {" <> _ = line), do: String.ends_with?(line, "}")
-  defp complete_json_line?("{" <> _ = line), do: String.ends_with?(line, "}")
-  defp complete_json_line?(_), do: false
 
   @doc """
   Decodes a single JSON line into provider events and folds them into state.
@@ -285,7 +234,7 @@ defmodule Opal.Agent.Stream do
   # ── Usage & Completion ──
 
   def handle_stream_event({:usage, usage}, state) do
-    Opal.Agent.UsageTracker.update_usage(usage, state)
+    Opal.Agent.ContextManager.update_usage(usage, state)
   end
 
   def handle_stream_event({:response_done, info}, state) do
