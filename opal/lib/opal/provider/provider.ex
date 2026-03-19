@@ -328,14 +328,23 @@ defmodule Opal.Provider do
     end)
   end
 
-  defp extract_text(data, provider) do
+  defp extract_text(data, provider) when is_binary(data) do
     data
-    |> IO.iodata_to_binary()
     |> String.split("\n", trim: true)
     |> Enum.reduce("", fn
       "data: [DONE]", acc -> acc
       "data: " <> json, acc -> acc <> text_from_events(provider.parse_stream_event(json))
       "{" <> _ = json, acc -> acc <> text_from_events(provider.parse_stream_event(json))
+      _, acc -> acc
+    end)
+  end
+
+  defp extract_text(messages, provider) when is_list(messages) do
+    Enum.reduce(messages, "", fn
+      %ReqSSE.Message{data: nil}, acc -> acc
+      %ReqSSE.Message{data: ""}, acc -> acc
+      %ReqSSE.Message{data: "[DONE]"}, acc -> acc
+      %ReqSSE.Message{data: json}, acc -> acc <> text_from_events(provider.parse_stream_event(json))
       _, acc -> acc
     end)
   end
@@ -347,4 +356,105 @@ defmodule Opal.Provider do
       _, acc -> acc
     end)
   end
+
+  @doc """
+  Like `collect_text/3` but also returns the usage map from the stream.
+
+  Returns `{text, usage}` where `usage` is the map from the `:usage` stream
+  event, or `%{}` if no usage event arrived.
+  """
+  @spec collect_text_with_usage(Req.Response.t(), module(), pos_integer()) ::
+          {String.t(), map()}
+  def collect_text_with_usage(resp, provider, timeout_ms \\ 30_000) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    do_collect_text_with_usage(resp, provider, "", %{}, deadline)
+  end
+
+  defp do_collect_text_with_usage(resp, provider, text_acc, usage_acc, deadline) do
+    remaining = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    receive do
+      message when is_tuple(message) ->
+        case Req.parse_message(resp, message) do
+          {:ok, chunks} ->
+            case reduce_sse_chunks_with_usage(chunks, provider, text_acc, usage_acc) do
+              {:done, text, usage} ->
+                {text, usage}
+
+              {:cont, text, usage} ->
+                do_collect_text_with_usage(resp, provider, text, usage, deadline)
+            end
+
+          :unknown ->
+            do_collect_text_with_usage(resp, provider, text_acc, usage_acc, deadline)
+        end
+    after
+      remaining -> {text_acc, usage_acc}
+    end
+  end
+
+  defp reduce_sse_chunks_with_usage(chunks, provider, text_acc, usage_acc) do
+    Enum.reduce(chunks, {:cont, text_acc, usage_acc}, fn
+      {:data, data}, {status, text, usage} ->
+        {new_text, new_usage} = extract_text_and_usage(data, provider, usage)
+        {status, text <> new_text, new_usage}
+
+      :done, {_, text, usage} ->
+        {:done, text, usage}
+
+      _, pair ->
+        pair
+    end)
+  end
+
+  defp extract_text_and_usage(data, provider, usage_acc) when is_binary(data) do
+    data
+    |> String.split("\n", trim: true)
+    |> Enum.reduce({"", usage_acc}, fn
+      "data: [DONE]", acc ->
+        acc
+
+      "data: " <> json, {text, usage} ->
+        events = provider.parse_stream_event(json)
+        text_delta = text_from_events(events)
+        new_usage = usage_from_events(events, usage)
+        {text <> text_delta, new_usage}
+
+      "{" <> _ = json, {text, usage} ->
+        events = provider.parse_stream_event(json)
+        text_delta = text_from_events(events)
+        new_usage = usage_from_events(events, usage)
+        {text <> text_delta, new_usage}
+
+      _, acc ->
+        acc
+    end)
+  end
+
+  defp extract_text_and_usage(messages, provider, usage_acc) when is_list(messages) do
+    Enum.reduce(messages, {"", usage_acc}, fn
+      %ReqSSE.Message{data: nil}, acc -> acc
+      %ReqSSE.Message{data: ""}, acc -> acc
+      %ReqSSE.Message{data: "[DONE]"}, acc -> acc
+
+      %ReqSSE.Message{data: json}, {text, usage} ->
+        events = provider.parse_stream_event(json)
+        text_delta = text_from_events(events)
+        new_usage = usage_from_events(events, usage)
+        {text <> text_delta, new_usage}
+
+      _, acc ->
+        acc
+    end)
+  end
+
+  defp usage_from_events(events, current) when is_list(events) do
+    Enum.find_value(events, current, fn
+      {:usage, u} when is_map(u) -> Map.merge(current, u)
+      _ -> nil
+    end)
+  end
+
+  defp usage_from_events({:usage, u}, _current) when is_map(u), do: u
+  defp usage_from_events(_, current), do: current
 end

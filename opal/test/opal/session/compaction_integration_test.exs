@@ -382,7 +382,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
       original_count = length(original_path)
       assert original_count == 13
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: CompactionProvider,
           model: @model,
@@ -414,7 +414,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
       build_coding_session(session)
 
       # Use keep_recent_tokens: 0 to ensure all tool-call messages are compacted
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: CompactionProvider,
           model: @model,
@@ -442,7 +442,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
       CompactionProvider.setup(["compaction_summary.json"])
       build_coding_session(session)
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: CompactionProvider,
           model: @model,
@@ -467,7 +467,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
       CompactionProvider.setup(["compaction_summary.json"])
       build_coding_session(session)
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: CompactionProvider,
           model: @model,
@@ -503,7 +503,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
       # Cycle 1: realistic coding session → compact
       build_coding_session(session)
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: CompactionProvider,
           model: @model,
@@ -550,7 +550,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
           Message.assistant("All done" <> String.duplicate("z", 500))
         )
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: CompactionProvider,
           model: @model,
@@ -616,7 +616,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
       :ok = Session.append(session, Message.user("Next" <> String.duplicate(" ", 200)))
       :ok = Session.append(session, Message.assistant("OK" <> String.duplicate("c", 500)))
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: CompactionProvider,
           model: @model,
@@ -662,7 +662,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
       :ok = Session.append(session, Message.user("Done" <> String.duplicate(" ", 200)))
       :ok = Session.append(session, Message.assistant("Done" <> String.duplicate("g", 500)))
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: CompactionProvider,
           model: @model,
@@ -694,7 +694,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
       # 2 initial msgs + 1 user + 20 * 2 (assistant+tool_result) = 43 messages
       assert length(path_before) == 43
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: CompactionProvider,
           model: @model,
@@ -850,7 +850,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
           Message.assistant("All tests pass." <> String.duplicate(" ", 300))
         )
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: CompactionProvider,
           model: @model,
@@ -1095,7 +1095,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
       # Compact against real API
       model = Opal.Provider.Model.new(:copilot, "claude-sonnet-4")
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: Opal.Provider.Copilot,
           model: model,
@@ -1149,7 +1149,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
 
       :ok = Session.append(session, Message.assistant("User controller created with CRUD."))
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: Opal.Provider.Copilot,
           model: model,
@@ -1192,7 +1192,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
           Message.assistant("Pagination added." <> String.duplicate(" ", 200))
         )
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: Opal.Provider.Copilot,
           model: model,
@@ -1283,7 +1283,7 @@ defmodule Opal.Session.CompactionIntegrationTest do
              "Summarize the following conversation transcript. " <>
                "Produce a structured summary.\n\n" <> prompt
            ) do
-        {:ok, summary} ->
+        {:ok, summary, _usage} ->
           assert String.length(summary) > 0
 
           events = stop_recording_provider(recording_pid)

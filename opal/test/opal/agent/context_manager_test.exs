@@ -1,8 +1,8 @@
-defmodule Opal.Agent.UsageTrackerTest do
+defmodule Opal.Agent.ContextManagerTest do
   use ExUnit.Case, async: true
 
   alias Opal.Agent.State
-  alias Opal.Agent.UsageTracker
+  alias Opal.Agent.ContextManager
 
   describe "update_usage/2" do
     setup do
@@ -22,7 +22,7 @@ defmodule Opal.Agent.UsageTrackerTest do
 
     test "extracts Chat Completions keys (prompt_tokens, completion_tokens)", %{state: state} do
       usage = %{"prompt_tokens" => 100, "completion_tokens" => 50, "total_tokens" => 150}
-      result = UsageTracker.update_usage(usage, state)
+      result = ContextManager.update_usage(usage, state)
 
       assert result.token_usage.prompt_tokens == 100
       assert result.token_usage.completion_tokens == 50
@@ -32,7 +32,7 @@ defmodule Opal.Agent.UsageTrackerTest do
 
     test "extracts Responses API keys (input_tokens, output_tokens)", %{state: state} do
       usage = %{"input_tokens" => 200, "output_tokens" => 80}
-      result = UsageTracker.update_usage(usage, state)
+      result = ContextManager.update_usage(usage, state)
 
       assert result.token_usage.prompt_tokens == 200
       assert result.token_usage.completion_tokens == 80
@@ -41,7 +41,7 @@ defmodule Opal.Agent.UsageTrackerTest do
 
     test "handles atom keys", %{state: state} do
       usage = %{prompt_tokens: 300, completion_tokens: 100, total_tokens: 400}
-      result = UsageTracker.update_usage(usage, state)
+      result = ContextManager.update_usage(usage, state)
 
       assert result.token_usage.prompt_tokens == 300
       assert result.token_usage.completion_tokens == 100
@@ -50,7 +50,7 @@ defmodule Opal.Agent.UsageTrackerTest do
 
     test "handles nil values in usage", %{state: state} do
       usage = %{"prompt_tokens" => nil, "completion_tokens" => nil, "total_tokens" => nil}
-      result = UsageTracker.update_usage(usage, state)
+      result = ContextManager.update_usage(usage, state)
 
       assert result.token_usage.prompt_tokens == 0
       assert result.token_usage.completion_tokens == 0
@@ -58,7 +58,7 @@ defmodule Opal.Agent.UsageTrackerTest do
     end
 
     test "handles empty usage map", %{state: state} do
-      result = UsageTracker.update_usage(%{}, state)
+      result = ContextManager.update_usage(%{}, state)
 
       assert result.token_usage.prompt_tokens == 0
       assert result.token_usage.completion_tokens == 0
@@ -69,8 +69,8 @@ defmodule Opal.Agent.UsageTrackerTest do
       usage1 = %{"prompt_tokens" => 100, "completion_tokens" => 50, "total_tokens" => 150}
       usage2 = %{"prompt_tokens" => 200, "completion_tokens" => 80, "total_tokens" => 280}
 
-      state = UsageTracker.update_usage(usage1, state)
-      state = UsageTracker.update_usage(usage2, state)
+      state = ContextManager.update_usage(usage1, state)
+      state = ContextManager.update_usage(usage2, state)
 
       assert state.token_usage.prompt_tokens == 300
       assert state.token_usage.completion_tokens == 130
@@ -81,7 +81,7 @@ defmodule Opal.Agent.UsageTrackerTest do
 
     test "broadcasts usage_update event", %{state: state} do
       usage = %{"prompt_tokens" => 100, "completion_tokens" => 50, "total_tokens" => 150}
-      _result = UsageTracker.update_usage(usage, state)
+      _result = ContextManager.update_usage(usage, state)
 
       assert_receive {:opal_event, _, {:usage_update, update}}
       assert update.prompt_tokens == 100
@@ -93,7 +93,7 @@ defmodule Opal.Agent.UsageTrackerTest do
       state = %{state | messages: messages}
       usage = %{"prompt_tokens" => 100, "completion_tokens" => 50, "total_tokens" => 150}
 
-      result = UsageTracker.update_usage(usage, state)
+      result = ContextManager.update_usage(usage, state)
       assert result.last_usage_msg_index == 2
     end
   end
@@ -108,7 +108,7 @@ defmodule Opal.Agent.UsageTrackerTest do
         config: Opal.Config.new()
       }
 
-      assert UsageTracker.maybe_auto_compact(state, & &1.messages) == state
+      assert ContextManager.maybe_auto_compact(state, & &1.messages) == state
     end
   end
 
@@ -125,7 +125,7 @@ defmodule Opal.Agent.UsageTrackerTest do
         config: Opal.Config.new(%{features: %{debug: %{enabled: true}}})
       }
 
-      new_state = UsageTracker.handle_overflow(state, :overflow)
+      new_state = ContextManager.handle_overflow(state, :overflow)
       assert new_state.status == :idle
       assert_receive {:opal_event, ^session_id, {:error, {:overflow_no_session, :overflow}}}
     end
@@ -141,7 +141,7 @@ defmodule Opal.Agent.UsageTrackerTest do
         messages: [Opal.Message.user("Hello")]
       }
 
-      estimate = UsageTracker.estimate_tokens(state, & &1.messages)
+      estimate = ContextManager.estimate_tokens(state, & &1.messages)
       assert is_integer(estimate) and estimate > 0
     end
 
@@ -156,7 +156,7 @@ defmodule Opal.Agent.UsageTrackerTest do
         last_usage_msg_index: 1
       }
 
-      estimate = UsageTracker.estimate_tokens(state, & &1.messages)
+      estimate = ContextManager.estimate_tokens(state, & &1.messages)
       # Should be at least the base prompt tokens
       assert estimate >= 500
     end

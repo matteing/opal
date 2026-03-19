@@ -36,7 +36,7 @@ defmodule Opal.Agent do
   @behaviour :gen_statem
 
   require Logger
-  alias Opal.Agent.{Emitter, Repair, State, ToolRunner, UsageTracker}
+  alias Opal.Agent.{Emitter, Repair, State, ToolRunner, ContextManager}
 
   # ── Public API ────────────────────────────────────────────────────────
 
@@ -147,7 +147,7 @@ defmodule Opal.Agent do
           completion_tokens: 0,
           total_tokens: 0,
           context_window: Opal.Provider.Registry.context_window(model),
-          current_context_tokens: 0
+          last_context_tokens: 0
         }
       }
       |> maybe_recover_session()
@@ -315,7 +315,7 @@ defmodule Opal.Agent do
   # ── Turn Lifecycle ────────────────────────────────────────────────────
 
   defp run_turn(state) do
-    state = state |> UsageTracker.maybe_auto_compact(&build_messages/1) |> repair_orphans()
+    state = state |> ContextManager.maybe_auto_compact(&build_messages/1) |> repair_orphans()
     messages = build_messages(state)
     tools = ToolRunner.active_tools(state)
 
@@ -350,7 +350,6 @@ defmodule Opal.Agent do
         current_tool_calls: [],
         current_thinking: nil,
         message_started: false,
-        sse_buffer: "",
         last_chunk_at: System.monotonic_time(:second),
         stream_watchdog: nil
     }
@@ -364,7 +363,7 @@ defmodule Opal.Agent do
 
   defp fold_sse(chunks, state) do
     Enum.reduce(chunks, touch(state), fn
-      {:data, data}, acc -> Opal.Agent.Stream.parse_sse_data(data, acc)
+      {:data, messages}, acc -> Opal.Agent.Stream.dispatch_sse_messages(messages, acc)
       _other, acc -> acc
     end)
   end
@@ -397,8 +396,7 @@ defmodule Opal.Agent do
 
   # Overflow detected during streaming → compact and retry
   defp dispatch(%{overflow_detected: true} = state, _assistant, _tcs) do
-    UsageTracker.handle_overflow(%{state | overflow_detected: false}, :usage_overflow)
-    |> next()
+    recover_from_overflow(state, :usage_overflow)
   end
 
   # Model requested tool calls → execute them
@@ -425,7 +423,7 @@ defmodule Opal.Agent do
     usage =
       Map.merge(state.token_usage, %{
         context_window: context_window,
-        current_context_tokens: state.last_prompt_tokens
+        last_context_tokens: state.last_prompt_tokens
       })
 
     Emitter.broadcast(state, {:agent_end, Enum.reverse(state.messages), usage})
@@ -456,7 +454,7 @@ defmodule Opal.Agent do
   defp handle_provider_error(state, reason) do
     cond do
       Opal.Agent.Overflow.context_overflow?(reason) ->
-        UsageTracker.handle_overflow(state, reason) |> next()
+        recover_from_overflow(state, reason)
 
       Opal.Agent.Retry.retryable?(reason) and state.retry_count < state.max_retries ->
         schedule_retry(state, reason)
@@ -469,10 +467,15 @@ defmodule Opal.Agent do
 
   defp recover_stream_error(%{stream_errored: reason} = state) when reason != false do
     if Opal.Agent.Overflow.context_overflow?(reason) do
-      UsageTracker.handle_overflow(%{state | stream_errored: false}, reason) |> next()
+      recover_from_overflow(state, reason)
     else
       {:next_state, :idle, %{state | status: :idle, stream_errored: false}}
     end
+  end
+
+  defp recover_from_overflow(state, reason) do
+    state = %{state | overflow_detected: false, stream_errored: false}
+    ContextManager.handle_overflow(state, reason) |> next()
   end
 
   defp schedule_retry(state, reason) do
@@ -510,7 +513,7 @@ defmodule Opal.Agent do
 
   # ── Continuation ──────────────────────────────────────────────────────
   #
-  # ToolRunner and UsageTracker return `{:next_turn, state}` to loop
+  # ToolRunner and ContextManager return `{:next_turn, state}` to loop
   # or `%State{}` to stay put. Translate to gen_statem tuples.
 
   defp next({:next_turn, state}), do: run_turn(%{state | status: :running})

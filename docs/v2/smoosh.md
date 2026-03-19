@@ -1,3 +1,8 @@
+> **STATUS: UNIMPLEMENTED / DEFERRED**
+> This document describes a planned feature that was designed but not yet built.
+> The modules referenced here (`Opal.Agent.Smoosh.*`, `Opal.Tool.KbSearch`) do
+> not exist in the codebase. This is kept as a design reference only.
+
 # Smoosh!
 
 > **Status**: Idea (rolled back — not yet implemented)

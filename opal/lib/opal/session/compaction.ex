@@ -23,8 +23,9 @@ defmodule Opal.Session.Compaction do
 
   require Logger
 
+  alias Opal.Token
+
   @keep_recent_tokens 20_000
-  @chars_per_token 4
 
   # ── Summary Prompts ─────────────────────────────────────────────────
   #
@@ -114,7 +115,7 @@ defmodule Opal.Session.Compaction do
     * `:keep_recent_tokens` — tokens to keep uncompacted (default: #{@keep_recent_tokens})
     * `:instructions` — optional focus instructions for the summary
   """
-  @spec compact(GenServer.server(), keyword()) :: :ok
+  @spec compact(GenServer.server(), keyword()) :: {:ok, map()}
   def compact(session, opts \\ []) do
     {provider, model} = resolve_provider(opts)
     has_provider = provider != nil
@@ -137,7 +138,7 @@ defmodule Opal.Session.Compaction do
 
     case cut_idx do
       nil ->
-        :ok
+        {:ok, %{}}
 
       idx ->
         to_compact = Enum.slice(path, 0, idx)
@@ -150,7 +151,7 @@ defmodule Opal.Session.Compaction do
 
         # Detect split turns (cut lands inside a multi-message turn) and
         # generate appropriate summaries for each segment.
-        summary_content =
+        {summary_content, compaction_usage} =
           case detect_split_turn(path, idx) do
             :clean ->
               build_summary(to_compact, strategy, {provider, model}, instructions)
@@ -175,6 +176,7 @@ defmodule Opal.Session.Compaction do
 
         Logger.debug("Compacting #{length(to_compact)} messages, keeping #{length(path) - idx}")
         Opal.Session.replace_path_segment(session, ids_to_remove, summary_msg)
+        {:ok, compaction_usage}
     end
   end
 
@@ -201,31 +203,28 @@ defmodule Opal.Session.Compaction do
   # Always cut at a user message boundary to avoid splitting turns.
   defp find_cut_point(path, keep_tokens) do
     total = length(path)
-    keep_chars = keep_tokens * @chars_per_token
 
-    {_, _acc_chars, cut_idx} =
+    {_, _acc_tokens, cut_idx} =
       path
       |> Enum.reverse()
       |> Enum.with_index()
-      |> Enum.reduce({false, 0, nil}, fn {msg, rev_idx}, {found, chars, cut} ->
-        msg_chars = estimate_chars(msg)
-        new_chars = chars + msg_chars
+      |> Enum.reduce({false, 0, nil}, fn {msg, rev_idx}, {found, tokens, cut} ->
+        msg_tokens = Token.estimate_message(msg)
+        new_tokens = tokens + msg_tokens
 
         if found do
-          {true, new_chars, cut}
+          {true, new_tokens, cut}
         else
-          if new_chars >= keep_chars do
-            # Find the nearest user message boundary at or before this point
+          if new_tokens >= keep_tokens do
             real_idx = total - 1 - rev_idx
             boundary = find_turn_boundary(path, real_idx)
-            {true, new_chars, boundary}
+            {true, new_tokens, boundary}
           else
-            {false, new_chars, cut}
+            {false, new_tokens, cut}
           end
         end
       end)
 
-    # Only compact if we found a cut point with at least one message to remove
     if cut_idx && cut_idx >= 1, do: cut_idx, else: nil
   end
 
@@ -238,10 +237,6 @@ defmodule Opal.Session.Compaction do
       if msg.role == :user, do: i
     end) || idx
   end
-
-  defp estimate_chars(%{content: nil}), do: 20
-  defp estimate_chars(%{content: c}) when is_binary(c), do: byte_size(c) + 20
-  defp estimate_chars(_), do: 20
 
   # ── Summary generation ──────────────────────────────────────────────
 
@@ -263,6 +258,7 @@ defmodule Opal.Session.Compaction do
         else: ""
 
     "[Compacted #{count} messages: #{role_str}]#{read}#{modified}"
+    |> then(&{&1, %{}})
   end
 
   # LLM-powered summarization with iterative update support.
@@ -291,8 +287,8 @@ defmodule Opal.Session.Compaction do
       end
 
     case summarize_with_provider(provider, model, prompt) do
-      {:ok, summary} ->
-        summary
+      {:ok, summary, usage} ->
+        {summary, usage}
 
       {:error, _reason} ->
         Logger.warning("LLM summarization failed, falling back to truncation")
@@ -313,10 +309,10 @@ defmodule Opal.Session.Compaction do
   Calls the LLM provider to generate a summary from a prompt.
 
   Used internally by compaction.
-  Returns `{:ok, text}` or `{:error, reason}`.
+  Returns `{:ok, text, usage}` or `{:error, reason}`.
   """
   @spec summarize_with_provider(module(), Opal.Provider.Model.t(), String.t()) ::
-          {:ok, String.t()} | {:error, term()}
+          {:ok, String.t(), map()} | {:error, term()}
   def summarize_with_provider(provider, model, prompt) do
     # The system prompt explicitly forbids continuation — models are less
     # likely to slip into "assistant mode" when both system and user prompts
@@ -333,8 +329,8 @@ defmodule Opal.Session.Compaction do
 
     case provider.stream(model, summary_messages, []) do
       {:ok, resp} ->
-        text = Opal.Provider.collect_text(resp, provider, 30_000)
-        if text != "", do: {:ok, String.trim(text)}, else: {:error, :empty}
+        {text, usage} = Opal.Provider.collect_text_with_usage(resp, provider, 30_000)
+        if text != "", do: {:ok, String.trim(text), usage}, else: {:error, :empty}
 
       {:error, reason} ->
         {:error, reason}
@@ -519,14 +515,14 @@ defmodule Opal.Session.Compaction do
     history = Enum.take(path, turn_start_idx)
     turn_prefix = Enum.slice(path, turn_start_idx, cut_idx - turn_start_idx)
 
-    history_summary =
+    {history_summary, history_usage} =
       if history != [] do
         build_summary(history, :summarize, {provider, model}, instructions)
       else
-        nil
+        {nil, %{}}
       end
 
-    turn_summary =
+    {turn_summary, turn_usage} =
       build_summary(
         turn_prefix,
         :summarize,
@@ -535,7 +531,8 @@ defmodule Opal.Session.Compaction do
           "Focus on what was attempted and any intermediate results."
       )
 
-    merge_split_summaries(history_summary, turn_summary)
+    merged_usage = Map.merge(history_usage, turn_usage, fn _k, v1, v2 -> v1 + v2 end)
+    {merge_split_summaries(history_summary, turn_summary), merged_usage}
   end
 
   # Combines history and turn-prefix summaries into a single coherent block.

@@ -42,14 +42,9 @@ defmodule Opal.Session.CompactionTest do
       # Build SSE events matching Copilot Responses API format
       # Use simple single-line deltas to avoid newline splitting issues
       events = [
-        "data: " <>
-          Jason.encode!(%{
-            "type" => "response.output_item.added",
-            "item" => %{"type" => "message"}
-          }) <> "\n",
-        "data: " <>
-          Jason.encode!(%{"type" => "response.output_text.delta", "delta" => summary}) <> "\n",
-        "data: " <> Jason.encode!(%{"type" => "response.completed"}) <> "\n"
+        [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})}],
+        [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => summary})}],
+        [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.completed"})}]
       ]
 
       spawn(fn ->
@@ -136,7 +131,7 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, Message.user("a"))
       :ok = Session.append(session, Message.assistant("b"))
 
-      assert :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100)
+      assert {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100)
 
       path = Session.get_path(session)
       assert length(path) == 2
@@ -147,7 +142,7 @@ defmodule Opal.Session.CompactionTest do
         :ok = Session.append(session, Message.user("msg #{i} " <> String.duplicate("x", 200)))
       end
 
-      assert :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 200)
+      assert {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 200)
 
       path = Session.get_path(session)
       assert length(path) < 10
@@ -162,7 +157,7 @@ defmodule Opal.Session.CompactionTest do
         :ok = Session.append(session, Message.user("msg #{i} " <> String.duplicate("y", 200)))
       end
 
-      :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 200)
+      {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 200)
 
       path = Session.get_path(session)
       [first | rest] = path
@@ -177,7 +172,7 @@ defmodule Opal.Session.CompactionTest do
     test "summary includes role frequencies", %{session: session} do
       populate_turns(session, 6)
 
-      :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 200)
+      {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 200)
 
       path = Session.get_path(session)
       summary = hd(path)
@@ -189,7 +184,7 @@ defmodule Opal.Session.CompactionTest do
     test "summary wraps content with conversation summary header", %{session: session} do
       populate_turns(session, 6)
 
-      :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 200)
+      {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 200)
 
       summary = hd(Session.get_path(session))
       assert summary.content =~ "[Conversation summary"
@@ -202,7 +197,7 @@ defmodule Opal.Session.CompactionTest do
     test "uses LLM provider to generate summary", %{session: session} do
       populate_turns(session, 6)
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           strategy: :summarize,
           provider: MockProvider,
@@ -220,7 +215,7 @@ defmodule Opal.Session.CompactionTest do
     test "falls back to truncation when provider fails", %{session: session} do
       populate_turns(session, 6)
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           strategy: :summarize,
           provider: FailingProvider,
@@ -238,7 +233,7 @@ defmodule Opal.Session.CompactionTest do
       populate_turns(session, 6)
 
       # No explicit strategy — should default to :summarize because provider is given
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           provider: MockProvider,
           model: @model,
@@ -254,7 +249,7 @@ defmodule Opal.Session.CompactionTest do
       populate_turns(session, 6)
 
       # No provider — should default to :truncate
-      :ok = Compaction.compact(session, keep_recent_tokens: 200)
+      {:ok, _} = Compaction.compact(session, keep_recent_tokens: 200)
 
       path = Session.get_path(session)
       summary = hd(path)
@@ -276,7 +271,7 @@ defmodule Opal.Session.CompactionTest do
       original_count = length(Session.get_path(session))
       assert original_count == 5
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           strategy: :truncate,
           keep_recent_tokens: 100_000,
@@ -294,7 +289,7 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, Message.user("third"))
       :ok = Session.append(session, Message.assistant("fourth"))
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           strategy: :truncate,
           keep_recent_tokens: 100_000,
@@ -310,7 +305,7 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, Message.user("only"))
       :ok = Session.append(session, Message.assistant("two"))
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           strategy: :truncate,
           keep_recent_tokens: 100_000,
@@ -511,7 +506,7 @@ defmodule Opal.Session.CompactionTest do
           Session.append(session, Message.assistant("reply #{i} " <> String.duplicate("z", 300)))
       end
 
-      :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 300)
+      {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 300)
 
       path = Session.get_path(session)
       non_summary = Enum.drop(path, 1)
@@ -526,7 +521,7 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, Message.assistant("reply"))
       :ok = Session.append(session, Message.user("another"))
 
-      :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100_000)
+      {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100_000)
 
       path = Session.get_path(session)
       assert length(path) == 3
@@ -556,7 +551,7 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, Message.user("done"))
       :ok = Session.append(session, Message.assistant("ok" <> String.duplicate("x", 500)))
 
-      :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100)
+      {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100)
 
       path = Session.get_path(session)
       summary = hd(path)
@@ -590,7 +585,7 @@ defmodule Opal.Session.CompactionTest do
 
       :ok = Session.append(session, Message.assistant("here's what I found"))
 
-      :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 300)
+      {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 300)
 
       path = Session.get_path(session)
       roles = Enum.map(path, & &1.role)
@@ -606,7 +601,7 @@ defmodule Opal.Session.CompactionTest do
     test "can compact multiple times", %{session: session} do
       # First round of messages
       populate_turns(session, 6)
-      :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 200)
+      {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 200)
 
       path_after_first = Session.get_path(session)
       first_count = length(path_after_first)
@@ -624,7 +619,7 @@ defmodule Opal.Session.CompactionTest do
       end
 
       # Second compaction
-      :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 200)
+      {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 200)
 
       path_after_second = Session.get_path(session)
       assert length(path_after_second) < first_count + 8
@@ -668,7 +663,7 @@ defmodule Opal.Session.CompactionTest do
       # First compaction cycle
       populate_turns(session, 6)
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           strategy: :summarize,
           provider: MockProvider,
@@ -692,7 +687,7 @@ defmodule Opal.Session.CompactionTest do
       end
 
       # Second compaction — should build on the previous summary
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           strategy: :summarize,
           provider: MockProvider,
@@ -725,7 +720,7 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, Message.user("done"))
       :ok = Session.append(session, Message.assistant("ok" <> String.duplicate("x", 500)))
 
-      :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100)
+      {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100)
 
       summary = hd(Session.get_path(session))
       assert summary.metadata != nil
@@ -751,7 +746,7 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, Message.user("next"))
       :ok = Session.append(session, Message.assistant("ok" <> String.duplicate("x", 500)))
 
-      :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100)
+      {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100)
 
       # Verify cycle 1 metadata
       summary_1 = hd(Session.get_path(session))
@@ -775,7 +770,7 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, Message.user("done"))
       :ok = Session.append(session, Message.assistant("done" <> String.duplicate("z", 500)))
 
-      :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100)
+      {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100)
 
       summary_2 = hd(Session.get_path(session))
 
@@ -813,7 +808,7 @@ defmodule Opal.Session.CompactionTest do
       # Build clean turn boundaries: user/assistant pairs
       populate_turns(session, 6)
 
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           strategy: :truncate,
           keep_recent_tokens: 300
@@ -854,7 +849,7 @@ defmodule Opal.Session.CompactionTest do
       end
 
       # Keep only a small budget so the cut lands mid-turn
-      :ok =
+      {:ok, _} =
         Compaction.compact(session,
           strategy: :summarize,
           provider: MockProvider,
@@ -899,13 +894,13 @@ defmodule Opal.Session.CompactionTest do
 
   describe "edge cases" do
     test "empty session returns :ok", %{session: session} do
-      assert :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100)
+      assert {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 100)
       assert Session.get_path(session) == []
     end
 
     test "single message returns :ok without compacting", %{session: session} do
       :ok = Session.append(session, Message.user("only one"))
-      assert :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 1)
+      assert {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 1)
       assert length(Session.get_path(session)) == 1
     end
 
@@ -915,13 +910,13 @@ defmodule Opal.Session.CompactionTest do
       :ok = Session.append(session, Message.user("recent " <> String.duplicate("x", 500)))
 
       # Should not crash on nil content
-      assert :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 50)
+      assert {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 50)
     end
 
     test "handles very large keep_recent_tokens gracefully", %{session: session} do
       populate_turns(session, 3)
 
-      assert :ok =
+      assert {:ok, _} =
                Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 10_000_000)
 
       assert length(Session.get_path(session)) == 6
@@ -930,7 +925,7 @@ defmodule Opal.Session.CompactionTest do
     test "handles keep_recent_tokens of 0", %{session: session} do
       populate_turns(session, 3)
       # With 0 tokens budget, everything should be compacted (except the cut needs ≥1 message)
-      assert :ok = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 0)
+      assert {:ok, _} = Compaction.compact(session, strategy: :truncate, keep_recent_tokens: 0)
       path = Session.get_path(session)
       # Should still have at least a summary
       assert length(path) >= 1

@@ -729,7 +729,7 @@ defmodule Opal.Inspect do
       "| Completion Tokens | #{Map.get(usage, :completion_tokens, 0)} |",
       "| Total Tokens | #{Map.get(usage, :total_tokens, 0)} |",
       "| Context Window | #{Map.get(usage, :context_window, 0)} |",
-      "| Current Context | #{Map.get(usage, :current_context_tokens, 0)} |",
+      "| Current Context | #{Map.get(usage, :last_context_tokens, 0)} |",
       "",
       "### Active Tools (#{length(tool_names)})\n",
       format_list(tool_names),

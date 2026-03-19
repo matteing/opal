@@ -602,7 +602,7 @@ defmodule Opal.RPC.Protocol do
                "completion_tokens" => :integer,
                "total_tokens" => :integer,
                "context_window" => :integer,
-               "current_context_tokens" => :integer
+               "last_context_tokens" => :integer
              }},
           required: false,
           description: "Cumulative token usage for the session."
@@ -727,7 +727,7 @@ defmodule Opal.RPC.Protocol do
                "completion_tokens" => :integer,
                "total_tokens" => :integer,
                "context_window" => :integer,
-               "current_context_tokens" => :integer
+               "last_context_tokens" => :integer
              }},
           description: "Current token usage snapshot."
         }

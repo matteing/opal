@@ -24,7 +24,7 @@ graph TD
 
 **Key files:**
 - `lib/opal/session/compaction.ex` — cut point, summarization, file-op tracking
-- `lib/opal/agent/usage_tracker.ex` — auto-compact trigger, hybrid estimation
+- `lib/opal/agent/context_manager.ex` — Context management — trigger, compact, estimate, recover from overflow
 - `lib/opal/agent/overflow.ex` — overflow pattern matching and emergency compaction
 - `lib/opal/agent/token.ex` — token estimation heuristics
 
@@ -36,7 +36,7 @@ generated).
 
 | Metric | Definition | Compaction-relevant? |
 |---|---|---|
-| `currentContextTokens` | `prompt_tokens` from the last API call | **Yes** — actual context size |
+| `lastContextTokens` | The most recently reported `prompt_tokens` from the LLM provider. Updated once per turn when the provider sends usage data — **not** a real-time counter. | **Yes** — actual context size |
 | `totalTokens` | Cumulative `prompt + completion` across all turns | No — billing metric |
 
 `totalTokens` double-counts because each turn re-reads the full history:
@@ -47,10 +47,14 @@ Turn 2: sends [sys, user1, asst1, user2]                → prompt=14k
 Turn 3: sends [sys, user1, asst1, user2, asst2, user3]  → prompt=19k
 
 totalTokens = (10+2) + (14+3) + (19+1) = 49k   ← cumulative
-currentContextTokens = 19k                       ← actual context size
+lastContextTokens = 19k                          ← actual context size
 ```
 
-The CLI compaction bar uses `currentContextTokens / contextWindow`.
+The CLI compaction bar uses `lastContextTokens / contextWindow`.
+
+> **Note:** `last_context_tokens` should not be confused with the hybrid estimate
+> used for overflow prediction — they are different: this is the calibrated
+> anchor, the estimate adds trailing messages on top.
 
 ## Auto-Compaction
 
@@ -66,6 +70,14 @@ The CLI compaction bar uses `currentContextTokens / contextWindow`.
 2. Call `Compaction.compact/2` with `keep_recent_tokens = contextWindow / 4`.
 3. Broadcast `compaction_end` with before/after message counts.
 4. Reset `last_prompt_tokens` and `last_usage_msg_index` to 0.
+
+## Compaction Token Cost
+
+Each LLM-powered compaction cycle makes one additional API call (provider,
+same model). The tokens consumed by that call are accumulated into the
+session's `prompt_tokens` and `completion_tokens` totals, so usage reporting
+remains accurate. `last_context_tokens` is intentionally **not** updated by
+compaction calls — it represents main-turn context size only.
 
 ## Compaction Algorithm
 

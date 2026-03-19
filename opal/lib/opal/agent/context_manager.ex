@@ -1,6 +1,6 @@
-defmodule Opal.Agent.UsageTracker do
+defmodule Opal.Agent.ContextManager do
   @moduledoc """
-  Token usage tracking and context-aware compaction for the agent loop.
+  Context management for the agent loop.
 
   Combines actual provider usage reports with heuristic estimates for
   messages added between turns, letting the agent predict overflow
@@ -97,7 +97,7 @@ defmodule Opal.Agent.UsageTracker do
       | prompt_tokens: state.token_usage.prompt_tokens + prompt,
         completion_tokens: state.token_usage.completion_tokens + completion,
         total_tokens: state.token_usage.total_tokens + total,
-        current_context_tokens: prompt
+        last_context_tokens: prompt
     }
 
     window = context_window(state)
@@ -136,16 +136,39 @@ defmodule Opal.Agent.UsageTracker do
         Keyword.take(opts, [:keep_recent_tokens, :force]) ++
         if(tokens = opts[:keep], do: [keep_recent_tokens: tokens], else: [])
 
-    :ok = Compaction.compact(session, compact_opts)
+    {:ok, compaction_usage} = Compaction.compact(session, compact_opts)
     new_path = Opal.Session.get_path(session)
+    new_messages = Enum.reverse(new_path)
+
+    # Accumulate compaction LLM cost into totals without touching
+    # last_context_tokens (which reflects actual prompt size, not compaction cost).
+    state =
+      if map_size(compaction_usage) > 0 do
+        prompt = Map.get(compaction_usage, "prompt_tokens") || Map.get(compaction_usage, "input_tokens") || 0
+        completion = Map.get(compaction_usage, "completion_tokens") || Map.get(compaction_usage, "output_tokens") || 0
+        total = prompt + completion
+
+        updated_usage = %{
+          state.token_usage
+          | prompt_tokens: state.token_usage.prompt_tokens + prompt,
+            completion_tokens: state.token_usage.completion_tokens + completion,
+            total_tokens: state.token_usage.total_tokens + total
+        }
+
+        %{state | token_usage: updated_usage}
+      else
+        state
+      end
+
+    estimated_tokens = Token.estimate_context(new_messages)
     Emitter.broadcast(state, {:compaction_end, length(state.messages), length(new_path)})
 
     {:ok,
      %{
        state
-       | messages: Enum.reverse(new_path),
-         last_prompt_tokens: 0,
-         last_usage_msg_index: 0
+       | messages: new_messages,
+         last_prompt_tokens: estimated_tokens,
+         last_usage_msg_index: length(new_messages)
      }}
   end
 

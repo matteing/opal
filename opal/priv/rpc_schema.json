@@ -42,7 +42,7 @@
               "context_window": {
                 "type": "integer"
               },
-              "current_context_tokens": {
+              "last_context_tokens": {
                 "type": "integer"
               },
               "prompt_tokens": {
@@ -55,7 +55,7 @@
             "required": [
               "completion_tokens",
               "context_window",
-              "current_context_tokens",
+              "last_context_tokens",
               "prompt_tokens",
               "total_tokens"
             ],
@@ -530,7 +530,7 @@
               "context_window": {
                 "type": "integer"
               },
-              "current_context_tokens": {
+              "last_context_tokens": {
                 "type": "integer"
               },
               "prompt_tokens": {
@@ -543,7 +543,7 @@
             "required": [
               "completion_tokens",
               "context_window",
-              "current_context_tokens",
+              "last_context_tokens",
               "prompt_tokens",
               "total_tokens"
             ],
