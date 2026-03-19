@@ -118,7 +118,9 @@ defmodule Opal.MixProject do
       opal: [
         applications: [opal: :permanent],
         include_erts: true,
-        strip_beams: true
+        strip_beams: true,
+        # vm.args disables interactive shell; see rel/vm.args.eex
+        rel_templates_path: "rel"
       ]
     ]
   end

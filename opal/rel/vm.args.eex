@@ -1,0 +1,10 @@
+## Opal RPC binary — no Erlang distribution, no interactive shell.
+## Communicates exclusively via JSON-RPC 2.0 over stdio.
+## No -name / -sname means distribution is never started.
+
+-noshell
+
+## Optimize for latency over throughput (single-user local tool)
++A 4
++sbwt none
++swt low
