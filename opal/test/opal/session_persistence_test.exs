@@ -92,13 +92,10 @@ defmodule Opal.SessionPersistenceTest do
       assert length(current_path) == 2
       assert Enum.map(current_path, & &1.id) == [m1.id, m3.id]
 
-      # All messages should exist (including branch A)
-      all = Session.all_messages(s2)
-      assert length(all) == 3
-      all_ids = Enum.map(all, & &1.id) |> MapSet.new()
-      assert m1.id in all_ids
-      assert m2.id in all_ids
-      assert m3.id in all_ids
+      # All messages should exist (including branch A) — verify via branching
+      assert :ok == Session.branch(s2, m1.id)
+      assert :ok == Session.branch(s2, m2.id)
+      assert :ok == Session.branch(s2, m3.id)
 
       # Can switch back to branch A
       :ok = Session.branch(s2, m2.id)

@@ -58,21 +58,6 @@ defmodule Opal.SessionTest do
     end
   end
 
-  describe "get_message/2" do
-    test "returns the message by ID", %{session: session} do
-      msg = Message.user("test")
-      :ok = Session.append(session, msg)
-
-      found = Session.get_message(session, msg.id)
-      assert found.id == msg.id
-      assert found.content == "test"
-    end
-
-    test "returns nil for unknown ID", %{session: session} do
-      assert Session.get_message(session, "nonexistent") == nil
-    end
-  end
-
   describe "branch/2" do
     test "branches from a past message", %{session: session} do
       m1 = Message.user("first")
@@ -99,65 +84,6 @@ defmodule Opal.SessionTest do
 
     test "returns error for nonexistent message", %{session: session} do
       assert Session.branch(session, "nope") == {:error, :not_found}
-    end
-  end
-
-  describe "get_tree/1" do
-    test "returns empty list for empty session", %{session: session} do
-      assert Session.get_tree(session) == []
-    end
-
-    test "returns nested tree structure", %{session: session} do
-      m1 = Message.user("root")
-      m2 = Message.assistant("reply")
-
-      :ok = Session.append(session, m1)
-      :ok = Session.append(session, m2)
-
-      tree = Session.get_tree(session)
-      assert length(tree) == 1
-
-      root = hd(tree)
-      assert root.message.id == m1.id
-      assert length(root.children) == 1
-      assert hd(root.children).message.id == m2.id
-    end
-
-    test "shows branches in tree", %{session: session} do
-      m1 = Message.user("root")
-      m2 = Message.assistant("branch A")
-
-      :ok = Session.append(session, m1)
-      :ok = Session.append(session, m2)
-
-      # Branch back to root
-      :ok = Session.branch(session, m1.id)
-      m3 = Message.assistant("branch B")
-      :ok = Session.append(session, m3)
-
-      tree = Session.get_tree(session)
-      root = hd(tree)
-      assert root.message.id == m1.id
-      assert length(root.children) == 2
-
-      child_ids = Enum.map(root.children, & &1.message.id) |> Enum.sort()
-      expected = Enum.sort([m2.id, m3.id])
-      assert child_ids == expected
-    end
-  end
-
-  describe "all_messages/1" do
-    test "returns all messages unordered", %{session: session} do
-      m1 = Message.user("a")
-      m2 = Message.assistant("b")
-
-      :ok = Session.append(session, m1)
-      :ok = Session.append(session, m2)
-
-      all = Session.all_messages(session)
-      assert length(all) == 2
-      ids = Enum.map(all, & &1.id) |> Enum.sort()
-      assert ids == Enum.sort([m1.id, m2.id])
     end
   end
 

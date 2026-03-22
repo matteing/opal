@@ -11,7 +11,10 @@ defmodule Opal.Session do
 
   ## Usage
 
-      {:ok, session} = Opal.Session.start_link(session_id: "abc")
+      # Sessions are registered in the Registry — look them up by session_id:
+      {:ok, _} = Opal.Session.start_link(session_id: "abc")
+      session = Opal.Session.via("abc")
+
       :ok = Opal.Session.append(session, message)
       path = Opal.Session.get_path(session)
       :ok = Opal.Session.branch(session, some_message_id)
@@ -54,17 +57,9 @@ defmodule Opal.Session do
   def append_many(session, msgs) when is_list(msgs),
     do: GenServer.call(session, {:append_many, msgs})
 
-  @doc "Returns the message with the given ID, or `nil`."
-  @spec get_message(GenServer.server(), String.t()) :: Opal.Message.t() | nil
-  def get_message(session, id), do: GenServer.call(session, {:get_message, id})
-
   @doc "Returns the path from root to the current leaf."
   @spec get_path(GenServer.server()) :: [Opal.Message.t()]
   def get_path(session), do: GenServer.call(session, :get_path)
-
-  @doc "Returns the full tree as nested `%{message: msg, children: [...]}`."
-  @spec get_tree(GenServer.server()) :: [map()]
-  def get_tree(session), do: GenServer.call(session, :get_tree)
 
   @doc "Moves the current pointer to `message_id`, creating a branch point."
   @spec branch(GenServer.server(), String.t()) :: :ok | {:error, :not_found}
@@ -73,10 +68,6 @@ defmodule Opal.Session do
   @doc "Returns the current leaf message ID, or `nil` if empty."
   @spec current_id(GenServer.server()) :: String.t() | nil
   def current_id(session), do: GenServer.call(session, :current_id)
-
-  @doc "Returns all messages (unordered)."
-  @spec all_messages(GenServer.server()) :: [Opal.Message.t()]
-  def all_messages(session), do: GenServer.call(session, :all_messages)
 
   @doc "Returns the session ID."
   @spec session_id(GenServer.server()) :: String.t()
@@ -183,6 +174,8 @@ defmodule Opal.Session do
     {:ok, state}
   end
 
+  # – Message storage –
+
   @impl true
   def handle_call({:append, msg}, _from, state) do
     msg = %{msg | parent_id: state.current_id}
@@ -201,22 +194,10 @@ defmodule Opal.Session do
     {:reply, :ok, state}
   end
 
-  def handle_call({:get_message, id}, _from, state) do
-    reply =
-      case :ets.lookup(state.table, id) do
-        [{^id, msg}] -> msg
-        [] -> nil
-      end
-
-    {:reply, reply, state}
-  end
+  # – Reads –
 
   def handle_call(:get_path, _from, state) do
     {:reply, walk_path(state.table, state.current_id), state}
-  end
-
-  def handle_call(:get_tree, _from, state) do
-    {:reply, build_tree(state.table), state}
   end
 
   def handle_call({:branch, id}, _from, state) do
@@ -228,11 +209,9 @@ defmodule Opal.Session do
 
   def handle_call(:current_id, _from, state), do: {:reply, state.current_id, state}
 
-  def handle_call(:all_messages, _from, state) do
-    {:reply, for({_id, msg} <- :ets.tab2list(state.table), do: msg), state}
-  end
-
   def handle_call(:session_id, _from, state), do: {:reply, state.session_id, state}
+
+  # – Metadata –
 
   def handle_call({:get_metadata, key}, _from, state) do
     {:reply, Map.get(state.metadata, key), state}
@@ -241,6 +220,8 @@ defmodule Opal.Session do
   def handle_call({:set_metadata, key, value}, _from, state) do
     {:reply, :ok, %{state | metadata: Map.put(state.metadata, key, value)}}
   end
+
+  # – Persistence –
 
   def handle_call({:save, dir}, _from, state) do
     {:reply, persist_to_dets(state, dir), state}
@@ -252,6 +233,9 @@ defmodule Opal.Session do
 
   @impl true
   def terminate(reason, state) do
+    # On abnormal termination (crash), attempt a best-effort save before
+    # the ETS table is lost. We rescue here because terminate/2 must not
+    # raise — the OTP runtime calls it as a last-resort cleanup.
     if reason != :normal do
       try do
         dir = state.sessions_dir || Opal.Config.sessions_dir(Opal.Config.new())
@@ -267,12 +251,14 @@ defmodule Opal.Session do
 
   # ── Tree Traversal ─────────────────────────────────────────────────
 
-  defp walk_path(_table, nil), do: []
+  defp walk_path(table, id), do: do_walk(table, id, [])
 
-  defp walk_path(table, id) do
+  defp do_walk(_table, nil, acc), do: acc
+
+  defp do_walk(table, id, acc) do
     case :ets.lookup(table, id) do
-      [{^id, msg}] -> walk_path(table, msg.parent_id) ++ [msg]
-      [] -> []
+      [{^id, msg}] -> do_walk(table, msg.parent_id, [msg | acc])
+      [] -> acc
     end
   end
 
@@ -295,6 +281,10 @@ defmodule Opal.Session do
   # ── Segment Replacement (compaction) ───────────────────────────────
 
   defp do_replace_segment(state, ids_to_remove, summary) do
+    # Compaction segment replacement:
+    # 1. Anchor the summary to the parent of the first removed message.
+    # 2. Re-parent any children of the last removed message to the summary.
+    # 3. Delete removed messages; insert summary; update current_id if needed.
     id_set = MapSet.new(ids_to_remove)
     first_id = List.first(ids_to_remove)
     last_id = List.last(ids_to_remove)
@@ -334,6 +324,7 @@ defmodule Opal.Session do
     File.mkdir_p!(dir)
     path = dets_path(dir, state.session_id)
 
+    # Open, write, close atomically — DETS is not held open between saves.
     with {:ok, ref} <- :dets.open_file(dets_name(state.session_id), file: to_charlist(path)) do
       :dets.delete_all_objects(ref)
 
@@ -352,34 +343,33 @@ defmodule Opal.Session do
   end
 
   defp load_from_dets(state, path) do
-    with {:ok, ref} <- :dets.open_file(dets_name(state.session_id), file: to_charlist(path)) do
-      # Load metadata
-      meta =
-        case :dets.lookup(ref, @meta_key) do
-          [{@meta_key, m}] -> m
-          _ -> %{current_id: nil, metadata: %{}}
+    case :dets.open_file(dets_name(state.session_id), file: to_charlist(path)) do
+      {:ok, ref} ->
+        try do
+          meta =
+            case :dets.lookup(ref, @meta_key) do
+              [{@meta_key, m}] -> m
+              _ -> %{current_id: nil, metadata: %{}}
+            end
+
+          :ets.delete_all_objects(state.table)
+
+          :dets.foldl(
+            fn
+              {@meta_key, _}, acc -> acc
+              {id, msg}, acc -> :ets.insert(state.table, {id, msg}); acc
+            end,
+            :ok,
+            ref
+          )
+
+          %{state | current_id: meta.current_id, metadata: meta.metadata}
+        after
+          :dets.close(ref)
         end
 
-      # Load messages into ETS
-      :ets.delete_all_objects(state.table)
-
-      :dets.foldl(
-        fn
-          {@meta_key, _}, acc ->
-            acc
-
-          {id, msg}, acc ->
-            :ets.insert(state.table, {id, msg})
-            acc
-        end,
-        :ok,
-        ref
-      )
-
-      :dets.close(ref)
-      %{state | current_id: meta.current_id, metadata: meta.metadata}
-    else
-      _ -> state
+      _ ->
+        state
     end
   end
 
