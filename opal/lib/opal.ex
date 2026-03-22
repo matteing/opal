@@ -15,7 +15,7 @@ defmodule Opal do
       end)
   """
 
-  alias Opal.{Agent, Config, Events, Id, Provider.Model, SessionServer, Settings}
+  alias Opal.{Agent, Config, Events, Id, Provider.Model, Session, Settings}
 
   # -- Types ------------------------------------------------------------------
 
@@ -69,9 +69,10 @@ defmodule Opal do
     child_opts = build_child_opts(opts)
     Config.ensure_dirs!(child_opts[:config])
 
-    with {:ok, server} <-
-           DynamicSupervisor.start_child(Opal.SessionSupervisor, {SessionServer, child_opts}) do
-      {:ok, SessionServer.agent(server)}
+    with {:ok, _server} <-
+           DynamicSupervisor.start_child(Opal.SessionSupervisor, {Session.Supervisor, child_opts}) do
+      [{agent, _}] = Registry.lookup(Opal.Registry, {:agent, child_opts[:session_id]})
+      {:ok, agent}
     end
   end
 

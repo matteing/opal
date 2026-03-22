@@ -64,6 +64,9 @@ defmodule Opal.IntegrationTest do
 
     @impl true
     def execute(%{"path" => path}, _ctx), do: {:ok, "Contents of #{path}"}
+
+@impl true
+    def meta(_args), do: name()
   end
 
   defp start_agent(opts) do

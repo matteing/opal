@@ -331,7 +331,7 @@ defmodule Opal.Agent do
          ) do
       {:ok, resp} ->
         Emitter.broadcast(state, {:request_end})
-        {:next_state, :streaming, begin_stream(state, streaming_resp: resp), [stall_timeout()]}
+        {:next_state, :streaming, begin_stream(state, resp), [stall_timeout()]}
 
       {:error, reason} ->
         Logger.error("Provider stream failed: #{inspect(reason)}")
@@ -339,11 +339,11 @@ defmodule Opal.Agent do
     end
   end
 
-  defp begin_stream(state, transport) do
-    base = %{
+  defp begin_stream(state, resp) do
+    %{
       state
       | status: :streaming,
-        streaming_resp: nil,
+        streaming_resp: resp,
         current_text: "",
         current_tool_calls: [],
         current_thinking: nil,
@@ -351,8 +351,6 @@ defmodule Opal.Agent do
         last_chunk_at: System.monotonic_time(:second),
         stream_watchdog: nil
     }
-
-    Enum.reduce(transport, base, fn {k, v}, acc -> Map.put(acc, k, v) end)
   end
 
   defp stall_timeout, do: {:state_timeout, @stall_ms, :stall_check}
@@ -584,9 +582,9 @@ defmodule Opal.Agent do
   defp resolve_session(session_id, opts) do
     case Keyword.get(opts, :session) do
       true ->
-        case Opal.Util.Registry.lookup({:session, session_id}) do
-          {:ok, pid} -> pid
-          {:error, _} -> nil
+        case Registry.lookup(Opal.Registry, {:session, session_id}) do
+          [{pid, _}] -> pid
+          [] -> nil
         end
 
       pid when is_pid(pid) ->

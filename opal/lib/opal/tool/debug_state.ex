@@ -103,7 +103,7 @@ defmodule Opal.Tool.DebugState do
       %{
         timestamp_ms: ts,
         type: event_type(event),
-        data: FileIO.truncate(inspect(event, limit: 5, printable_limit: 500), 500)
+        data: Opal.Util.Text.truncate(inspect(event, limit: 5, printable_limit: 500), 500)
       }
     end)
   end
@@ -132,7 +132,7 @@ defmodule Opal.Tool.DebugState do
     do: value |> inspect(limit: 3, printable_limit: limit) |> truncate_content(limit)
 
   defp clamp_int(value, _default, max_limit) when is_integer(value),
-    do: Opal.Util.Number.clamp(value, 1, max_limit)
+    do: value |> max(1) |> min(max_limit)
 
   defp clamp_int(_value, default, _max_limit), do: default
 

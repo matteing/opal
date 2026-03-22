@@ -155,6 +155,9 @@ defmodule Opal.AgentChatCompletionsTest do
 
     @impl true
     def execute(%{"input" => input}, _ctx), do: {:ok, "Echo: #{input}"}
+
+@impl true
+    def meta(_args), do: name()
   end
 
   defp set_scenario(scenario) do

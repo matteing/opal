@@ -101,7 +101,7 @@ defmodule Opal.MixProject do
           Opal.Context,
           Opal.Message,
           Opal.Path,
-          Opal.SessionServer,
+          Opal.Session.Supervisor,
           Opal.Session.Compaction
         ]
       ]

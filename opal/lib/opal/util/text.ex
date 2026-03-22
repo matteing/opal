@@ -26,6 +26,5 @@ defmodule Opal.Util.Text do
       "hello"
   """
   @spec truncate_preview(String.t(), pos_integer()) :: String.t()
-  def truncate_preview(str, max) when byte_size(str) <= max, do: str
   def truncate_preview(str, max), do: String.slice(str, 0, max)
 end

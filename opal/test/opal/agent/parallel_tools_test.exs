@@ -36,6 +36,9 @@ defmodule Opal.Agent.ParallelToolsTest do
       Process.sleep(sleep_ms)
       {:ok, "done:#{id}"}
     end
+
+@impl true
+    def meta(_args), do: name()
   end
 
   # Provider that returns N tool calls in a single response, then text on the second turn.

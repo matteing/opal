@@ -50,6 +50,9 @@ defmodule Opal.Provider.CopilotTest do
     def execute(%{"input" => input}, _context) do
       {:ok, "Result: #{input}"}
     end
+
+@impl true
+    def meta(_args), do: name()
   end
 
   defmodule EmptyParamsTool do
@@ -66,6 +69,9 @@ defmodule Opal.Provider.CopilotTest do
 
     @impl true
     def execute(_args, _context), do: {:ok, "done"}
+
+@impl true
+    def meta(_args), do: name()
   end
 
   # ============================================================

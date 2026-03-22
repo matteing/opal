@@ -239,6 +239,9 @@ defmodule Opal.Agent.AbortResilienceTest do
       Process.sleep(ms)
       {:ok, "done:#{id}"}
     end
+
+@impl true
+    def meta(_args), do: name()
   end
 
   # ── Setup ──────────────────────────────────────────────────────────────

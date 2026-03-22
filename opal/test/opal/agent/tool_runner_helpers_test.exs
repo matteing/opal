@@ -12,6 +12,8 @@ defmodule Opal.Agent.ToolRunnerHelpersTest do
     def description, do: "Echoes input"
     def parameters, do: %{"type" => "object", "properties" => %{}}
     def execute(%{"text" => text}, _ctx), do: {:ok, text}
+@impl true
+    def meta(_args), do: name()
   end
 
   describe "find_tool/2" do

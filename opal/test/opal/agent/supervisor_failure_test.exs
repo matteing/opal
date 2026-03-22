@@ -113,6 +113,8 @@ defmodule Opal.Agent.SupervisorFailureTest do
     def description, do: "test"
     def parameters, do: %{"type" => "object", "properties" => %{}}
     def execute(_args, _ctx), do: {:ok, "result"}
+@impl true
+    def meta(_args), do: name()
   end
 
   describe "cancel_all with empty pending" do

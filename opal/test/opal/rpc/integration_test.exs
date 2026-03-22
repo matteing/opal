@@ -66,6 +66,9 @@ defmodule Opal.RPC.IntegrationTest do
 
     @impl true
     def execute(%{"path" => path}, _ctx), do: {:ok, "Contents of #{path}"}
+
+@impl true
+    def meta(_args), do: name()
   end
 
   # -- In-Process JSON-RPC Server --
@@ -898,27 +901,10 @@ defmodule Opal.RPC.IntegrationTest do
   defp cleanup_session(session_id) do
     drain_messages()
 
-    # Find and terminate the session's agent
-    children = DynamicSupervisor.which_children(Opal.SessionSupervisor)
-
-    Enum.each(children, fn
-      {_, pid, :supervisor, _} when is_pid(pid) ->
-        try do
-          agent = Opal.SessionServer.agent(pid)
-
-          if agent && Process.alive?(agent) do
-            state = Opal.Agent.get_state(agent)
-
-            if state.session_id == session_id do
-              DynamicSupervisor.terminate_child(Opal.SessionSupervisor, pid)
-            end
-          end
-        catch
-          _, _ -> :ok
-        end
-
-      _ ->
-        :ok
-    end)
+    with [{agent, _}] <- Registry.lookup(Opal.Registry, {:agent, session_id}),
+         {:dictionary, dict} <- Process.info(agent, :dictionary),
+         [parent | _] when is_pid(parent) <- dict[:"$ancestors"] do
+      DynamicSupervisor.terminate_child(Opal.SessionSupervisor, parent)
+    end
   end
 end

@@ -108,17 +108,6 @@ defmodule Opal.FileIO do
 
   # ── Truncation ────────────────────────────────────────────────────────
 
-  @doc ~S"""
-  Truncates a string to `max` characters, appending `"… (truncated)"`.
-
-  Delegates to `Opal.Util.Text.truncate/3`.
-
-      iex> Opal.FileIO.truncate("hello", 100)
-      "hello"
-  """
-  @spec truncate(String.t(), pos_integer()) :: String.t()
-  defdelegate truncate(str, max), to: Opal.Util.Text
-
   @doc """
   Truncates binary content at the last newline before `max_bytes`.
 

@@ -1,19 +1,24 @@
-defmodule Opal.SessionServer do
+defmodule Opal.Session.Supervisor do
   @moduledoc """
   Per-session supervisor that owns the full session process tree.
 
   Each session gets its own supervision subtree:
 
-      Opal.SessionServer (Supervisor, :rest_for_one)
+      Opal.Session.Supervisor (Supervisor, :rest_for_one)
       ├── Task.Supervisor        — per-session tool execution
       ├── Opal.Session           — conversation persistence (optional)
       └── Opal.Agent             — the agent loop
 
-  Terminating the SessionServer cleans up everything: the agent, all
+  Terminating the Session.Supervisor cleans up everything: the agent, all
   running tools, and the session store.
 
   The `:rest_for_one` strategy means if the Task.Supervisor crashes,
   the Agent (which depends on it) restarts too.
+
+  The agent registers itself in `Opal.Registry` under `{:agent, session_id}`,
+  so callers can discover it without a reference to this supervisor:
+
+      [{agent, _}] = Registry.lookup(Opal.Registry, {:agent, session_id})
   """
 
   use Supervisor
@@ -47,24 +52,14 @@ defmodule Opal.SessionServer do
     # (avoids dynamic atom generation which leaks memory on the BEAM)
     tool_sup_name = {:via, Registry, {Opal.Registry, {:tool_sup, session_id}}}
 
-    # Build child list dynamically
     children =
-      [
-        {Task.Supervisor, name: tool_sup_name}
-      ] ++
+      [{Task.Supervisor, name: tool_sup_name}] ++
         maybe_session_child(opts) ++
-        [
-          {Opal.Agent,
-           opts ++
-             [
-               tool_supervisor: tool_sup_name
-             ]}
-        ]
+        [{Opal.Agent, opts ++ [tool_supervisor: tool_sup_name]}]
 
     Supervisor.init(children, strategy: :rest_for_one)
   end
 
-  # Optionally includes an Opal.Session child if session: true.
   defp maybe_session_child(opts) do
     if Keyword.get(opts, :session) == true do
       session_id = Keyword.fetch!(opts, :session_id)
@@ -78,7 +73,6 @@ defmodule Opal.SessionServer do
         name: {:via, Registry, {Opal.Registry, {:session, session_id}}}
       ]
 
-      # If a saved session file exists on disk, load it during init
       session_opts =
         if File.exists?(session_file),
           do: Keyword.put(session_opts, :load_from, session_file),
@@ -88,31 +82,5 @@ defmodule Opal.SessionServer do
     else
       []
     end
-  end
-
-  @doc """
-  Returns the Agent pid from a SessionServer supervisor.
-  """
-  @spec agent(pid()) :: pid() | nil
-  def agent(session_server) do
-    session_server
-    |> Supervisor.which_children()
-    |> Enum.find_value(fn
-      {Opal.Agent, pid, :worker, _} -> pid
-      _ -> nil
-    end)
-  end
-
-  @doc """
-  Returns the Session pid from a SessionServer supervisor, or nil.
-  """
-  @spec session(pid()) :: pid() | nil
-  def session(session_server) do
-    session_server
-    |> Supervisor.which_children()
-    |> Enum.find_value(fn
-      {Opal.Session, pid, :worker, _} -> pid
-      _ -> nil
-    end)
   end
 end

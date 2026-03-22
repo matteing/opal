@@ -1,13 +1,14 @@
-defmodule Opal.SessionServerTest do
+defmodule Opal.Session.SupervisorTest do
   @moduledoc """
   Tests for the per-session supervisor tree.
 
-  Verifies that `Opal.SessionServer` correctly builds its supervision tree,
-  starts the expected children, and provides agent/session discovery.
+  Verifies that `Opal.Session.Supervisor` correctly builds its supervision
+  tree and starts the expected children. Agent and session discovery is done
+  via `Opal.Registry` rather than through supervisor introspection.
   """
   use ExUnit.Case, async: false
 
-  alias Opal.SessionServer
+  alias Opal.Session.Supervisor, as: SessionSup
   alias Opal.Test.FixtureHelper
 
   # Provider that returns canned text responses
@@ -27,7 +28,7 @@ defmodule Opal.SessionServerTest do
     def convert_tools(tools), do: tools
   end
 
-  defp start_session_server(opts \\ []) do
+  defp start_session_sup(opts \\ []) do
     session_id = Keyword.get(opts, :session_id, "ss-test-#{System.unique_integer([:positive])}")
 
     base_opts = [
@@ -39,7 +40,7 @@ defmodule Opal.SessionServerTest do
       provider: TestProvider
     ]
 
-    {:ok, sup} = SessionServer.start_link(Keyword.merge(base_opts, opts))
+    {:ok, sup} = SessionSup.start_link(Keyword.merge(base_opts, opts))
     %{sup: sup, session_id: session_id}
   end
 
@@ -47,7 +48,7 @@ defmodule Opal.SessionServerTest do
 
   describe "supervision tree structure" do
     test "starts with expected children" do
-      %{sup: sup} = start_session_server()
+      %{sup: sup} = start_session_sup()
 
       children = Supervisor.which_children(sup)
 
@@ -56,13 +57,12 @@ defmodule Opal.SessionServerTest do
           {id, _pid, _type, _} -> id
         end)
 
-      # Task.Supervisor and DynamicSupervisor register via Registry tuples
       assert Opal.Agent in child_ids
       assert Enum.any?(child_ids, fn id -> match?({Opal.Registry, {:tool_sup, _}}, id) end)
     end
 
     test "children are all alive" do
-      %{sup: sup} = start_session_server()
+      %{sup: sup} = start_session_sup()
 
       children = Supervisor.which_children(sup)
 
@@ -73,16 +73,15 @@ defmodule Opal.SessionServerTest do
     end
 
     test "uses rest_for_one strategy" do
-      %{sup: sup} = start_session_server()
+      %{sup: sup} = start_session_sup()
 
-      # Verify by checking supervisor counts (rest_for_one is set in init)
       info = Supervisor.count_children(sup)
       assert info[:workers] >= 1
       assert info[:supervisors] >= 1
     end
 
     test "includes Session child when session: true" do
-      %{sup: sup} = start_session_server(session: true)
+      %{sup: sup} = start_session_sup(session: true)
 
       children = Supervisor.which_children(sup)
       child_modules = Enum.map(children, fn {mod, _pid, _type, _} -> mod end)
@@ -91,7 +90,7 @@ defmodule Opal.SessionServerTest do
     end
 
     test "excludes Session child when session option is absent" do
-      %{sup: sup} = start_session_server()
+      %{sup: sup} = start_session_sup()
 
       children = Supervisor.which_children(sup)
       child_modules = Enum.map(children, fn {mod, _pid, _type, _} -> mod end)
@@ -100,57 +99,28 @@ defmodule Opal.SessionServerTest do
     end
   end
 
-  # ── Agent/Session Discovery ─────────────────────────────────────────
+  # ── Registry Discovery ──────────────────────────────────────────────
 
-  describe "agent/1" do
-    test "returns the Agent pid" do
-      %{sup: sup} = start_session_server()
+  describe "registry-based discovery" do
+    test "agent is discoverable via Registry" do
+      %{session_id: session_id} = start_session_sup()
 
-      agent = SessionServer.agent(sup)
-      assert is_pid(agent)
-      assert Process.alive?(agent)
+      [{pid, _}] = Registry.lookup(Opal.Registry, {:agent, session_id})
+      assert is_pid(pid)
+      assert Process.alive?(pid)
     end
 
     test "agent responds to get_state" do
-      %{sup: sup, session_id: session_id} = start_session_server()
+      %{session_id: session_id} = start_session_sup()
 
-      agent = SessionServer.agent(sup)
+      [{agent, _}] = Registry.lookup(Opal.Registry, {:agent, session_id})
       state = Opal.Agent.get_state(agent)
       assert state.session_id == session_id
       assert state.status == :idle
     end
-  end
 
-  describe "session/1" do
-    test "returns nil when no session child" do
-      %{sup: sup} = start_session_server()
-      assert SessionServer.session(sup) == nil
-    end
-
-    test "returns Session pid when session: true" do
-      %{sup: sup} = start_session_server(session: true)
-
-      session = SessionServer.session(sup)
-      assert is_pid(session)
-      assert Process.alive?(session)
-    end
-
-    test "session is functional" do
-      %{sup: sup} = start_session_server(session: true)
-
-      session = SessionServer.session(sup)
-      :ok = Opal.Session.append(session, Opal.Message.user("hello"))
-      path = Opal.Session.get_path(session)
-      assert length(path) == 1
-      assert hd(path).content == "hello"
-    end
-  end
-
-  # ── Registry Discovery ──────────────────────────────────────────────
-
-  describe "registry-based discovery" do
     test "tool supervisor is discoverable via Registry" do
-      %{session_id: session_id} = start_session_server()
+      %{session_id: session_id} = start_session_sup()
 
       [{pid, _}] = Registry.lookup(Opal.Registry, {:tool_sup, session_id})
       assert is_pid(pid)
@@ -158,11 +128,31 @@ defmodule Opal.SessionServerTest do
     end
 
     test "session is discoverable via Registry when started" do
-      %{session_id: session_id} = start_session_server(session: true)
+      %{session_id: session_id} = start_session_sup(session: true)
 
       [{pid, _}] = Registry.lookup(Opal.Registry, {:session, session_id})
       assert is_pid(pid)
       assert Process.alive?(pid)
+    end
+
+    test "session is not in Registry when not started" do
+      %{session_id: session_id} = start_session_sup()
+
+      assert Registry.lookup(Opal.Registry, {:session, session_id}) == []
+    end
+  end
+
+  # ── Session Functionality ───────────────────────────────────────────
+
+  describe "session functionality" do
+    test "session is functional when started" do
+      %{session_id: session_id} = start_session_sup(session: true)
+
+      [{session, _}] = Registry.lookup(Opal.Registry, {:session, session_id})
+      :ok = Opal.Session.append(session, Opal.Message.user("hello"))
+      path = Opal.Session.get_path(session)
+      assert length(path) == 1
+      assert hd(path).content == "hello"
     end
   end
 
@@ -170,9 +160,9 @@ defmodule Opal.SessionServerTest do
 
   describe "agent functionality through supervisor" do
     test "agent can receive prompts and stream responses" do
-      %{sup: sup, session_id: session_id} = start_session_server()
+      %{session_id: session_id} = start_session_sup()
 
-      agent = SessionServer.agent(sup)
+      [{agent, _}] = Registry.lookup(Opal.Registry, {:agent, session_id})
       Opal.Events.subscribe(session_id)
 
       Opal.Agent.prompt(agent, "Hello")
@@ -186,9 +176,9 @@ defmodule Opal.SessionServerTest do
     end
 
     test "multiple prompts work sequentially" do
-      %{sup: sup, session_id: session_id} = start_session_server()
+      %{session_id: session_id} = start_session_sup()
 
-      agent = SessionServer.agent(sup)
+      [{agent, _}] = Registry.lookup(Opal.Registry, {:agent, session_id})
       Opal.Events.subscribe(session_id)
 
       Opal.Agent.prompt(agent, "First")
@@ -206,24 +196,22 @@ defmodule Opal.SessionServerTest do
 
   describe "termination" do
     test "stopping supervisor terminates all children" do
-      %{sup: sup} = start_session_server()
+      %{sup: sup} = start_session_sup()
 
       children = Supervisor.which_children(sup)
       child_pids = for {_, pid, _, _} <- children, is_pid(pid), do: pid
 
-      # Monitor all children
       refs = Enum.map(child_pids, &Process.monitor/1)
 
       Supervisor.stop(sup, :normal)
 
-      # All children should terminate
       for ref <- refs do
         assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 2000
       end
     end
 
     test "supervisor itself terminates" do
-      %{sup: sup} = start_session_server()
+      %{sup: sup} = start_session_sup()
       ref = Process.monitor(sup)
 
       Supervisor.stop(sup, :normal)
@@ -234,13 +222,13 @@ defmodule Opal.SessionServerTest do
   # ── DynamicSupervisor Integration ───────────────────────────────────
 
   describe "via DynamicSupervisor" do
-    test "session server can be started under SessionSupervisor" do
+    test "session supervisor can be started under SessionSupervisor" do
       session_id = "dyn-test-#{System.unique_integer([:positive])}"
 
       {:ok, sup} =
         DynamicSupervisor.start_child(
           Opal.SessionSupervisor,
-          {SessionServer,
+          {SessionSup,
            session_id: session_id,
            model: Opal.Provider.Model.new(:test, "test-model"),
            working_dir: System.tmp_dir!(),
@@ -250,10 +238,10 @@ defmodule Opal.SessionServerTest do
         )
 
       assert is_pid(sup)
-      agent = SessionServer.agent(sup)
+
+      [{agent, _}] = Registry.lookup(Opal.Registry, {:agent, session_id})
       assert is_pid(agent)
 
-      # Clean up
       DynamicSupervisor.terminate_child(Opal.SessionSupervisor, sup)
     end
   end

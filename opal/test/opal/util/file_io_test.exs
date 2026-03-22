@@ -64,13 +64,13 @@ defmodule Opal.FileIOTest do
 
   # ── Truncation ────────────────────────────────────────────────────────
 
-  describe "truncate/2" do
+  describe "truncate/2 (Opal.Util.Text)" do
     test "returns short strings unchanged" do
-      assert FileIO.truncate("hello", 100) == "hello"
+      assert Opal.Util.Text.truncate("hello", 100) == "hello"
     end
 
     test "truncates long strings with marker" do
-      result = FileIO.truncate(String.duplicate("x", 200), 10)
+      result = Opal.Util.Text.truncate(String.duplicate("x", 200), 10)
       assert String.starts_with?(result, "xxxxxxxxxx")
       assert result =~ "truncated"
     end

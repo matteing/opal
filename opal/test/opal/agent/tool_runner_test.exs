@@ -11,6 +11,8 @@ defmodule Opal.Agent.ToolRunnerTest do
     def description, do: "Always succeeds"
     def parameters, do: %{"type" => "object", "properties" => %{}}
     def execute(_args, _ctx), do: {:ok, "ok"}
+@impl true
+    def meta(_args), do: name()
   end
 
   defmodule CrashTool do
@@ -19,6 +21,8 @@ defmodule Opal.Agent.ToolRunnerTest do
     def description, do: "Always raises"
     def parameters, do: %{"type" => "object", "properties" => %{}}
     def execute(_args, _ctx), do: raise("boom")
+@impl true
+    def meta(_args), do: name()
   end
 
   defp base_state do

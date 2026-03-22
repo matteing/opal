@@ -100,6 +100,9 @@ defmodule Opal.LiveThinkingTest do
         {:error, reason} -> {:error, "Failed to read #{path}: #{reason}"}
       end
     end
+
+@impl true
+    def meta(_args), do: name()
   end
 
   # ── Setup ──────────────────────────────────────────────────────────

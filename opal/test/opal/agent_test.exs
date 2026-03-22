@@ -587,6 +587,9 @@ defmodule Opal.AgentTest do
     def execute(%{"input" => input}, _context) do
       {:ok, "Echo: #{input}"}
     end
+
+@impl true
+    def meta(_args), do: name()
   end
 
   defmodule FailingTool do
@@ -605,6 +608,9 @@ defmodule Opal.AgentTest do
     def execute(_args, _context) do
       {:error, "Tool failed intentionally"}
     end
+
+@impl true
+    def meta(_args), do: name()
   end
 
   defmodule SlowEchoTool do
@@ -631,6 +637,9 @@ defmodule Opal.AgentTest do
       Process.sleep(100)
       {:ok, "Echo: #{input}"}
     end
+
+@impl true
+    def meta(_args), do: name()
   end
 
   defmodule CrashingTool do
@@ -649,6 +658,9 @@ defmodule Opal.AgentTest do
     def execute(_args, _context) do
       exit(:tool_crash_boom)
     end
+
+@impl true
+    def meta(_args), do: name()
   end
 
   defmodule RaisingTool do
@@ -667,6 +679,9 @@ defmodule Opal.AgentTest do
     def execute(_args, _context) do
       raise RuntimeError, "kaboom from tool"
     end
+
+@impl true
+    def meta(_args), do: name()
   end
 
   defmodule TimeoutTool do
@@ -686,6 +701,9 @@ defmodule Opal.AgentTest do
       Process.sleep(200)
       {:ok, "eventually done"}
     end
+
+@impl true
+    def meta(_args), do: name()
   end
 
   defmodule SideEffectTool do
@@ -706,6 +724,9 @@ defmodule Opal.AgentTest do
       :persistent_term.put({__MODULE__, :ran}, true)
       {:ok, "side effect done"}
     end
+
+@impl true
+    def meta(_args), do: name()
   end
 
   # --- Helpers ---

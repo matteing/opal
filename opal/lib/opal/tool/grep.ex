@@ -134,8 +134,8 @@ defmodule Opal.Tool.Grep do
              required_message: "Missing required parameter: pattern"
            ),
          {:ok, regex} <- compile_regex(opts[:pattern]) do
-      ctx_lines = opts[:context_lines] |> Opal.Util.Number.clamp(0, 10)
-      max_results = opts[:max_results] |> Opal.Util.Number.clamp(1, 500)
+      ctx_lines = opts[:context_lines] |> max(0) |> min(10)
+      max_results = opts[:max_results] |> max(1) |> min(500)
 
       case FileIO.resolve_path(opts[:path], working_dir,
              allow_bases: FileIO.allowed_bases(context)

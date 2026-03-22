@@ -109,7 +109,7 @@ defmodule Opal.Tool do
   @callback execute(args :: map(), context :: map()) ::
               {:ok, String.t()} | {:error, String.t()} | {:effect, term()}
 
-  @optional_callbacks [meta: 1, description: 1]
+  @optional_callbacks [description: 1]
 
   @doc """
   Returns the tool description, enriched with context when supported.
@@ -130,16 +130,10 @@ defmodule Opal.Tool do
   @doc """
   Returns the meta description for a tool invocation.
 
-  Calls `tool_module.meta(args)` if defined, otherwise returns `tool_module.name()`.
+  Calls `tool_module.meta(args)` directly — all tool modules must implement `meta/1`.
   """
   @spec meta(module(), map()) :: String.t()
-  def meta(tool_module, args) do
-    if function_exported?(tool_module, :meta, 1) do
-      tool_module.meta(args)
-    else
-      tool_module.name()
-    end
-  end
+  def meta(tool_module, args), do: tool_module.meta(args)
 
   @doc false
   defmacro __using__(opts) do
@@ -172,6 +166,14 @@ defmodule Opal.Tool do
 
   @doc false
   defmacro __before_compile__(env) do
+    meta_default =
+      unless Module.defines?(env.module, {:meta, 1}) do
+        quote do
+          @impl true
+          def meta(_args), do: name()
+        end
+      end
+
     unless Module.defines?(env.module, {:parameters, 0}) do
       raise CompileError,
         file: env.file,
@@ -187,6 +189,6 @@ defmodule Opal.Tool do
         description: "#{inspect(env.module)} must implement execute/2 when using `use Opal.Tool`"
     end
 
-    :ok
+    meta_default
   end
 end

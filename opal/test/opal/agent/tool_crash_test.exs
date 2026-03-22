@@ -25,6 +25,8 @@ defmodule Opal.Agent.ToolCrashTest do
       }
 
     def execute(%{"id" => id}, _ctx), do: {:ok, "ok:#{id}"}
+@impl true
+    def meta(_args), do: name()
   end
 
   defmodule CrashTool do
@@ -40,6 +42,8 @@ defmodule Opal.Agent.ToolCrashTest do
       }
 
     def execute(_args, _ctx), do: raise("boom!")
+@impl true
+    def meta(_args), do: name()
   end
 
   defmodule ExitTool do
@@ -55,6 +59,8 @@ defmodule Opal.Agent.ToolCrashTest do
       }
 
     def execute(_args, _ctx), do: Process.exit(self(), :kill)
+@impl true
+    def meta(_args), do: name()
   end
 
   defmodule SlowTool do
@@ -76,6 +82,9 @@ defmodule Opal.Agent.ToolCrashTest do
       Process.sleep(ms)
       {:ok, "done:#{id}"}
     end
+
+@impl true
+    def meta(_args), do: name()
   end
 
   # ── Provider ───────────────────────────────────────────────────────────
@@ -407,6 +416,8 @@ defmodule Opal.Agent.ToolCrashTest do
         def description, do: "Returns unexpected"
         def parameters, do: %{"type" => "object", "properties" => %{}}
         def execute(_args, _ctx), do: :not_a_valid_return
+    @impl true
+    def meta(_args), do: name()
       end
 
       result =

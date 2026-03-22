@@ -34,6 +34,8 @@ defmodule Opal.Provider.MacroTest do
         def description, do: "A fake tool"
         def parameters, do: %{"type" => "object", "properties" => %{}}
         def execute(_args, _ctx), do: {:ok, "ok"}
+    @impl true
+    def meta(_args), do: name()
       end
 
       [tool_def] = TestProvider.convert_tools([FakeTool])
@@ -79,6 +81,8 @@ defmodule Opal.Provider.MacroTest do
         def description, do: "Another"
         def parameters, do: %{}
         def execute(_args, _ctx), do: {:ok, "ok"}
+    @impl true
+    def meta(_args), do: name()
       end
 
       assert [%{custom: "another"}] = CustomFormatProvider.convert_tools([AnotherFakeTool])

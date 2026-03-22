@@ -26,6 +26,9 @@ defmodule Opal.ToolTest do
     def execute(%{"input" => input}, _context) do
       {:ok, "Echo: #{input}"}
     end
+
+@impl true
+    def meta(_args), do: name()
   end
 
   # Validates that a module implementing Opal.Tool compiles and works
