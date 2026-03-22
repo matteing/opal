@@ -1,4 +1,4 @@
-defmodule Opal.Id do
+defmodule Opal.Util.Id do
   @moduledoc "Generates cryptographically random hex identifiers."
 
   @doc "Generates a random hex string of `byte_count` bytes (2 hex chars per byte)."

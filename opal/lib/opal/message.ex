@@ -63,7 +63,7 @@ defmodule Opal.Message do
   """
   @spec system(String.t()) :: t()
   def system(content) when is_binary(content) do
-    %__MODULE__{id: Opal.Id.generate(), role: :system, content: content}
+    %__MODULE__{id: Opal.Util.Id.generate(), role: :system, content: content}
   end
 
   @doc """
@@ -77,7 +77,7 @@ defmodule Opal.Message do
   """
   @spec user(String.t()) :: t()
   def user(content) when is_binary(content) do
-    %__MODULE__{id: Opal.Id.generate(), role: :user, content: content}
+    %__MODULE__{id: Opal.Util.Id.generate(), role: :user, content: content}
   end
 
   @doc """
@@ -92,7 +92,7 @@ defmodule Opal.Message do
   @spec assistant(String.t() | nil, [tool_call()], keyword()) :: t()
   def assistant(content, tool_calls \\ [], opts \\ []) do
     %__MODULE__{
-      id: Opal.Id.generate(),
+      id: Opal.Util.Id.generate(),
       role: :assistant,
       content: content,
       thinking: Keyword.get(opts, :thinking),
@@ -113,7 +113,7 @@ defmodule Opal.Message do
   def tool_call(call_id, name, arguments)
       when is_binary(call_id) and is_binary(name) and is_map(arguments) do
     %__MODULE__{
-      id: Opal.Id.generate(),
+      id: Opal.Util.Id.generate(),
       role: :tool_call,
       call_id: call_id,
       name: name,
@@ -134,7 +134,7 @@ defmodule Opal.Message do
   def tool_result(call_id, output, is_error \\ false)
       when is_binary(call_id) and is_binary(output) and is_boolean(is_error) do
     %__MODULE__{
-      id: Opal.Id.generate(),
+      id: Opal.Util.Id.generate(),
       role: :tool_result,
       call_id: call_id,
       content: output,

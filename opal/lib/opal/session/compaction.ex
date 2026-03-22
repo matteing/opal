@@ -161,7 +161,7 @@ defmodule Opal.Session.Compaction do
           end
 
         summary_msg = %Opal.Message{
-          id: Opal.Id.generate(),
+          id: Opal.Util.Id.generate(),
           role: :user,
           content: "[Conversation summary — older messages were compacted]\n\n#{summary_content}",
           parent_id: nil,

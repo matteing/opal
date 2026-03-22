@@ -295,7 +295,7 @@ defmodule Opal.Tool.Shell do
     dir = Path.join(System.tmp_dir!(), "opal-shell")
     File.mkdir_p!(dir)
 
-    id = Opal.Id.hex(6)
+    id = Opal.Util.Id.hex(6)
     path = Path.join(dir, "#{id}.log")
     File.write!(path, output)
     path

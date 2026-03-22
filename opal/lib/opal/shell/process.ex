@@ -85,7 +85,7 @@ defmodule Opal.Shell.Process do
 
   @impl true
   def handle_call({:run, executable, args, port_opts, wait_ms, emit}, from, state) do
-    id = Opal.Id.generate()
+    id = Opal.Util.Id.generate()
 
     full_opts =
       [

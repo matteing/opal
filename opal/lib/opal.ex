@@ -15,7 +15,8 @@ defmodule Opal do
       end)
   """
 
-  alias Opal.{Agent, Config, Events, Id, Provider.Model, Session, Settings}
+  alias Opal.{Agent, Config, Events, Provider.Model, Session, Settings}
+  alias Opal.Util.Id
 
   # -- Types ------------------------------------------------------------------
 
