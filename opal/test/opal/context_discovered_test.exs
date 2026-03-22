@@ -23,7 +23,6 @@ defmodule Opal.ContextDiscoveredTest do
           working_dir: test_dir,
           tools: [],
           tool_supervisor: nil,
-          sub_agent_supervisor: nil,
           session: false
         )
 
@@ -55,7 +54,6 @@ defmodule Opal.ContextDiscoveredTest do
           working_dir: test_dir,
           tools: [],
           tool_supervisor: nil,
-          sub_agent_supervisor: nil,
           session: false
         )
 

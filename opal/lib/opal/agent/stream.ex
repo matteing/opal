@@ -68,7 +68,10 @@ defmodule Opal.Agent.Stream do
         acc
 
       %ReqSSE.Message{data: json}, acc ->
-        Logger.debug("SSE message (#{byte_size(json)} bytes): #{inspect(String.slice(json, 0, 300))}")
+        Logger.debug(
+          "SSE message (#{byte_size(json)} bytes): #{inspect(String.slice(json, 0, 300))}"
+        )
+
         dispatch_sse_events(json, acc)
     end)
   end

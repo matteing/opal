@@ -218,13 +218,10 @@ defmodule Opal.RPC.IntegrationTest do
       do: {"tool_start", %{tool: tool, call_id: "", args: args, meta: tool}}
 
     defp serialize_event({:tool_execution_end, tool, call_id, result}),
-      do:
-        {"tool_end",
-         %{tool: tool, call_id: call_id, result: serialize_tool_result(result)}}
+      do: {"tool_end", %{tool: tool, call_id: call_id, result: serialize_tool_result(result)}}
 
     defp serialize_event({:tool_execution_end, tool, result}),
-      do:
-        {"tool_end", %{tool: tool, call_id: "", result: serialize_tool_result(result)}}
+      do: {"tool_end", %{tool: tool, call_id: "", result: serialize_tool_result(result)}}
 
     defp serialize_event({:turn_end, msg, _}), do: {"turn_end", %{message: serialize_msg(msg)}}
     defp serialize_event({:agent_end, _msgs}), do: {"agent_end", %{}}

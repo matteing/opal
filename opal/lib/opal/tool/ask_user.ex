@@ -6,7 +6,8 @@ defmodule Opal.Tool.AskUser do
   tool task until the user responds. Supports both freeform text input
   and optional multiple-choice questions.
 
-  Not available to sub-agents — only top-level agents prompt the user.
+  Only available to agents with an attached session — ephemeral agents
+  cannot prompt the user.
   """
 
   @behaviour Opal.Tool

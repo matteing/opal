@@ -112,7 +112,6 @@ defmodule Opal.RPC.Protocol do
           type:
             {:object,
              %{
-               "sub_agents" => :boolean,
                "skills" => :boolean,
                "debug" => :boolean
              }},
@@ -339,17 +338,6 @@ defmodule Opal.RPC.Protocol do
       ]
     },
     %{
-      method: "tasks/list",
-      direction: :client_to_server,
-      description: "List active tasks (open, in_progress, blocked) for a session's project.",
-      params: [
-        %{name: "session_id", type: :string, required: true, description: "Target session ID."}
-      ],
-      result: [
-        %{name: "tasks", type: {:array, :object}, description: "Array of task objects."}
-      ]
-    },
-    %{
       method: "settings/get",
       direction: :client_to_server,
       description: "Get all persistent user settings.",
@@ -387,7 +375,6 @@ defmodule Opal.RPC.Protocol do
           type:
             {:object,
              %{
-               "sub_agents" => :boolean,
                "skills" => :boolean,
                "debug" => :boolean
              }},
@@ -417,7 +404,6 @@ defmodule Opal.RPC.Protocol do
           type:
             {:object,
              %{
-               "sub_agents" => :boolean,
                "skills" => :boolean,
                "debug" => :boolean
              }},
@@ -437,7 +423,6 @@ defmodule Opal.RPC.Protocol do
           type:
             {:object,
              %{
-               "sub_agents" => :boolean,
                "skills" => :boolean,
                "debug" => :boolean
              }},
@@ -694,24 +679,6 @@ defmodule Opal.RPC.Protocol do
       fields: [
         %{name: "name", type: :string, description: "Skill name."},
         %{name: "description", type: :string, description: "Skill description."}
-      ]
-    },
-    %{
-      type: "sub_agent_event",
-      description: "An event forwarded from a spawned sub-agent.",
-      fields: [
-        %{
-          name: "parent_call_id",
-          type: :string,
-          description: "The call_id of the parent sub_agent tool invocation."
-        },
-        %{name: "sub_session_id", type: :string, description: "The sub-agent's session ID."},
-        %{
-          name: "inner",
-          type: :object,
-          description:
-            "The wrapped agent event from the sub-agent (contains a type field and event-specific data)."
-        }
       ]
     },
     %{

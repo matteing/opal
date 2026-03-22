@@ -539,10 +539,39 @@ defmodule Opal.Agent.ConversationIntegrityTest do
         else
           # Subsequent calls: succeed with text
           events = [
-            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message", "id" => "item_ok"}})}],
-            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Recovered!"})}],
-            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.done", "text" => "Recovered!"})}],
-            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r2", "status" => "completed", "usage" => %{}}})}]
+            [
+              %ReqSSE.Message{
+                data:
+                  Jason.encode!(%{
+                    "type" => "response.output_item.added",
+                    "item" => %{"type" => "message", "id" => "item_ok"}
+                  })
+              }
+            ],
+            [
+              %ReqSSE.Message{
+                data:
+                  Jason.encode!(%{
+                    "type" => "response.output_text.delta",
+                    "delta" => "Recovered!"
+                  })
+              }
+            ],
+            [
+              %ReqSSE.Message{
+                data:
+                  Jason.encode!(%{"type" => "response.output_text.done", "text" => "Recovered!"})
+              }
+            ],
+            [
+              %ReqSSE.Message{
+                data:
+                  Jason.encode!(%{
+                    "type" => "response.completed",
+                    "response" => %{"id" => "r2", "status" => "completed", "usage" => %{}}
+                  })
+              }
+            ]
           ]
 
           for event <- events do

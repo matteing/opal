@@ -59,7 +59,6 @@ defmodule Opal.SessionServerTest do
       # Task.Supervisor and DynamicSupervisor register via Registry tuples
       assert Opal.Agent in child_ids
       assert Enum.any?(child_ids, fn id -> match?({Opal.Registry, {:tool_sup, _}}, id) end)
-      assert Enum.any?(child_ids, fn id -> match?({Opal.Registry, {:sub_agent_sup, _}}, id) end)
     end
 
     test "children are all alive" do
@@ -154,14 +153,6 @@ defmodule Opal.SessionServerTest do
       %{session_id: session_id} = start_session_server()
 
       [{pid, _}] = Registry.lookup(Opal.Registry, {:tool_sup, session_id})
-      assert is_pid(pid)
-      assert Process.alive?(pid)
-    end
-
-    test "sub-agent supervisor is discoverable via Registry" do
-      %{session_id: session_id} = start_session_server()
-
-      [{pid, _}] = Registry.lookup(Opal.Registry, {:sub_agent_sup, session_id})
       assert is_pid(pid)
       assert Process.alive?(pid)
     end

@@ -631,20 +631,42 @@ defmodule Opal.Agent.StreamTest do
 
     test "skips nil and empty data" do
       state = base_state() |> Map.put(:provider, Opal.Provider.Copilot)
-      result = Stream.dispatch_sse_messages([%ReqSSE.Message{data: nil}, %ReqSSE.Message{data: ""}], state)
+
+      result =
+        Stream.dispatch_sse_messages(
+          [%ReqSSE.Message{data: nil}, %ReqSSE.Message{data: ""}],
+          state
+        )
+
       assert result.current_text == ""
     end
 
     test "processes a valid data message" do
       state = base_state() |> Map.put(:provider, Opal.Provider.Copilot)
-      json = Jason.encode!(%{"choices" => [%{"index" => 0, "delta" => %{"content" => "ok", "role" => "assistant"}}], "created" => 1})
+
+      json =
+        Jason.encode!(%{
+          "choices" => [%{"index" => 0, "delta" => %{"content" => "ok", "role" => "assistant"}}],
+          "created" => 1
+        })
+
       result = Stream.dispatch_sse_messages([%ReqSSE.Message{data: json}], state)
       assert result.current_text == "ok"
     end
 
     test "processes multiple messages in order" do
       state = base_state() |> Map.put(:provider, Opal.Provider.Copilot)
-      make = fn content -> %ReqSSE.Message{data: Jason.encode!(%{"choices" => [%{"index" => 0, "delta" => %{"content" => content}}], "created" => 1})} end
+
+      make = fn content ->
+        %ReqSSE.Message{
+          data:
+            Jason.encode!(%{
+              "choices" => [%{"index" => 0, "delta" => %{"content" => content}}],
+              "created" => 1
+            })
+        }
+      end
+
       result = Stream.dispatch_sse_messages([make.("a"), make.("b"), make.("c")], state)
       assert result.current_text == "abc"
     end

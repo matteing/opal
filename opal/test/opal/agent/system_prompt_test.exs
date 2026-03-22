@@ -32,14 +32,6 @@ defmodule Opal.Agent.SystemPromptTest do
     def name, do: "powershell"
   end
 
-  defmodule SubAgentStub do
-    def name, do: "sub_agent"
-  end
-
-  defmodule TasksStub do
-    def name, do: "tasks"
-  end
-
   defmodule CustomStub do
     def name, do: "custom_tool"
   end
@@ -125,81 +117,30 @@ defmodule Opal.Agent.SystemPromptTest do
       tools = [ReadStub, WriteStub, ShellStub]
       result = SystemPrompt.build_guidelines(tools)
 
-      assert result =~ "in parallel in a single response"
-      assert result =~ "depends on them"
+      assert result =~ "in the same response rather than sequentially"
+      assert result =~ "MUST wait for previous calls to finish"
     end
 
     test "does not emit parallel call guidance with only 2 tools" do
       tools = [ReadStub, ShellStub]
       result = SystemPrompt.build_guidelines(tools)
 
-      refute result =~ "in parallel in a single response"
+      refute result =~ "in the same response rather than sequentially"
     end
 
     test "includes parameter validation guidance with 3+ tools" do
       tools = [ReadStub, WriteStub, ShellStub]
       result = SystemPrompt.build_guidelines(tools)
 
-      assert result =~ "exact parameter values"
-      assert result =~ "do not invent optional parameters"
+      assert result =~ "use that value EXACTLY"
+      assert result =~ "DO NOT make up values"
     end
 
     test "warns against using placeholders for dependent values" do
       tools = [ReadStub, EditStub, ShellStub]
       result = SystemPrompt.build_guidelines(tools)
 
-      assert result =~ "Wait for results only when a subsequent call depends on them"
-    end
-  end
-
-  describe "sub-agent parallelism" do
-    test "emits sub-agent guidance when sub_agent tool is active" do
-      tools = [ReadStub, ShellStub, SubAgentStub]
-      result = SystemPrompt.build_guidelines(tools)
-
-      assert result =~ "sub_agent"
-      assert result =~ "independent workstreams"
-    end
-
-    test "does not emit sub-agent guidance when sub_agent is absent" do
-      tools = [ReadStub, WriteStub, ShellStub]
-      result = SystemPrompt.build_guidelines(tools)
-
-      refute result =~ "sub_agent"
-      refute result =~ "independent workstreams"
-    end
-
-    test "warns against overuse on simple tasks" do
-      tools = [SubAgentStub, ShellStub]
-      result = SystemPrompt.build_guidelines(tools)
-
-      assert result =~ "Do not spawn sub-agents for single tool calls"
-    end
-
-    test "lists available models from same provider when state is provided" do
-      tools = [SubAgentStub, ShellStub]
-
-      state = %Opal.Agent.State{
-        session_id: "test-123",
-        model: %Opal.Provider.Model{provider: :copilot, id: "claude-sonnet-4"},
-        working_dir: "/tmp",
-        config: Opal.Config.new()
-      }
-
-      result = SystemPrompt.build_guidelines(tools, state)
-
-      assert result =~ "Available models for sub-agents"
-      assert result =~ "claude-sonnet-4 (current)"
-      assert result =~ "claude-haiku"
-      assert result =~ "smaller/faster models"
-    end
-
-    test "omits model list when state is nil" do
-      tools = [SubAgentStub, ShellStub]
-      result = SystemPrompt.build_guidelines(tools)
-
-      assert result =~ "sub_agent"
-      refute result =~ "Available models"
+      assert result =~ "MUST wait for previous calls to finish first to determine the"
     end
   end
 
@@ -284,11 +225,11 @@ defmodule Opal.Agent.SystemPromptTest do
       ]
 
       result = SystemPrompt.format_skills(skills, config)
-      assert result =~ "<available_skills>"
-      assert result =~ "</available_skills>"
+      assert result =~ "<skills>"
+      assert result =~ "</skills>"
       assert result =~ "use_skill"
-      assert result =~ "<name>lint</name>"
-      assert result =~ "<name>test</name>"
+      assert result =~ "**lint**"
+      assert result =~ "**test**"
     end
   end
 

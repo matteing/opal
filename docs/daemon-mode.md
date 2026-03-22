@@ -151,7 +151,6 @@ graph TD
 
     SeSup --> SS["Opal.SessionServer<br/><code>:rest_for_one</code><br/><i>per session</i>"]
     SS --> TS["Task.Supervisor"]
-    SS --> DS["DynamicSupervisor<br/><i>sub-agents</i>"]
     SS --> Ses["Opal.Session<br/><i>GenServer, DETS</i>"]
     SS --> Ag["Opal.Agent<br/><i>:gen_statem</i>"]
 ```
@@ -775,7 +774,6 @@ graph LR
 | **Unix domain sockets** | TCP localhost is fast enough. UDS is a latency optimization (~2× faster) for later |
 | **Session sharing (`--attach`)** | Requires multi-client event routing complexity |
 | **Desktop notifications** | Platform-specific, not core to agent UX |
-| **Agent-to-agent messaging** | Sub-agents already work for delegation |
 | **Web UI for sessions** | Entirely separate project |
 | **CubDB/SQLite for sessions** | DETS with atomic-rename fallback is sufficient |
 | **Write-ahead log (WAL)** | Adds complexity; current auto-save covers most cases |

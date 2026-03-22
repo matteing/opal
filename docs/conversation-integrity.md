@@ -12,10 +12,6 @@ Several runtime scenarios can corrupt the message sequence:
 | **Stream error from provider** | `finalize_response` creates a broken assistant message from partial stream data |
 | **Compaction** | Summary replacement can orphan `tool_result` messages whose parent assistant was removed |
 | **Session reload** | Previously-corrupted history can be reintroduced from persisted sessions |
-| **Sub-agent abort** | Long-running `sub_agent` calls (120s timeout) are a common abort trigger |
-
-A frequent trigger is aborting during `sub_agent` execution — it has a 120s blocking receive loop, so user aborts are common.
-
 ## Defense Layers
 
 The fix uses three independent layers so that any single failure is caught by the next:

@@ -6,9 +6,9 @@ Opal is built on OTP — the Erlang framework for building concurrent, fault-tol
 
 Most agent frameworks are written in TypeScript or Python and have to reinvent concurrency primitives from scratch — process management, supervision, message passing, graceful shutdown, and crash isolation all become application-level concerns. In OTP, these are built into the runtime.
 
-An agent is naturally a process: it has long-lived state (conversation history, model config), reacts to events (user prompts, streaming chunks, tool results), and needs to be independently stoppable and restartable. A sub-agent is just another process under a supervisor. Tool execution is a supervised task. Event broadcasting is a registry dispatch. None of these required custom infrastructure — they fell out of OTP's existing primitives.
+An agent is naturally a process: it has long-lived state (conversation history, model config), reacts to events (user prompts, streaming chunks, tool results), and needs to be independently stoppable and restartable. Tool execution is a supervised task. Event broadcasting is a registry dispatch. None of these required custom infrastructure — they fell out of OTP's existing primitives.
 
-The result is significantly less code. Opal's entire agent loop, session management, tool execution, sub-agent spawning, and fault isolation fit in a few thousand lines of Elixir. An equivalent TypeScript system would need to build or import a process manager, a task queue, a pub/sub bus, graceful shutdown hooks, and crash recovery logic — each a source of bugs and maintenance burden.
+The result is significantly less code. Opal's entire agent loop, session management, tool execution, and fault isolation fit in a few thousand lines of Elixir. An equivalent TypeScript system would need to build or import a process manager, a task queue, a pub/sub bus, graceful shutdown hooks, and crash recovery logic — each a source of bugs and maintenance burden.
 
 This makes Opal a natural foundation for building something like an open-source Claude — the supervision and concurrency model scales from a single CLI agent to a multi-session server without architectural changes.
 
@@ -23,7 +23,6 @@ A running Opal node is composed of global transport processes plus per-session c
 | `Opal.RPC.Server` | GenServer | JSON-RPC transport over stdin/stdout (global) |
 | `Opal.SessionServer` | Supervisor | Per-session supervisor (`:rest_for_one`) |
 | Tool tasks | Task (under Task.Supervisor) | Supervised non-blocking tool execution |
-| Sub-agents | Opal.Agent (under DynamicSupervisor) | Delegated child agents |
 
 Each session is isolated. A crash in one session's agent cannot affect another session.
 
@@ -35,7 +34,7 @@ Each session is isolated. A crash in one session's agent cannot affect another s
 
 **Calls** for synchronous coordination:
 - `{:prompt, text}` — start a new turn (or queue when busy)
-- `:get_state` / `:get_context` — snapshots for introspection and sub-agent spawning
+- `:get_state` / `:get_context` — snapshots for introspection
 - `{:set_model, model}` / `{:set_provider, module}` — runtime model/provider swap
 - `{:sync_messages, messages}` / `{:configure, attrs}` — session sync and runtime config changes
 
@@ -85,7 +84,7 @@ Maps structured keys to process PIDs. This replaces named processes (which would
 Key types:
 - `{:session, id}` → Session process
 - `{:tool_sup, id}` → Task.Supervisor for tool execution
-- `{:sub_agent_sup, id}` → DynamicSupervisor for sub-agents
+
 ### Duplicate Registry (`Opal.Events.Registry`)
 
 Pub/sub backbone. Multiple processes can register under the same session ID:
@@ -116,11 +115,9 @@ Messages are keyed by UUID. The table is private (only the owning process can ac
 
 The table is deleted in `terminate/2` — when the session supervisor shuts down, the Session process terminates and its ETS table is reclaimed.
 
-### DETS — Task Persistence
+### DETS — Session Persistence
 
-`Opal.Tool.Tasks` uses DETS (disk-backed ETS) in hashed files under `~/.opal/tasks/` (for example `~/.opal/tasks/<hash>.dets`) for the task tracker. Unlike ETS, DETS survives process restarts. This is intentional — tasks represent cross-session work plans.
-
-DETS is opened/closed per tool invocation rather than held open in a process. This is simpler than wrapping it in a GenServer and acceptable for the low-frequency access pattern of task management.
+Conversation sessions use DETS for persistence. See `Opal.Session` for details.
 
 ## Task.Supervisor — Tool Execution
 
@@ -136,26 +133,15 @@ Tool calls are dispatched concurrently per turn, and each tool runs in a supervi
 
 This is safer than spawning raw processes: supervised tasks are tracked, limited, and cleaned up on shutdown.
 
-## DynamicSupervisor — Sub-Agents
-
-Sub-agents are full `Opal.Agent` processes started under a per-session DynamicSupervisor:
-
-```elixir
-DynamicSupervisor.start_child(sub_agent_supervisor, {Opal.Agent, opts})
-```
-
-The DynamicSupervisor is chosen over a static Supervisor because sub-agents are created on demand (the agent decides at runtime whether to delegate). Sub-agents inherit the parent's config but run independently — they have their own streaming connections and state while sharing the per-session tool supervisor.
-
-Depth is limited to one level by excluding `Opal.Tool.SubAgent` from the sub-agent's tool list.
-
 ## Supervision Strategies
 
 | Supervisor | Strategy | Rationale |
 |-----------|----------|-----------|
 | Application | `:rest_for_one` | Core infrastructure starts first; later children restart if an earlier dependency fails |
 | SessionSupervisor | `:one_for_one` (Dynamic) | Sessions are independent of each other |
-| SessionServer | `:rest_for_one` | If infrastructure (Task.Supervisor, DynamicSupervisor) crashes, restart the Agent that depends on it |
-The `:rest_for_one` strategy in SessionServer is the key design choice. Children are ordered: Task.Supervisor → DynamicSupervisor → [Session] → Agent. If the Task.Supervisor crashes, the Agent restarts (it can't function without tool execution). If the Agent crashes, infrastructure children stay up and the Agent restarts cleanly.
+| SessionServer | `:rest_for_one` | If infrastructure (Task.Supervisor) crashes, restart the Agent that depends on it |
+
+The `:rest_for_one` strategy in SessionServer is the key design choice. Children are ordered: Task.Supervisor → [Session] → Agent. If the Task.Supervisor crashes, the Agent restarts (it can't function without tool execution). If the Agent crashes, infrastructure children stay up and the Agent restarts cleanly.
 
 ## Port — External I/O
 
@@ -210,5 +196,4 @@ Process.send_after(self(), :retry_turn, delay_ms)
 | `lib/opal/session/server.ex` | Per-session Supervisor |
 | `lib/opal/events.ex` | Pub/sub helpers (subscribe, broadcast) |
 | `lib/opal/rpc/server.ex` | JSON-RPC transport GenServer |
-| `lib/opal/agent/spawner.ex` | Sub-agent spawning helpers |
 

@@ -18,7 +18,6 @@ defmodule Opal.Agent.State do
   - **Token tracking** — `token_usage`, `last_prompt_tokens`, `last_usage_msg_index`
   - **Context** — `context_entries` (raw discovered file data), `context_files` (paths for UI)
   - **Skills** — `available_skills`, `active_skills`
-  - **Sub-agents** — `sub_agent_supervisor`
   - **Resilience** — `retry_count`, `max_retries`, `retry_base_delay_ms`, `retry_max_delay_ms`,
     `overflow_detected`
   - **Interaction** — `pending_messages`
@@ -127,10 +126,6 @@ defmodule Opal.Agent.State do
           # Names of skills that have been loaded into the conversation.
           active_skills: [String.t()],
 
-          # ── Sub-agents ───────────────────────────────────────────────
-          # Supervisor for child agent processes.
-          sub_agent_supervisor: atom() | pid(),
-
           # ── Resilience ───────────────────────────────────────────────
           # Consecutive retry count for the current turn.
           retry_count: non_neg_integer(),
@@ -209,9 +204,6 @@ defmodule Opal.Agent.State do
     # Skills
     available_skills: [],
     active_skills: [],
-
-    # Sub-agents
-    sub_agent_supervisor: nil,
 
     # Resilience
     retry_count: 0,

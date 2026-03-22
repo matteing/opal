@@ -11,14 +11,12 @@ The supervision tree provides solid **process-level** fault tolerance:
 ```mermaid
 flowchart TD
     ToolCrash["Tool task crashes"] --> ErrorResult["Agent receives error result<br/><small>continues turn normally</small>"]
-    SubAgentCrash["Sub-agent crashes"] --> ToolError["Parent gets tool error<br/><small>continues turn normally</small>"]
     AgentCrash["Agent :gen_statem crashes"] --> RestForOne["SessionServer restarts it<br/><small>:rest_for_one strategy</small>"]
     SessionCrash["SessionServer crashes"] --> DynSup["SessionSupervisor terminates subtree<br/><small>session is lost</small>"]
 ```
 
 - **Tool crashes** are non-fatal — `{:DOWN, ref, ...}` is caught and converted to an error tool result so the LLM always gets a response.
-- **Sub-agent crashes** are contained — the parent agent's tool call receives an error and continues.
-- **Agent crashes** trigger a `:rest_for_one` restart. The `Task.Supervisor`, `DynamicSupervisor`, and `Session` GenServer survive because they're started before the agent.
+- **Agent crashes** trigger a `:rest_for_one` restart. The `Task.Supervisor` and `Session` GenServer survive because they're started before the agent.
 - **Session isolation** — one session's crash cannot affect another.
 
 ### What breaks
@@ -135,7 +133,7 @@ Subscribers can recover UI state, but they still cannot inspect the original cra
 
 ## Gap 7: Orphaned tool_use After Abort — Resolved
 
-**Problem:** When the user aborts during tool execution (especially long-running tools like `sub_agent`), the assistant message containing `tool_calls` is already committed but the corresponding `tool_result` messages are never added. On the next prompt, the provider rejects the malformed history with `invalid_request_body`.
+**Problem:** When the user aborts during tool execution, the assistant message containing `tool_calls` is already committed but the corresponding `tool_result` messages are never added. On the next prompt, the provider rejects the malformed history with `invalid_request_body`.
 
 **Status: Fixed** — see [Conversation Integrity](conversation-integrity.md) for the full design.
 

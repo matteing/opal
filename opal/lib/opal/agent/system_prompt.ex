@@ -100,8 +100,7 @@ defmodule Opal.Agent.SystemPrompt do
     You are Opal, an expert AI coding assistant.
 
     You help users understand, create, debug, and improve code. You have
-    access to tools for reading and editing files, running shell commands,
-    and delegating work to sub-agents.
+    access to tools for reading and editing files and running shell commands.
 
     ## Principles
 
@@ -334,16 +333,6 @@ defmodule Opal.Agent.SystemPrompt do
            "dependent values (do NOT use placeholders or guess missing parameters)."
        ]},
 
-      # sub_agent spawns a child agent for independent workstreams.
-      # Warn against overuse — simple sequential tasks don't need delegation.
-      # Include available sibling models so the agent can pick cheaper ones.
-      {has?.("sub_agent"),
-       [
-         "Use `sub_agent` to delegate independent workstreams that can run in parallel. " <>
-           "Avoid sub-agents for simple tasks a single tool call can handle."
-         | format_available_models(state)
-       ]},
-
       # Status tags let the TUI show progress during multi-step work.
       # Active whenever the agent has any tools (i.e. can do real work).
       {MapSet.size(names) > 0,
@@ -364,56 +353,6 @@ defmodule Opal.Agent.SystemPrompt do
     # normalizes single strings and lists into a flat list of guideline texts.
     for {true, texts} <- rules, text <- List.wrap(texts), do: text
   end
-
-  # Returns a list of guideline strings describing available models for
-  # sub-agent delegation.  Queries LLMDB for all active, non-deprecated
-  # models from the same provider, formats each as "id (Name) [tags]",
-  # and wraps them in a single guideline line.
-  #
-  # Returns [] when state is nil, the provider is unknown, or no sibling
-  # models are found — the caller prepends/appends to a list, so an empty
-  # list simply contributes nothing.
-  defp format_available_models(nil), do: []
-
-  defp format_available_models(%State{model: model}) do
-    provider = model.provider
-    llmdb_provider = if provider == :copilot, do: :github_copilot, else: provider
-
-    models =
-      LLMDB.models()
-      |> Enum.filter(fn m ->
-        m.provider == llmdb_provider and not m.deprecated and not m.retired
-      end)
-      |> Enum.sort_by(& &1.id)
-
-    case models do
-      [] ->
-        []
-
-      models ->
-        current_id = model.id
-
-        entries =
-          Enum.map_join(models, ", ", fn m ->
-            label = format_model_entry(m)
-            if m.id == current_id, do: label <> " (current)", else: label
-          end)
-
-        [
-          "Available models for sub-agents: #{entries}. " <>
-            "Use smaller/faster models for simple sub-tasks to save tokens."
-        ]
-    end
-  rescue
-    _ -> []
-  end
-
-  # Formats a single model entry: "id" or "id [tag1, tag2]" if tags exist.
-  defp format_model_entry(%{id: id, tags: tags}) when is_list(tags) and tags != [] do
-    "#{id} [#{Enum.join(tags, ", ")}]"
-  end
-
-  defp format_model_entry(%{id: id}), do: id
 
   # Returns true when the agent should ask the model to emit a <title> tag.
   # Conditions: auto_title enabled, session attached, first turn (≤ 1 message),

@@ -81,10 +81,26 @@ defmodule Opal.Agent.ProviderErrorsTest do
 
       spawn(fn ->
         Process.sleep(5)
-        event = [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})}]
+
+        event = [
+          %ReqSSE.Message{
+            data:
+              Jason.encode!(%{
+                "type" => "response.output_item.added",
+                "item" => %{"type" => "message"}
+              })
+          }
+        ]
+
         send(caller, {ref, {:data, event}})
         Process.sleep(5)
-        delta = [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "partial"})}]
+
+        delta = [
+          %ReqSSE.Message{
+            data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "partial"})
+          }
+        ]
+
         send(caller, {ref, {:data, delta}})
         # Simulate abrupt stream death — no :done sent, process exits
       end)

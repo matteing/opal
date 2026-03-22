@@ -173,30 +173,6 @@ defmodule Opal.RPC.ServerTransportTest do
       })
     end
 
-    test "sub_agent_start event" do
-      event = {:sub_agent_start, %{model: "gpt-5", label: "helper", tools: ["read_file"]}}
-
-      assert_serializes(event, "sub_agent_start", %{
-        model: "gpt-5",
-        label: "helper",
-        tools: ["read_file"]
-      })
-    end
-
-    test "sub_agent_event wraps inner event" do
-      inner = {:message_delta, %{delta: "sub text"}}
-      event = {:sub_agent_event, "parent_call", "sub_session", inner}
-
-      notification = event_to_notification("test-session", event)
-      decoded = Jason.decode!(notification)
-
-      assert decoded["params"]["type"] == "sub_agent_event"
-      assert decoded["params"]["parent_call_id"] == "parent_call"
-      assert decoded["params"]["sub_session_id"] == "sub_session"
-      assert decoded["params"]["inner"]["type"] == "message_delta"
-      assert decoded["params"]["inner"]["delta"] == "sub text"
-    end
-
     test "context_discovered event" do
       event = {:context_discovered, ["AGENTS.md", ".opal/config.yml"]}
       assert_serializes(event, "context_discovered", %{files: ["AGENTS.md", ".opal/config.yml"]})
@@ -320,10 +296,16 @@ defmodule Opal.RPC.ServerTransportTest do
 
       # Simulate two request_client calls
       {state1, output1} =
-        handle_call_capture({:request_client, "client/request", %{kind: "confirm", q: "?"}}, state)
+        handle_call_capture(
+          {:request_client, "client/request", %{kind: "confirm", q: "?"}},
+          state
+        )
 
       {state2, output2} =
-        handle_call_capture({:request_client, "client/request", %{kind: "input", prompt: "enter"}}, state1)
+        handle_call_capture(
+          {:request_client, "client/request", %{kind: "input", prompt: "enter"}},
+          state1
+        )
 
       decoded1 = Jason.decode!(output1)
       decoded2 = Jason.decode!(output2)
@@ -595,26 +577,10 @@ defmodule Opal.RPC.ServerTransportTest do
     do: {"tool_start", %{tool: tool, call_id: "", args: args, meta: tool}}
 
   defp serialize_event({:tool_execution_end, tool, call_id, result}),
-    do:
-      {"tool_end",
-       %{tool: tool, call_id: call_id, result: serialize_tool_result(result)}}
+    do: {"tool_end", %{tool: tool, call_id: call_id, result: serialize_tool_result(result)}}
 
   defp serialize_event({:tool_execution_end, tool, result}),
     do: {"tool_end", %{tool: tool, call_id: "", result: serialize_tool_result(result)}}
-
-  defp serialize_event({:sub_agent_start, %{model: model, label: label, tools: tools}}),
-    do: {"sub_agent_start", %{model: model, label: label, tools: tools}}
-
-  defp serialize_event({:sub_agent_event, parent_call_id, sub_session_id, inner}) do
-    {inner_type, inner_data} = serialize_event(inner)
-
-    {"sub_agent_event",
-     %{
-       parent_call_id: parent_call_id,
-       sub_session_id: sub_session_id,
-       inner: Map.put(inner_data, :type, inner_type)
-     }}
-  end
 
   defp serialize_event({:context_discovered, files}),
     do: {"context_discovered", %{files: files}}

@@ -149,7 +149,6 @@ defmodule Opal.RPC.ServerDispatchTest do
       assert {:ok, %{features: features, tools: tools}} =
                Server.dispatch("opal/config/get", %{"session_id" => sid})
 
-      assert is_boolean(features.sub_agents)
       assert is_boolean(features.skills)
       assert is_boolean(features.debug)
       assert is_list(tools.all)
@@ -172,11 +171,10 @@ defmodule Opal.RPC.ServerDispatchTest do
       assert {:ok, %{features: features, tools: tools}} =
                Server.dispatch("opal/config/set", %{
                  "session_id" => sid,
-                 "features" => %{"sub_agents" => false, "debug" => true},
+                 "features" => %{"debug" => true},
                  "tools" => enabled_tools
                })
 
-      refute features.sub_agents
       assert features.debug
       assert first_tool in tools.enabled
       assert "debug_state" in tools.enabled
@@ -201,7 +199,7 @@ defmodule Opal.RPC.ServerDispatchTest do
       assert {:ok, %{session_id: sid}} =
                Server.dispatch("session/start", %{
                  "working_dir" => File.cwd!(),
-                 "features" => %{"sub_agents" => false}
+                 "features" => %{"debug" => true}
                })
 
       on_exit(fn ->
@@ -214,7 +212,7 @@ defmodule Opal.RPC.ServerDispatchTest do
       assert {:ok, %{features: features}} =
                Server.dispatch("opal/config/get", %{"session_id" => sid})
 
-      refute features.sub_agents
+      assert features.debug
     end
   end
 
@@ -246,17 +244,6 @@ defmodule Opal.RPC.ServerDispatchTest do
     test "returns error for non-map settings" do
       assert {:error, -32602, _, nil} =
                Server.dispatch("settings/save", %{"settings" => "not a map"})
-    end
-  end
-
-  describe "handle/2 tasks/list" do
-    test "returns error for missing session_id" do
-      assert {:error, -32602, _, nil} = Server.dispatch("tasks/list", %{})
-    end
-
-    test "returns error for nonexistent session" do
-      assert {:error, -32602, "Session not found", _} =
-               Server.dispatch("tasks/list", %{"session_id" => "nonexistent"})
     end
   end
 
@@ -354,13 +341,6 @@ defmodule Opal.RPC.ServerDispatchTest do
 
       # May succeed or fail depending on session state — both are valid paths
       assert is_tuple(result)
-    end
-
-    test "tasks/list returns tasks for valid session", %{sid: sid} do
-      assert {:ok, %{tasks: tasks}} =
-               Server.dispatch("tasks/list", %{"session_id" => sid})
-
-      assert is_list(tasks)
     end
   end
 

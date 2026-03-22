@@ -81,7 +81,6 @@ defmodule Opal.Agent.ToolRunner do
     disabled = MapSet.new(disabled_tools)
 
     gates = [
-      {not config.features.sub_agents.enabled, &(&1 == Opal.Tool.SubAgent)},
       {not config.features.debug.enabled, &(&1 == Opal.Tool.DebugState)},
       {not (config.features.skills.enabled and skills != []), &(&1 == Opal.Tool.UseSkill)}
     ]

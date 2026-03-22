@@ -11,8 +11,6 @@ Opal uses two directory hierarchies: a **global data directory** for runtime sta
 ├── node                          # Erlang distribution discovery file
 ├── sessions/                     # Saved conversation state
 │   └── {session_id}.dets         # One session per file (DETS)
-├── tasks/                        # Task databases (created on first use by tasks tool)
-│   └── {scope_hash}.dets         # DETS file keyed by session_id (or working-dir fallback)
 ├── skills/                       # Global skill directories (user-created, not auto-created)
 └── logs/                         # Reserved for structured logging
 
@@ -99,16 +97,6 @@ Sessions are written when `auto_save: true` or explicitly via `Opal.Session.save
 
 Reserved directory for structured logging output. Created by `Opal.Config.ensure_dirs!/1` but not currently populated.
 
-## Runtime Data (`~/.opal/tasks/`)
-
-### `{scope_hash}.dets`
-
-Erlang DETS (Disk Erlang Term Storage) file for the task tracker tool. Managed by `Opal.Tool.Tasks`.
-
-Each scope key gets a unique DETS file named by a SHA-256 hash (first 12 chars, URL-safe base64). Scope is session ID when available, with working-directory fallback for compatibility. This keeps runtime data in the global data directory rather than mixing it with project configuration in `{project}/.opal/`.
-
-Each record contains: `id`, `label`, `status`, `priority`, `group_name`, `tags`, `due`, `notes`, `blocked_by`, `created_at`, `updated_at`.
-
 ## Temporary Files
 
 ### `{System.tmp_dir!()}/opal-shell/{id}.log`
@@ -132,7 +120,7 @@ if data_dir = System.get_env("OPAL_DATA_DIR") do
 end
 ```
 
-`Opal.Config.ensure_dirs!/1` auto-creates `data_dir`, `sessions/`, and `logs/` on session start. The `tasks/` directory is created lazily by `Opal.Tool.Tasks` on first use; `skills/` is scanned if present but must be created manually.
+`Opal.Config.ensure_dirs!/1` auto-creates `data_dir`, `sessions/`, and `logs/` on session start. `skills/` is scanned if present but must be created manually.
 
 ## Source
 
@@ -140,7 +128,6 @@ end
 - `opal/lib/opal/auth/copilot.ex` — Copilot token persistence (`save_token/1`, `load_token/0`)
 - `opal/lib/opal/util/settings.ex` — User preferences persistence
 - `opal/lib/opal/session/session.ex` — DETS-backed session persistence
-- `opal/lib/opal/tool/tasks.ex` — DETS-backed task storage
 - `opal/lib/opal/tool/shell.ex` — Temporary output files
 - `opal/lib/opal/application.ex` — Node discovery file
 - `opal/lib/opal/context/context.ex` — Context/skills discovery paths

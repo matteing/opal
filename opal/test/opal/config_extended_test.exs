@@ -6,17 +6,16 @@ defmodule Opal.Config.FeaturesTest do
   describe "new/1" do
     test "enables all subsystems by default" do
       f = Features.new(%{})
-      assert f.sub_agents.enabled == true
       assert f.context.enabled == true
       assert f.skills.enabled == true
       assert f.debug.enabled == false
     end
 
     test "disables subsystems via override" do
-      f = Features.new(%{sub_agents: %{enabled: false}})
-      assert f.sub_agents.enabled == false
+      f = Features.new(%{skills: %{enabled: false}})
+      assert f.skills.enabled == false
       # Others unchanged
-      assert f.skills.enabled == true
+      assert f.context.enabled == true
     end
 
     test "merges subsystem options" do

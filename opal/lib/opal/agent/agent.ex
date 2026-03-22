@@ -51,7 +51,6 @@ defmodule Opal.Agent do
           | {:provider, module()}
           | {:config, Opal.Config.t()}
           | {:session, boolean() | pid()}
-          | {:sub_agent_supervisor, Supervisor.supervisor()}
         ]
 
   @doc "Starts the agent state machine."
@@ -137,7 +136,6 @@ defmodule Opal.Agent do
         provider: provider,
         session: resolve_session(session_id, opts),
         tool_supervisor: Keyword.fetch!(opts, :tool_supervisor),
-        sub_agent_supervisor: Keyword.get(opts, :sub_agent_supervisor),
         context_entries: entries,
         context_files: files,
         available_skills: skills,
@@ -546,7 +544,7 @@ defmodule Opal.Agent do
 
   # ── Configuration ─────────────────────────────────────────────────────
 
-  @feature_keys [:sub_agents, :skills, :debug]
+  @feature_keys [:skills, :debug]
 
   defp apply_config(state, attrs) do
     state

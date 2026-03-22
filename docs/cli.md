@@ -109,13 +109,11 @@ All UI state lives in the `useOpal()` hook, which returns `[OpalState, OpalActio
 
 ### Key State Fields
 
-State uses a nested `AgentView` shape. The `main` field holds the primary agent's view; sub-agents have their own views in `subAgents`.
+State uses a nested `AgentView` shape. The `main` field holds the primary agent's view.
 
 | Field | Type | Purpose |
 |-------|------|---------|
 | `main` | `AgentView` | Primary agent view (timeline, isRunning, thinking, statusMessage) |
-| `subAgents` | `Record<string, SubAgent>` | Sub-agent views keyed by session ID |
-| `activeTab` | `string` | `"main"` or a sub-agent session ID |
 | `currentModel` | `string \| null` | Active model display string |
 | `tokenUsage` | `TokenUsage \| null` | Context window utilization |
 | `confirmation` | `ConfirmRequest \| null` | Pending tool approval |
@@ -143,7 +141,6 @@ State uses a nested `AgentView` shape. The `main` field holds the primary agent'
 | `dismissModelPicker()` | Close model picker without selecting |
 | `resolveConfirmation(action)` | Respond to tool approval dialog |
 | `resolveAskUser(answer)` | Respond to agent question dialog |
-| `switchTab(tabId)` | Switch between main and sub-agent views |
 | `authStartDeviceFlow()` | Start device-code OAuth flow |
 | `authSubmitKey(providerId, apiKey)` | Submit API key for a provider |
 
@@ -156,9 +153,7 @@ State uses a nested `AgentView` shape. The `main` field holds the primary agent'
 | `/model <id>` | Switch model (e.g. `/model anthropic:claude-sonnet-4`) |
 | `/models` | Open interactive model picker |
 | `/compact` | Trigger conversation compaction |
-| `/agents` | List active sub-agents |
-| `/agents <n\|main>` | Switch view to a sub-agent or back to main |
-| `/opal` | Open runtime configuration menu (toggle Sub-agents, Skills, Debug introspection, and tools) |
+| `/opal` | Open runtime configuration menu (toggle Skills, Debug introspection, and tools) |
 | `/debug` | Toggle JSON-RPC debug panel |
 
 ## Keyboard Shortcuts
@@ -199,7 +194,6 @@ Key event types and their UI effects:
 | `toolExecutionStart` / `End` | Show tool with spinner → result |
 | `usageUpdate` | Update token counter |
 | `agentEnd` | Clear running state, ring bell |
-| `subAgentEvent` | Nest sub-tasks under parent tool |
 
 ## SDK
 

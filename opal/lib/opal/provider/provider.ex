@@ -341,11 +341,20 @@ defmodule Opal.Provider do
 
   defp extract_text(messages, provider) when is_list(messages) do
     Enum.reduce(messages, "", fn
-      %ReqSSE.Message{data: nil}, acc -> acc
-      %ReqSSE.Message{data: ""}, acc -> acc
-      %ReqSSE.Message{data: "[DONE]"}, acc -> acc
-      %ReqSSE.Message{data: json}, acc -> acc <> text_from_events(provider.parse_stream_event(json))
-      _, acc -> acc
+      %ReqSSE.Message{data: nil}, acc ->
+        acc
+
+      %ReqSSE.Message{data: ""}, acc ->
+        acc
+
+      %ReqSSE.Message{data: "[DONE]"}, acc ->
+        acc
+
+      %ReqSSE.Message{data: json}, acc ->
+        acc <> text_from_events(provider.parse_stream_event(json))
+
+      _, acc ->
+        acc
     end)
   end
 
@@ -433,9 +442,14 @@ defmodule Opal.Provider do
 
   defp extract_text_and_usage(messages, provider, usage_acc) when is_list(messages) do
     Enum.reduce(messages, {"", usage_acc}, fn
-      %ReqSSE.Message{data: nil}, acc -> acc
-      %ReqSSE.Message{data: ""}, acc -> acc
-      %ReqSSE.Message{data: "[DONE]"}, acc -> acc
+      %ReqSSE.Message{data: nil}, acc ->
+        acc
+
+      %ReqSSE.Message{data: ""}, acc ->
+        acc
+
+      %ReqSSE.Message{data: "[DONE]"}, acc ->
+        acc
 
       %ReqSSE.Message{data: json}, {text, usage} ->
         events = provider.parse_stream_event(json)

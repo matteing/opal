@@ -67,7 +67,7 @@ This creates a remote IEx shell (`--remsh`) that connects to the Opal node and a
 2. Enters a receive loop, printing each `{:opal_event, session_id, event}` message
 3. Returns `{:ok, pid}` — call `Process.exit(pid, :normal)` to stop watching without leaving IEx
 
-Since the inspector runs inside the same BEAM cluster, it receives events from every active session — including sub-agents.
+Since the inspector runs inside the same BEAM cluster, it receives events from every active session.
 
 ## Event Reference
 
@@ -79,7 +79,6 @@ Events are color-coded by category:
 | Cyan | `message_start`, `message_delta` | LLM response streaming |
 | Magenta | `thinking_start`, `thinking_delta` | Extended thinking output |
 | Yellow | `tool_start`, `tool_end`, `agent_abort` | Tool execution |
-| Blue | `sub_agent` | Sub-agent activity (wraps inner events) |
 | Red | `error` | Errors |
 | Dim | `request_start`, `request_end`, `usage_update`, others | HTTP requests, token usage |
 

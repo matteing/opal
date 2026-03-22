@@ -94,7 +94,6 @@ defmodule Opal.MixProject do
           Opal.Tool.WriteFile,
           Opal.Tool.EditFile,
           Opal.Tool.Shell,
-          Opal.Tool.SubAgent,
           Opal.Skill
         ],
         Internals: [
@@ -103,8 +102,7 @@ defmodule Opal.MixProject do
           Opal.Message,
           Opal.Path,
           Opal.SessionServer,
-          Opal.Session.Compaction,
-          Opal.SubAgent
+          Opal.Session.Compaction
         ]
       ]
     ]

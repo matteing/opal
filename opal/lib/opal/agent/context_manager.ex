@@ -144,8 +144,14 @@ defmodule Opal.Agent.ContextManager do
     # last_context_tokens (which reflects actual prompt size, not compaction cost).
     state =
       if map_size(compaction_usage) > 0 do
-        prompt = Map.get(compaction_usage, "prompt_tokens") || Map.get(compaction_usage, "input_tokens") || 0
-        completion = Map.get(compaction_usage, "completion_tokens") || Map.get(compaction_usage, "output_tokens") || 0
+        prompt =
+          Map.get(compaction_usage, "prompt_tokens") || Map.get(compaction_usage, "input_tokens") ||
+            0
+
+        completion =
+          Map.get(compaction_usage, "completion_tokens") ||
+            Map.get(compaction_usage, "output_tokens") || 0
+
         total = prompt + completion
 
         updated_usage = %{

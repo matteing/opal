@@ -17,8 +17,6 @@
 - `read_file`, `write_file`, `edit_file` - File operations with hashline tags
 - `grep` - Cross-platform search with glob filtering
 - `shell` - Cross-platform command execution
-- `sub_agent` - Spawn child agents for parallel work
-- `tasks` - Task tracker for planning
 
 ## Development
 

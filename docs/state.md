@@ -2,7 +2,7 @@
 
 The TUI's state layer is a single Zustand store composed of five independent slices. It lives at `cli/src/state/` and provides reactive state for React/Ink components via selector-based subscriptions.
 
-The key design principle is **normalized agent views** — every agent (root and sub-agents) is stored in the same `AgentView` shape inside a single map. A focus stack controls which agent the UI is viewing. Components read from the focused agent via `useActiveAgent()` and never need to know whether they're rendering the root agent or a sub-agent.
+The key design principle is **normalized agent views** — every agent is stored in the same `AgentView` shape inside a single map. A focus stack controls which agent the UI is viewing. Components read from the focused agent via `useActiveAgent()`.
 
 ## Quick Start
 
@@ -11,7 +11,7 @@ import { useOpalStore } from "../state/index.js";
 import { useActiveAgent } from "../state/selectors.js";
 
 function Conversation() {
-  // Reads from whichever agent is focused — root or sub-agent
+  // Reads from whichever agent is focused
   const { entries, isRunning, thinking } = useActiveAgent();
 
   return entries.map((entry) =>
@@ -58,7 +58,7 @@ The timeline slice stores all agent state in a normalized map:
 
 ```ts
 interface TimelineSlice {
-  agents: Record<string, AgentView>;   // root + sub-agents
+  agents: Record<string, AgentView>;   // agent views
   focusStack: string[];                // navigation breadcrumb
   tokenUsage: TokenUsage | null;       // shared across agents
   queuedMessages: string[];            // pending steering messages
@@ -71,7 +71,7 @@ interface TimelineSlice {
 }
 ```
 
-The root agent always lives at `agents["root"]`. Sub-agents are added when a `subAgentEvent` with `inner.type === "sub_agent_start"` arrives, and removed when `inner.type === "agent_end"` fires. Every agent has the same shape:
+The root agent always lives at `agents["root"]`. Every agent has the same shape:
 
 ```ts
 interface AgentView {
@@ -91,10 +91,9 @@ interface AgentView {
 
 ### Focus Navigation
 
-The `focusStack` is a breadcrumb trail. Components call `focusAgent(id)` to drill into a sub-agent and `focusBack()` to return. The focused agent is always the last element:
+The `focusStack` is a breadcrumb trail. Components call `focusAgent(id)` to push and `focusBack()` to return. The focused agent is always the last element:
 
 ```ts
-// Navigate into a sub-agent
 store.getState().focusAgent("sub-abc");
 // focusStack: ["root", "sub-abc"]
 
@@ -103,7 +102,7 @@ store.getState().focusBack();
 // focusStack: ["root"]
 ```
 
-When a focused sub-agent finishes (`agent_end`), the focus automatically pops back to the parent. The root agent can never be popped.
+The root agent can never be popped.
 
 ### Reading from the Focused Agent
 
@@ -114,7 +113,7 @@ import { useActiveAgent } from "../state/selectors.js";
 
 function MessageList() {
   const { entries, isRunning } = useActiveAgent();
-  // Works identically for root or any sub-agent
+  // Works identically for any agent view
 }
 ```
 
@@ -238,11 +237,11 @@ entries.map((entry) => {
 
 **Event flow.** The session slice receives raw `AgentEvent` objects from the SDK's event subscription. It batches them in a 32ms window (coalescing streaming deltas) then calls `applyEvents()` on the timeline slice. Terminal events (`agentEnd`, `agentAbort`, `error`) flush immediately.
 
-**Event normalization.** Inside `applyEvent()`, most event types route to the root agent via `reduceView()` — a pure function that updates entries, thinking, and status. `subAgentEvent` is the exception: the reducer unwraps the envelope, extracts the `subSessionId`, and routes the inner event to the correct agent in the map. This normalization happens once, at the boundary — downstream logic never deals with envelopes.
+**Event normalization.** Inside `applyEvent()`, most event types route to the root agent via `reduceView()` — a pure function that updates entries, thinking, and status.
 
 **The reducer is pure.** `applyEvent(state, event) → state` is a pure function with no side effects. It's exported for unit testing outside of Zustand. The Zustand slice simply loops over the event batch and applies each one.
 
-**Sub-agent lifecycle.** When `subAgentEvent` arrives with `inner.type === "sub_agent_start"`, a new `AgentView` is created in the map with the sub-agent's metadata (label, model, tools). Subsequent inner events update that agent's view. When `inner.type === "agent_end"` arrives, the agent is removed from the map and focus auto-pops if it was the focused agent. A top-level `agentEnd` or `agentAbort` clears all sub-agents and resets focus to root.
+A top-level `agentEnd` or `agentAbort` resets focus to root.
 
 ## Testing
 

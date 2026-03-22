@@ -6,16 +6,14 @@ defmodule Opal.SessionServer do
 
       Opal.SessionServer (Supervisor, :rest_for_one)
       ├── Task.Supervisor        — per-session tool execution
-      ├── DynamicSupervisor      — per-session sub-agents
       ├── Opal.Session           — conversation persistence (optional)
       └── Opal.Agent             — the agent loop
 
   Terminating the SessionServer cleans up everything: the agent, all
-  running tools, all sub-agents, and the session store.
+  running tools, and the session store.
 
-  The `:rest_for_one` strategy means if the Task.Supervisor or
-  DynamicSupervisor crashes, the Agent (which depends
-  on them) restarts too.
+  The `:rest_for_one` strategy means if the Task.Supervisor crashes,
+  the Agent (which depends on it) restarts too.
   """
 
   use Supervisor
@@ -48,21 +46,18 @@ defmodule Opal.SessionServer do
     # Name the per-session supervisors using Registry for discoverability
     # (avoids dynamic atom generation which leaks memory on the BEAM)
     tool_sup_name = {:via, Registry, {Opal.Registry, {:tool_sup, session_id}}}
-    sub_agent_sup_name = {:via, Registry, {Opal.Registry, {:sub_agent_sup, session_id}}}
 
     # Build child list dynamically
     children =
       [
-        {Task.Supervisor, name: tool_sup_name},
-        {DynamicSupervisor, name: sub_agent_sup_name, strategy: :one_for_one}
+        {Task.Supervisor, name: tool_sup_name}
       ] ++
         maybe_session_child(opts) ++
         [
           {Opal.Agent,
            opts ++
              [
-               tool_supervisor: tool_sup_name,
-               sub_agent_supervisor: sub_agent_sup_name
+               tool_supervisor: tool_sup_name
              ]}
         ]
 

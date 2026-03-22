@@ -118,7 +118,6 @@ The agent runtime now follows a responsibility-first layout under `lib/opal/agen
 - `retry.ex` — retry policy and backoff classification
 - `usage_tracker.ex` + `overflow.ex` — usage tracking, compaction, and overflow handling
 - `repair.ex` + `system_prompt.ex` + `emitter.ex` — message repair, prompt assembly, and event broadcasting
-- `spawner.ex` + `collector.ex` — sub-agent orchestration and response collection
 
 ## References
 

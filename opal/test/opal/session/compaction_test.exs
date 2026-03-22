@@ -42,8 +42,20 @@ defmodule Opal.Session.CompactionTest do
       # Build SSE events matching Copilot Responses API format
       # Use simple single-line deltas to avoid newline splitting issues
       events = [
-        [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})}],
-        [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => summary})}],
+        [
+          %ReqSSE.Message{
+            data:
+              Jason.encode!(%{
+                "type" => "response.output_item.added",
+                "item" => %{"type" => "message"}
+              })
+          }
+        ],
+        [
+          %ReqSSE.Message{
+            data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => summary})
+          }
+        ],
         [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.completed"})}]
       ]
 

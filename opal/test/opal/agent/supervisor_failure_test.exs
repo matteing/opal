@@ -129,30 +129,4 @@ defmodule Opal.Agent.SupervisorFailureTest do
       assert result.pending_tool_tasks == %{}
     end
   end
-
-  describe "sub-agent supervisor unavailable" do
-    test "sub_agent tool exit is caught by execute_single_tool rescue" do
-      config = Opal.Config.new()
-
-      context = %{
-        agent_state: %Opal.Agent.State{
-          session_id: "sup-test",
-          model: Model.new(:test, "test"),
-          working_dir: System.tmp_dir!(),
-          config: config,
-          tools: [],
-          sub_agent_supervisor: nil
-        },
-        config: config,
-        working_dir: System.tmp_dir!(),
-        session_id: "sup-test"
-      }
-
-      # SubAgent calls DynamicSupervisor.start_child(nil, ...) which raises
-      # an exit. execute_single_tool rescues exceptions but exits propagate.
-      # In production, the Task.Supervisor catches the exit via :DOWN handler.
-      # Here we verify the exit happens.
-      assert catch_exit(Opal.Tool.SubAgent.execute(%{"prompt" => "test"}, context)) != nil
-    end
-  end
 end

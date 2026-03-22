@@ -134,13 +134,7 @@ sequenceDiagram
 
 ### Tool Registration
 
-`AskUser` is in the default tool list (`lib/opal/config.ex`). During sub-agent spawning, `Opal.Agent.Spawner.resolve_tools/2` filters it out from the child tool list:
-
-```elixir
-overrides
-|> Map.get(:tools, parent.tools)
-|> Enum.reject(&(&1 == Opal.Tool.AskUser))
-```
+`AskUser` is in the default tool list (`lib/opal/config.ex`).
 
 ### CLI Integration
 
@@ -156,7 +150,6 @@ overrides
 
 - **Timeout**: `execute/2` calls `request_client(..., :infinity)` since user input has no upper bound.
 - **Abort during input**: If the user presses Ctrl+C while `ask_user` is pending, the agent shuts down and the pending `request_client` call fails.
-- **Sub-agents**: `AskUser` is excluded from sub-agent tool lists. Sub-agents cannot ask the user questions.
 - **SDK (non-interactive)**: SDK users who don't set `onAskUser` get an error (same as `onInput` today).
 
 ## References

@@ -155,7 +155,7 @@ All events are delivered as `{:opal_event, session_id, event}` messages. The eve
 | Token usage | `{:usage_update, %{prompt_tokens: n, total_tokens: n, ...}}` |
 | Status | `{:status_update, message}` |
 | Error | `{:error, reason}` |
-| Sub-agent | `{:sub_agent_event, call_id, sub_session_id, inner_event}` |
+
 | Context files | `{:context_discovered, [path]}` |
 | Skills | `{:skill_loaded, name, description}` |
 | Recovery | `{:agent_recovered}` |
@@ -483,12 +483,11 @@ sequenceDiagram
 | `auth/set_key` | `provider`, `api_key` | Save an API key for a provider |
 | `settings/get` | — | Read persisted settings |
 | `settings/save` | `settings` | Save settings |
-| `tasks/list` | `session_id` | List tracked tasks |
 | `opal/ping` | — | Liveness check, returns `{}` |
 | `opal/config/get` | `session_id` | Read runtime feature/tool config for a session |
 | `opal/config/set` | `session_id`, `features?`, `tools?` | Update runtime feature/tool config for a session |
 
-`features` accepts `sub_agents`, `skills`, and `debug` booleans at boot (`session/start`) or runtime (`opal/config/set`).
+`features` accepts `skills` and `debug` booleans at boot (`session/start`) or runtime (`opal/config/set`).
 
 ### Server → Client Requests
 
@@ -521,7 +520,7 @@ All events arrive as `agent/event` notifications (no `id` field) with a `type` d
 | `error` | `reason` | Something went wrong |
 | `context_discovered` | `files` | Project context files found |
 | `skill_loaded` | `name`, `description` | Agent skill activated |
-| `sub_agent_event` | `parent_call_id`, `sub_session_id`, `inner` | Forwarded child agent event |
+
 | `agent_recovered` | — | Agent restarted after crash |
 
 ### Example: Python Client
@@ -783,7 +782,7 @@ const session = await Session.start({
   tools: ["read_file", "edit_file", "shell"],
 
   // Features
-  features: { subAgents: true, skills: true, debug: false },
+  features: { skills: true, debug: false },
 
   // Interaction handlers
   autoConfirm: true,

@@ -139,19 +139,6 @@ export const AgentEventSchema = z.discriminatedUnion("type", [
     usage: TokenUsageSchema,
   }),
 
-  z.object({
-    type: z.literal("sub_agent_event"),
-    parent_call_id: z.string(),
-    sub_session_id: z.string(),
-    inner: z.record(z.unknown()),
-  }),
-
-  z.object({
-    type: z.literal("sub_agent_start"),
-    model: z.string(),
-    label: z.string(),
-    tools: z.array(z.string()),
-  }),
 ]);
 export type AgentEvent = z.infer<typeof AgentEventSchema>;
 
@@ -244,7 +231,6 @@ export const SessionStartParamsSchema = z.object({
   }).optional(),
   system_prompt: z.string().optional(),
   features: z.object({
-    sub_agents: z.boolean().optional(),
     skills: z.boolean().optional(),
     debug: z.boolean().optional(),
   }).optional(),

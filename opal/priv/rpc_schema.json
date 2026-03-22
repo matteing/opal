@@ -301,40 +301,6 @@
         ],
         "type": "object"
       },
-      "sub_agent_event": {
-        "description": "An event forwarded from a spawned sub-agent.",
-        "properties": {
-          "inner": {
-            "description": "The wrapped agent event from the sub-agent (contains a type field and event-specific data).",
-            "type": "object"
-          },
-          "parent_call_id": {
-            "description": "The call_id of the parent sub_agent tool invocation.",
-            "type": "string"
-          },
-          "session_id": {
-            "description": "Session this event belongs to.",
-            "type": "string"
-          },
-          "sub_session_id": {
-            "description": "The sub-agent's session ID.",
-            "type": "string"
-          },
-          "type": {
-            "const": "sub_agent_event",
-            "description": "Event type discriminator.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "session_id",
-          "parent_call_id",
-          "sub_session_id",
-          "inner"
-        ],
-        "type": "object"
-      },
       "thinking_delta": {
         "description": "A chunk of LLM thinking/reasoning text.",
         "properties": {
@@ -893,15 +859,11 @@
                 },
                 "skills": {
                   "type": "boolean"
-                },
-                "sub_agents": {
-                  "type": "boolean"
                 }
               },
               "required": [
                 "debug",
-                "skills",
-                "sub_agents"
+                "skills"
               ],
               "type": "object"
             },
@@ -971,15 +933,11 @@
                 },
                 "skills": {
                   "type": "boolean"
-                },
-                "sub_agents": {
-                  "type": "boolean"
                 }
               },
               "required": [
                 "debug",
-                "skills",
-                "sub_agents"
+                "skills"
               ],
               "type": "object"
             },
@@ -1027,15 +985,11 @@
                 },
                 "skills": {
                   "type": "boolean"
-                },
-                "sub_agents": {
-                  "type": "boolean"
                 }
               },
               "required": [
                 "debug",
-                "skills",
-                "sub_agents"
+                "skills"
               ],
               "type": "object"
             },
@@ -1250,15 +1204,11 @@
                 },
                 "skills": {
                   "type": "boolean"
-                },
-                "sub_agents": {
-                  "type": "boolean"
                 }
               },
               "required": [
                 "debug",
-                "skills",
-                "sub_agents"
+                "skills"
               ],
               "type": "object"
             },
@@ -1398,36 +1348,6 @@
           },
           "required": [
             "settings"
-          ],
-          "type": "object"
-        }
-      },
-      "tasks/list": {
-        "description": "List active tasks (open, in_progress, blocked) for a session's project.",
-        "params": {
-          "properties": {
-            "session_id": {
-              "description": "Target session ID.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "session_id"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "properties": {
-            "tasks": {
-              "description": "Array of task objects.",
-              "items": {
-                "type": "object"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "tasks"
           ],
           "type": "object"
         }

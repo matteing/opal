@@ -54,7 +54,13 @@ defmodule Opal.Agent.StreamResilienceTest do
   describe "unknown event type" do
     test "unknown event type is silently ignored" do
       state = base_state()
-      result = Stream.dispatch_sse_messages(msg(Jason.encode!(%{"type" => "response.unknown_event", "data" => "foo"})), state)
+
+      result =
+        Stream.dispatch_sse_messages(
+          msg(Jason.encode!(%{"type" => "response.unknown_event", "data" => "foo"})),
+          state
+        )
+
       assert result.current_text == ""
     end
 
@@ -68,7 +74,13 @@ defmodule Opal.Agent.StreamResilienceTest do
   describe "out-of-order events" do
     test "text delta before output_item.added still accumulates" do
       state = base_state()
-      result = Stream.dispatch_sse_messages(msg(Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "hello"})), state)
+
+      result =
+        Stream.dispatch_sse_messages(
+          msg(Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "hello"})),
+          state
+        )
+
       assert result.current_text == "hello"
     end
 
@@ -115,9 +127,19 @@ defmodule Opal.Agent.StreamResilienceTest do
       state = base_state()
 
       messages = [
-        %ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})},
-        %ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Hello "})},
-        %ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "world"})}
+        %ReqSSE.Message{
+          data:
+            Jason.encode!(%{
+              "type" => "response.output_item.added",
+              "item" => %{"type" => "message"}
+            })
+        },
+        %ReqSSE.Message{
+          data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Hello "})
+        },
+        %ReqSSE.Message{
+          data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "world"})
+        }
       ]
 
       result = Stream.dispatch_sse_messages(messages, state)

@@ -36,9 +36,34 @@ defmodule Opal.Agent.ConcurrentSignalsTest do
         Process.sleep(delay)
 
         events = [
-          [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})}],
-          [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Response"})}],
-          [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r1", "status" => "completed", "usage" => %{"input_tokens" => 10, "output_tokens" => 5}}})}]
+          [
+            %ReqSSE.Message{
+              data:
+                Jason.encode!(%{
+                  "type" => "response.output_item.added",
+                  "item" => %{"type" => "message"}
+                })
+            }
+          ],
+          [
+            %ReqSSE.Message{
+              data:
+                Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Response"})
+            }
+          ],
+          [
+            %ReqSSE.Message{
+              data:
+                Jason.encode!(%{
+                  "type" => "response.completed",
+                  "response" => %{
+                    "id" => "r1",
+                    "status" => "completed",
+                    "usage" => %{"input_tokens" => 10, "output_tokens" => 5}
+                  }
+                })
+            }
+          ]
         ]
 
         for e <- events do
@@ -88,9 +113,29 @@ defmodule Opal.Agent.ConcurrentSignalsTest do
 
         if has_results do
           events = [
-            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "message"}})}],
-            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Done"})}],
-            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r2", "status" => "completed", "usage" => %{}}})}]
+            [
+              %ReqSSE.Message{
+                data:
+                  Jason.encode!(%{
+                    "type" => "response.output_item.added",
+                    "item" => %{"type" => "message"}
+                  })
+              }
+            ],
+            [
+              %ReqSSE.Message{
+                data: Jason.encode!(%{"type" => "response.output_text.delta", "delta" => "Done"})
+              }
+            ],
+            [
+              %ReqSSE.Message{
+                data:
+                  Jason.encode!(%{
+                    "type" => "response.completed",
+                    "response" => %{"id" => "r2", "status" => "completed", "usage" => %{}}
+                  })
+              }
+            ]
           ]
 
           for e <- events,
@@ -103,9 +148,48 @@ defmodule Opal.Agent.ConcurrentSignalsTest do
           send(caller, {ref, :done})
         else
           events = [
-            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.added", "item" => %{"type" => "function_call", "id" => "i1", "call_id" => "c1", "name" => "slow_tool"}})}],
-            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.output_item.done", "item" => %{"type" => "function_call", "id" => "i1", "call_id" => "c1", "name" => "slow_tool", "arguments" => Jason.encode!(%{"id" => "a", "sleep_ms" => 2000})}})}],
-            [%ReqSSE.Message{data: Jason.encode!(%{"type" => "response.completed", "response" => %{"id" => "r1", "status" => "completed", "usage" => %{"input_tokens" => 20, "output_tokens" => 10}}})}]
+            [
+              %ReqSSE.Message{
+                data:
+                  Jason.encode!(%{
+                    "type" => "response.output_item.added",
+                    "item" => %{
+                      "type" => "function_call",
+                      "id" => "i1",
+                      "call_id" => "c1",
+                      "name" => "slow_tool"
+                    }
+                  })
+              }
+            ],
+            [
+              %ReqSSE.Message{
+                data:
+                  Jason.encode!(%{
+                    "type" => "response.output_item.done",
+                    "item" => %{
+                      "type" => "function_call",
+                      "id" => "i1",
+                      "call_id" => "c1",
+                      "name" => "slow_tool",
+                      "arguments" => Jason.encode!(%{"id" => "a", "sleep_ms" => 2000})
+                    }
+                  })
+              }
+            ],
+            [
+              %ReqSSE.Message{
+                data:
+                  Jason.encode!(%{
+                    "type" => "response.completed",
+                    "response" => %{
+                      "id" => "r1",
+                      "status" => "completed",
+                      "usage" => %{"input_tokens" => 20, "output_tokens" => 10}
+                    }
+                  })
+              }
+            ]
           ]
 
           for e <- events,

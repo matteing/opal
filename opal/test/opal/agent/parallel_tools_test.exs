@@ -168,7 +168,6 @@ defmodule Opal.Agent.ParallelToolsTest do
 
     session_id = "parallel-#{System.unique_integer([:positive])}"
     {:ok, tool_sup} = Task.Supervisor.start_link()
-    {:ok, sub_sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
 
     agent_opts = [
       session_id: session_id,
@@ -178,8 +177,7 @@ defmodule Opal.Agent.ParallelToolsTest do
       tools: [SlowTool],
       provider: MultiToolProvider,
       config: Opal.Config.new(),
-      tool_supervisor: tool_sup,
-      sub_agent_supervisor: sub_sup
+      tool_supervisor: tool_sup
     ]
 
     {:ok, pid} = Agent.start_link(agent_opts)

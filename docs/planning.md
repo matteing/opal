@@ -116,7 +116,7 @@ The CLI gets the session directory directly from `session/start` (`session_dir` 
 2. **Core — System prompt**
    - Planning instructions are injected in
      `Opal.Agent.SystemPrompt.format_planning/1`, including the resolved plan path
-   - Only inject for interactive sessions (not sub-agents)
+   - Only inject for interactive sessions
 
 3. **Core — Protocol**
    - `session/start` includes `session_dir` in the result

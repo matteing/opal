@@ -200,7 +200,6 @@ flowchart LR
 | Any shell tool present                           | Output summary text directly; avoid shell display commands                              |
 | Shell present but `read_file` absent             | Encourage shell exploration commands (`cat`, `grep`, `find`, `ls`)                     |
 | `MapSet.size(names) >= 3`                        | Parameter-completeness and parallel-tool-call guidance                                  |
-| `sub_agent` present                              | Delegation guidance and available model hints                                           |
 | Any tool present                                 | Emit short `<status>...</status>` tags for multi-step tasks                             |
 | `needs_title?(state)`                            | Emit a `<title>...</title>` tag on new conversations when auto-title is enabled        |
 
@@ -238,7 +237,7 @@ Given tools `[Opal.Tool.ReadFile, Opal.Tool.EditFile, Opal.Tool.WriteFile, Opal.
 
 ## Component 6: Planning Instructions
 
-When a `Session` process is attached (i.e., this is a top-level agent, not a sub-agent), planning instructions are appended telling the agent where to write plan documents:
+When a `Session` process is attached, planning instructions are appended telling the agent where to write plan documents:
 
 ```xml
 <planning>
@@ -250,7 +249,7 @@ complete steps. The user can review the plan at any time with Ctrl+Y.
 </planning>
 ```
 
-Sub-agents (where `state.session` is `nil`) do not receive planning instructions, since they handle delegated subtasks rather than top-level planning.
+Agents without a `Session` (where `state.session` is `nil`) do not receive planning instructions.
 
 **Source:** `Opal.Agent.SystemPrompt.format_planning/1`.
 
@@ -299,20 +298,6 @@ sequenceDiagram
 5. **Skills use progressive disclosure.** Only names and descriptions go into the system prompt. Full instructions are injected as user messages when activated — this keeps the system prompt small and lets skill instructions age out during compaction.
 
 6. **The system prompt is a single message.** All components are concatenated and sent as one `:system` role message. This is the first message in the list sent to the provider.
-
----
-
-## Sub-Agent Differences
-
-Sub-agents (spawned via `Opal.Tool.SubAgent`) receive a stripped-down system prompt:
-
-| Component             | Top-level Agent         | Sub-Agent                         |
-| --------------------- | ----------------------- | --------------------------------- |
-| Base prompt           | ✓ (from session config) | ✓ (inherits parent prompt unless overridden) |
-| Project context       | ✓                       | ✓ (re-discovered from sub-agent `working_dir`) |
-| Skill menu            | ✓                       | ✓ (if skills discovered)          |
-| Tool guidelines       | ✓                       | ✓ (based on sub-agent's tool set) |
-| Planning instructions | ✓                       | ✗ (no session attached)           |
 
 ---
 

@@ -351,20 +351,6 @@ defmodule Opal.RPC.Server do
   def dispatch("auth/poll", _),
     do: error(:invalid_params, "Missing required params: device_code, interval")
 
-  # -- Tasks --
-
-  def dispatch("tasks/list", %{"session_id" => sid}) do
-    with_agent(sid, fn _agent ->
-      case Opal.Tool.Tasks.query_raw(%{session_id: sid}, nil) do
-        {:ok, tasks} -> {:ok, %{tasks: tasks}}
-        {:error, reason} -> error(:internal_error, "Tasks query failed", reason)
-      end
-    end)
-  end
-
-  def dispatch("tasks/list", _),
-    do: error(:invalid_params, "Missing required param: session_id")
-
   # -- Settings --
 
   def dispatch("settings/get", _params), do: {:ok, %{settings: Opal.Settings.get_all()}}
@@ -495,7 +481,6 @@ defmodule Opal.RPC.Server do
   defp normalize_features(f), do: Enum.into(f, %{}, fn {k, v} -> {k, %{enabled: v}} end)
 
   @feature_keys %{
-    "sub_agents" => :sub_agents,
     "skills" => :skills,
     "debug" => :debug
   }
@@ -566,7 +551,6 @@ defmodule Opal.RPC.Server do
 
     %{
       features: %{
-        sub_agents: state.config.features.sub_agents.enabled,
         skills: state.config.features.skills.enabled,
         debug: state.config.features.debug.enabled
       },
@@ -636,20 +620,6 @@ defmodule Opal.RPC.Server do
     {"turn_end", %{message: content}}
   end
 
-  defp serialize_event({:sub_agent_start, %{model: m, label: l, tools: t}}),
-    do: {"sub_agent_start", %{model: m, label: l, tools: t}}
-
-  defp serialize_event({:sub_agent_event, call_id, sub_sid, inner}) do
-    {inner_type, inner_data} = serialize_event(inner)
-
-    {"sub_agent_event",
-     %{
-       parent_call_id: call_id,
-       sub_session_id: sub_sid,
-       inner: Map.put(inner_data, :type, inner_type)
-     }}
-  end
-
   # tool_execution_start has 3 arities — all serialize to "tool_start"
   defp serialize_event({:tool_execution_start, tool, call_id, args, meta}),
     do: {"tool_start", %{tool: tool, call_id: call_id, args: args, meta: meta}}
@@ -661,8 +631,7 @@ defmodule Opal.RPC.Server do
     do: {"tool_start", %{tool: tool, call_id: "", args: args, meta: tool}}
 
   defp serialize_event({:tool_execution_end, tool, call_id, result}),
-    do:
-      {"tool_end", %{tool: tool, call_id: call_id, result: format_tool_result(result)}}
+    do: {"tool_end", %{tool: tool, call_id: call_id, result: format_tool_result(result)}}
 
   defp serialize_event({:tool_execution_end, tool, result}),
     do: {"tool_end", %{tool: tool, call_id: "", result: format_tool_result(result)}}

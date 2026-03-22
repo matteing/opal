@@ -32,7 +32,6 @@ Right now, Opal can:
 - **Edit files** — reads, writes, and applies targeted edits.
 - **Run shell commands** — executes builds, tests, linters, etc.
 - **Debug and fix** — can diagnose issues and apply fixes.
-- **Parallelize work** — sub-agents are cheap OTP processes, so it can plan + split tasks up easily.
 - **Ask questions** — will ask for clarification when planning with a nice UI.
 
 **Adjust expectations; this is a hobby project.** I built this for my own research use. There's no approval or permissions system. **No guardrails, no sandbox.** See [disclaimer](#disclaimer).
@@ -62,7 +61,7 @@ Mostly, the Erlang VM's [computing vision](https://www.youtube.com/watch?v=JvBT4
 
 **[Live introspection.](docs/inspecting.md)** Connect to a running agent from another terminal and stream every event in real time. See every thought, trace every call, and play with the live running system and its state. The BEAM enables unprecedented observability into agentic AI systems.
 
-**[Won't break a sweat.](docs/supervision.md)** Run as many tools as you want. Spawn a child agent with its own context, tools, and model. You won't choke the system; it'll remain responsive. OTP's _supervision tree_ manages every process lifecycle; if the parent dies, children are [cleaned up automatically](docs/supervision.md). No thread pools. No manual resource cleanup.
+**[Won't break a sweat.](docs/supervision.md)** Run as many tools as you want. OTP's _supervision tree_ manages every process lifecycle; if the parent dies, children are [cleaned up automatically](docs/supervision.md). No thread pools. No manual resource cleanup.
 
 **[Redirect the agent mid-flight.](docs/agent-loop.md)** Call `Opal.prompt(agent, "focus on tests instead")` while the agent is busy and it's queued, then picked up between tool calls. This works because every Erlang process has a _mailbox_ — a built-in message queue. The [agent loop](docs/agent-loop.md) checks it between steps. No polling, no callback chains.
 
@@ -115,8 +114,6 @@ end)
 | `write_file`  | Creates or overwrites a file entirely.                                                                                  |
 | `grep`        | Cross-platform regex search with glob filtering. Output is hashline-tagged and `edit_file`-ready.                       |
 | `shell`       | Runs commands in the working directory with streaming output.                                                           |
-| `sub_agent`   | Spawns a child agent with its own context, tools, and model for isolated parallel work.                                 |
-| `tasks`       | Persistent DAG task tracker on Erlang's DETS. Plan, order, unblock, and surface ready work for parallel dispatch.       |
 | `ask_user`    | Pauses the agent to ask the user a question. Supports freeform and multiple-choice.                                     |
 | `use_skill`   | Loads skill instructions from `.claude/skills/` (or similar dirs) into context on demand.                               |
 | `debug_state` | This one is the coolest, allows the agent to **debug itself** by introspecting its own system state. Ain't that badass. |
@@ -177,7 +174,7 @@ mise run inspect                   # connect via iex to a running dev mode insta
 
 I wanted to understand how agent harnesses work, not just use them.
 
-I studied [Pi](https://github.com/badlogic/pi-mono) and the more I stared at the problem space--long-running loops, concurrent tool execution, process isolation, sub-agent orchestration--the more it looked like Erlang/OTP would be a great fit. So I built it.
+I studied [Pi](https://github.com/badlogic/pi-mono) and the more I stared at the problem space--long-running loops, concurrent tool execution, process isolation--the more it looked like Erlang/OTP would be a great fit. So I built it.
 
 This is a research project; I try to keep it up to date with the latest standards and any papers that pop up in arXiv.
 
@@ -185,9 +182,6 @@ This is a research project; I try to keep it up to date with the latest standard
 
 - Proper SDK docs, NPM package
 - Random gaps in functionality that come through!
-- Subagents + agents talking to each other through message passing?
-  - subagent X asked subagent Y a question
-  - not sure if that would even work but whatevs
 - A toy OpenClaw reimplementation using Opal
 
 Let me know if there's any features you'd like baked in by filing an issue; no promises, but I'll try to get to them!

@@ -73,7 +73,9 @@ defmodule Opal.Provider.Copilot do
       )
       |> maybe_add_reasoning(model, :completions)
 
-    req |> ReqSSE.attach() |> Req.post(url: "/chat/completions", json: body, into: :self, receive_timeout: 120_000)
+    req
+    |> ReqSSE.attach()
+    |> Req.post(url: "/chat/completions", json: body, into: :self, receive_timeout: 120_000)
   end
 
   # ── Responses API (/v1/responses) ──────────────────────────────────
@@ -85,7 +87,9 @@ defmodule Opal.Provider.Copilot do
       |> put_unless_empty(:input, messages_to_responses(model, messages))
       |> maybe_add_reasoning(model, :responses)
 
-    req |> ReqSSE.attach() |> Req.post(url: "/responses", json: body, into: :self, receive_timeout: 120_000)
+    req
+    |> ReqSSE.attach()
+    |> Req.post(url: "/responses", json: body, into: :self, receive_timeout: 120_000)
   end
 
   # Responses API uses a flat tool format (no nested "function" key)

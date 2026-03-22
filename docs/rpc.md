@@ -46,7 +46,7 @@ Client → Server requests:
 
 `session/start` also accepts optional boot-time controls:
 
-- `features`: `{ sub_agents?: boolean, skills?: boolean, debug?: boolean }`
+- `features`: `{ skills?: boolean, debug?: boolean }`
 - `tools`: explicit enabled tool names for the session
 
 Server → Client requests:
@@ -81,7 +81,7 @@ The server streams agent events as notifications on `agent/event`. The CLI subsc
 | `error` | Something went wrong |
 | `context_discovered` | Project context files found |
 | `skill_loaded` | Agent skill activated |
-| `sub_agent_event` | Forwarded event from child agent |
+
 
 ## Protocol Spec
 

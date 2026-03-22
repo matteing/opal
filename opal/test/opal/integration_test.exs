@@ -510,7 +510,10 @@ defmodule Opal.IntegrationTest do
     test "fixture_events returns lists of ReqSSE.Message structs" do
       events = FixtureHelper.fixture_events("responses_api_text.json")
       assert is_list(events)
-      assert Enum.all?(events, fn chunk -> is_list(chunk) and match?([%ReqSSE.Message{}], chunk) end)
+
+      assert Enum.all?(events, fn chunk ->
+               is_list(chunk) and match?([%ReqSSE.Message{}], chunk)
+             end)
     end
 
     test "save_fixture creates a fixture file" do

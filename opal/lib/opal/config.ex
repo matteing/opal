@@ -7,23 +7,20 @@ defmodule Opal.Config.Features do
 
   ## Subsystems
 
-    * `:sub_agents` — child agent spawning via `Opal.Agent.Spawner`
     * `:context` — walk-up context file discovery (AGENTS.md, OPAL.md, etc.)
     * `:skills` — skill directory discovery and progressive disclosure
     * `:debug` — internal debug/introspection tooling (disabled by default)
 
   ## Usage
 
-      # Disable sub-agents, customize context filenames
+      # Customize context filenames
       features = Opal.Config.Features.new(%{
-        sub_agents: %{enabled: false},
         context: %{filenames: ["AGENTS.md", "CUSTOM.md"]}
       })
 
       # Or via application config
       config :opal,
         features: %{
-          sub_agents: %{enabled: true},
           context: %{filenames: ["AGENTS.md"]},
           skills: %{extra_dirs: ["/opt/skills"]},
           debug: %{enabled: false}
@@ -31,18 +28,10 @@ defmodule Opal.Config.Features do
   """
 
   @type t :: %__MODULE__{
-          sub_agents: sub_agents_config(),
           context: context_config(),
           skills: skills_config(),
           debug: debug_config()
         }
-
-  @typedoc """
-  Sub-agent subsystem configuration.
-
-    * `:enabled` — whether sub-agent spawning is allowed. Default: `true`.
-  """
-  @type sub_agents_config :: %{enabled: boolean()}
 
   @typedoc """
   Context file discovery configuration.
@@ -73,8 +62,7 @@ defmodule Opal.Config.Features do
   """
   @type debug_config :: %{enabled: boolean()}
 
-  defstruct sub_agents: %{enabled: true},
-            context: %{enabled: true, filenames: ["AGENTS.md", "OPAL.md"]},
+  defstruct context: %{enabled: true, filenames: ["AGENTS.md", "OPAL.md"]},
             skills: %{enabled: true, extra_dirs: []},
             debug: %{enabled: false}
 
@@ -87,10 +75,10 @@ defmodule Opal.Config.Features do
   ## Examples
 
       # Full config
-      Opal.Config.Features.new(%{sub_agents: %{enabled: false}})
+      Opal.Config.Features.new(%{context: %{filenames: ["AGENTS.md"]}})
 
       # Boolean shorthand
-      Opal.Config.Features.new(%{sub_agents: false})
+      Opal.Config.Features.new(%{debug: true})
   """
   @spec new(map() | keyword()) :: t()
   def new(attrs \\ %{})
@@ -101,7 +89,6 @@ defmodule Opal.Config.Features do
     base = %__MODULE__{}
 
     base
-    |> merge_subsystem(:sub_agents, attrs)
     |> merge_subsystem(:context, attrs)
     |> merge_subsystem(:skills, attrs)
     |> merge_subsystem(:debug, attrs)
@@ -112,7 +99,7 @@ defmodule Opal.Config.Features do
       nil ->
         features
 
-      # Boolean shorthand: `sub_agents: false` → %{enabled: false}
+      # Boolean shorthand: `debug: false` → %{enabled: false}
       enabled when is_boolean(enabled) ->
         current = Map.fetch!(features, key)
         %{features | key => %{current | enabled: enabled}}
@@ -153,7 +140,7 @@ defmodule Opal.Config do
       Default: `{"copilot", "claude-sonnet-4"}`.
 
     * `:default_tools` — list of modules implementing `Opal.Tool` available
-      to the agent. Default: `[Read, Write, Edit, Shell, SubAgent, Tasks, UseSkill, AskUser, Debug]`.
+      to the agent. Default: `[Read, Write, Edit, Shell, UseSkill, AskUser, Debug]`.
 
     * `:provider` — module implementing `Opal.Provider` for LLM communication.
       Default: `Opal.Provider.Copilot`.
@@ -173,7 +160,7 @@ defmodule Opal.Config do
       subsystems. Each subsystem has an `:enabled` toggle and subsystem-specific
       options. See `Opal.Config.Features` for full documentation.
 
-      Subsystems: `:sub_agents`, `:context`, `:skills`, `:debug`.
+      Subsystems: `:context`, `:skills`, `:debug`.
 
   ## Application config example
 
@@ -182,11 +169,9 @@ defmodule Opal.Config do
         shell: :zsh,
         default_model: {"copilot", "claude-sonnet-4-5"},
         default_tools: [Opal.Tool.ReadFile, Opal.Tool.WriteFile, Opal.Tool.EditFile, Opal.Tool.Grep,
-                        Opal.Tool.Shell, Opal.Tool.SubAgent, Opal.Tool.Tasks,
-                        Opal.Tool.UseSkill, Opal.Tool.AskUser, Opal.Tool.DebugState],
+                        Opal.Tool.Shell, Opal.Tool.UseSkill, Opal.Tool.AskUser, Opal.Tool.DebugState],
         copilot_domain: "github.com",
         features: %{
-          sub_agents: %{enabled: true},
           context: %{filenames: ["AGENTS.md", "OPAL.md"]},
           skills: %{extra_dirs: []},
           debug: %{enabled: false}
@@ -215,8 +200,6 @@ defmodule Opal.Config do
               Opal.Tool.EditFile,
               Opal.Tool.Grep,
               Opal.Tool.Shell,
-              Opal.Tool.SubAgent,
-              Opal.Tool.Tasks,
               Opal.Tool.UseSkill,
               Opal.Tool.AskUser,
               Opal.Tool.DebugState
